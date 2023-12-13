@@ -163,10 +163,10 @@ impl<T> ExponentialTreeNode<T> {
 
     fn add_child(&self, index: usize, child: NonNull<ExponentialTreeNode<T>>) {
         match &self.data {
-            ExponentialTreeNodeData::InternalNode(v) => unsafe {
+            ExponentialTreeNodeData::InternalNode(v) => {
                 debug_assert_eq!(index, v.len());
                 v.push(child);
-            },
+            }
             ExponentialTreeNodeData::LeafNode(_) => {
                 panic!("ExponentialTreeNode:LeafNode add_child");
             }

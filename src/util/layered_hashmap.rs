@@ -1,16 +1,12 @@
 use std::{
-    alloc::Layout,
     borrow::Borrow,
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hash, Hasher},
     ptr::NonNull,
-    sync::{
-        atomic::{AtomicPtr, AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
 
-use super::{capacity_policy, Bitset, CapacityPolicy, FixedCapacityPolicy, Raw};
+use super::{Bitset, CapacityPolicy, FixedCapacityPolicy, Raw};
 
 pub struct LayeredHashMap<
     K,
@@ -64,7 +60,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
         }
     }
 
-    fn insert(&self, key: K, value: V) -> Option<V>
+    pub fn insert(&self, key: K, value: V) -> Option<V>
     where
         K: Eq + Hash,
     {
@@ -72,7 +68,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
         head.insert(key, value, &self.hasher_builder)
     }
 
-    fn get<Q>(&self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Eq + Hash,
@@ -217,7 +213,7 @@ impl<K, V> HashBucket<K, V> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::hash_map::RandomState;
+    use std::{collections::hash_map::RandomState, thread, time::Duration};
 
     use super::{FixedCapacityPolicy, HashBucket, LayeredHashMap};
 
@@ -271,5 +267,47 @@ mod tests {
         assert_eq!(map.get(&2).unwrap().clone(), 20);
         assert_eq!(map.get(&1).unwrap().clone(), 10);
         assert!(map.get(&0).is_none());
+    }
+
+    #[test]
+    fn test_hashmap_multithreads() {
+        let hasher_builder = RandomState::new();
+        let capacity_policy = FixedCapacityPolicy;
+        let map =
+            LayeredHashMap::<i32, i32>::with_initial_capacity(4, hasher_builder, capacity_policy);
+        let count = 16;
+        thread::scope(|scope| {
+            let t = scope.spawn(|| {
+                // Node that the keys were inserted in reverse order.
+                // If a key is found, then the keys after it must also exist.
+                for i in 0..count {
+                    if i % 2 == 0 {
+                        if let Some(&v) = map.get(&i) {
+                            assert_eq!(v, i * 10);
+                            for j in i..count {
+                                if j % 2 == 0 {
+                                    assert_eq!(map.get(&j).unwrap().clone(), j * 10);
+                                }
+                            }
+                            if i == 0 {
+                                break;
+                            }
+                        } else {
+                            thread::sleep(Duration::from_millis(1));
+                        }
+                    } else {
+                        assert!(map.get(&i).is_none());
+                    }
+                }
+            });
+
+            for i in (0..count).rev() {
+                if i % 2 == 0 {
+                    map.insert(i, i * 10);
+                }
+            }
+
+            t.join().unwrap();
+        });
     }
 }

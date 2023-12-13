@@ -10,6 +10,8 @@ mod raw;
 pub use atomic::{AcqRelUsize, RelaxedUsize};
 pub use bitset::Bitset;
 pub use capacity_policy::{CapacityPolicy, FixedCapacityPolicy};
+pub use chunked_vector::ChunkedVector;
 pub use exponential_tree::ExponentialTree;
 pub use fixed_capacity_vec::FixedCapacityVec;
+pub use layered_hashmap::LayeredHashMap;
 pub use raw::Raw;

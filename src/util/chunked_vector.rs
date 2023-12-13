@@ -1,14 +1,3 @@
-use std::{
-    alloc::Layout,
-    mem::MaybeUninit,
-    ptr::{self, NonNull},
-    slice,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-};
-
 use super::{AcqRelUsize, ExponentialTree, FixedCapacityVec};
 
 pub struct ChunkedVector<T> {
