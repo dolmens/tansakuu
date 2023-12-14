@@ -7,7 +7,9 @@ mod fixed_capacity_vec;
 mod layered_hashmap;
 mod raw;
 
-pub use atomic::{AcqRelUsize, RelaxedUsize};
+pub use atomic::{
+    AcqRelAtomicPtr, AcqRelU64, AcqRelUsize, RelaxedAtomicPtr, RelaxedU64, RelaxedUsize,
+};
 pub use bitset::Bitset;
 pub use capacity_policy::{CapacityPolicy, FixedCapacityPolicy};
 pub use chunked_vector::ChunkedVector;

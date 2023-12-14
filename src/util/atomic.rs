@@ -8,10 +8,11 @@
 //!
 //! Thus, these little types come with pre-established memory ordering.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
 
 macro_rules! atomic {
     ($name:ident, $underlying:ident, $raw:ident, $load_ordering:expr, $store_ordering:expr) => {
+        #[derive(Default)]
         pub struct $name($underlying);
 
         impl $name {
@@ -31,3 +32,29 @@ macro_rules! atomic {
 atomic! { AcqRelUsize, AtomicUsize, usize, Ordering::Acquire, Ordering::Release }
 
 atomic! { RelaxedUsize, AtomicUsize, usize, Ordering::Relaxed, Ordering::Relaxed }
+
+atomic! { AcqRelU64, AtomicU64, u64, Ordering::Acquire, Ordering::Release }
+
+atomic! { RelaxedU64, AtomicU64, u64, Ordering::Relaxed, Ordering::Relaxed }
+
+macro_rules! atomic_ptr {
+    ($name:ident, $load_ordering:expr, $store_ordering:expr) => {
+        #[derive(Default)]
+        pub struct $name<T>(AtomicPtr<T>);
+
+        impl<T> $name<T> {
+            pub fn new(ptr: *mut T) -> Self {
+                Self(AtomicPtr::new(ptr))
+            }
+            pub fn load(&self) -> *mut T {
+                self.0.load($load_ordering)
+            }
+            pub fn store(&self, ptr: *mut T) {
+                self.0.store(ptr, $store_ordering);
+            }
+        }
+    };
+}
+
+atomic_ptr! {AcqRelAtomicPtr, Ordering::Acquire, Ordering::Release}
+atomic_ptr! {RelaxedAtomicPtr, Ordering::Relaxed, Ordering::Relaxed}
