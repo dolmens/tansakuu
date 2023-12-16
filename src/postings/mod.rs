@@ -7,7 +7,7 @@ mod encode;
 mod multi_value_buffer;
 mod skiplist;
 
-pub use buffered_byte_slice::BufferedByteSlice;
+pub use buffered_byte_slice::{transmute_mut_slice, BufferedByteSlice};
 pub use building_doc_list_decoder::BuildingDocListDecoder;
 pub use byte_slice_list::{ByteSliceReader, ByteSliceWriter};
 pub use doc_list_encoder::DocListEncoder;

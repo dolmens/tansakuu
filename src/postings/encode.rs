@@ -12,7 +12,7 @@ pub fn copy_encode(src: &[u8], dst: &ByteSliceWriter) -> usize {
 
 pub fn copy_decode(src: &mut ByteSliceReader, dst: &mut [u8]) -> usize {
     let len: usize = src.read();
-    assert!(len < dst.len());
+    assert!(len <= dst.len());
     src.read_data(&mut dst[..len]);
     len
 }
