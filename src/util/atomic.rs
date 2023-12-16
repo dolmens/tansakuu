@@ -8,7 +8,10 @@
 //!
 //! Thus, these little types come with pre-established memory ordering.
 
-use std::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use std::{
+    ptr::NonNull,
+    sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering},
+};
 
 macro_rules! atomic {
     ($name:ident, $underlying:ident, $raw:ident, $load_ordering:expr, $store_ordering:expr) => {
@@ -39,18 +42,32 @@ atomic! { RelaxedU64, AtomicU64, u64, Ordering::Relaxed, Ordering::Relaxed }
 
 macro_rules! atomic_ptr {
     ($name:ident, $load_ordering:expr, $store_ordering:expr) => {
-        #[derive(Default)]
         pub struct $name<T>(AtomicPtr<T>);
 
         impl<T> $name<T> {
             pub fn new(ptr: *mut T) -> Self {
                 Self(AtomicPtr::new(ptr))
             }
+            pub fn new_with_box(value: Box<T>) -> Self {
+                Self(AtomicPtr::new(Box::into_raw(value)))
+            }
             pub fn load(&self) -> *mut T {
                 self.0.load($load_ordering)
             }
             pub fn store(&self, ptr: *mut T) {
                 self.0.store(ptr, $store_ordering);
+            }
+            pub fn store_with_nonnull(&self, ptr: NonNull<T>) {
+                self.0.store(ptr.as_ptr(), $store_ordering);
+            }
+            pub fn store_with_box(&self, value: Box<T>) {
+                self.0.store(Box::into_raw(value), $store_ordering);
+            }
+        }
+
+        impl<T> Default for $name<T> {
+            fn default() -> Self {
+                $name::new(std::ptr::null_mut())
             }
         }
     };

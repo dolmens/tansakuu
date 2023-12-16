@@ -1,16 +1,9 @@
+pub mod postings;
 pub mod util;
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+pub type DocId = i32;
+pub type TermFreq = i32;
+pub type DocFreq = i32;
+pub type FieldMask = u8;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub const DOC_BLOCK_LEN: usize = 128;
