@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::index::IndexSegmentData;
 
-#[derive(Clone)]
 pub struct BuildingSegment {
     indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
 }

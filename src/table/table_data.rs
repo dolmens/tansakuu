@@ -5,7 +5,7 @@ use crate::schema::SchemaRef;
 use super::{segment::BuildingSegment, TableSettingsRef};
 
 pub struct TableData {
-    building_segments: Vec<BuildingSegment>,
+    building_segments: Vec<Arc<BuildingSegment>>,
     schema: SchemaRef,
     settings: TableSettingsRef,
 }
@@ -32,10 +32,10 @@ impl TableData {
     }
 
     pub fn add_building_segment(&mut self, building_segment: BuildingSegment) {
-        self.building_segments.push(building_segment);
+        self.building_segments.push(Arc::new(building_segment));
     }
 
-    pub fn building_segments(&self) -> &[BuildingSegment] {
+    pub fn building_segments(&self) -> &[Arc<BuildingSegment>] {
         &self.building_segments
     }
 
