@@ -37,7 +37,19 @@ impl Schema {
         }
     }
 
+    pub fn add_index(&mut self, name: String, index_type: IndexType, fields: Vec<String>) {
+        self.indexes.push(Index {
+            name,
+            index_type,
+            fields,
+        });
+    }
+
     pub fn indexes(&self) -> &[Index] {
+        &self.indexes
+    }
+
+    pub fn indexes_of_field(&self, field: &str) -> &[Index] {
         &self.indexes
     }
 }

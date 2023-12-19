@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Mutex};
 
 use crate::{index::IndexSegmentData, DocId, END_DOCID};
 
@@ -9,21 +6,22 @@ pub struct UniqueKeyIndexSegmentData {
     keys: Mutex<HashMap<String, DocId>>,
 }
 
-pub struct UniqueKeyIndexSegmentWriter {}
+impl UniqueKeyIndexSegmentData {
+    pub fn new() -> Self {
+        Self {
+            keys: Mutex::new(HashMap::new()),
+        }
+    }
 
-pub struct UniqueKeyIndexSegmentReader {
-    index_data: Arc<UniqueKeyIndexSegmentData>,
-}
-
-impl IndexSegmentData for UniqueKeyIndexSegmentData {}
-
-impl UniqueKeyIndexSegmentReader {
-    pub fn new(index_data: Arc<UniqueKeyIndexSegmentData>) -> Self {
-        Self { index_data }
+    pub fn insert(&self, key: String, docid: DocId) {
+        let mut keys = self.keys.lock().unwrap();
+        keys.insert(key, docid);
     }
 
     pub fn lookup(&self, key: &str) -> DocId {
-        let keys = self.index_data.keys.lock().unwrap();
+        let keys = self.keys.lock().unwrap();
         keys.get(key).cloned().unwrap_or(END_DOCID)
     }
 }
+
+impl IndexSegmentData for UniqueKeyIndexSegmentData {}

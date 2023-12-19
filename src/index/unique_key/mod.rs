@@ -1,6 +1,10 @@
 mod unique_key_index_reader;
 mod unique_key_index_segment_data;
+mod unique_key_index_segment_reader;
+mod unique_key_index_writer;
 mod unique_key_posting_iterator;
 
 pub use unique_key_index_reader::UniqueKeyIndexReader;
-pub use unique_key_index_segment_data::{UniqueKeyIndexSegmentData, UniqueKeyIndexSegmentReader};
+pub use unique_key_index_writer::UniqueKeyIndexWriter;
+pub use unique_key_index_segment_data::UniqueKeyIndexSegmentData;
+pub use unique_key_index_segment_reader::UniqueKeyIndexSegmentReader;

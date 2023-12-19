@@ -15,7 +15,7 @@ pub type TableDataRef = Arc<TableData>;
 impl Clone for TableData {
     fn clone(&self) -> Self {
         Self {
-            building_segments: vec![],
+            building_segments: self.building_segments.clone(),
             schema: self.schema.clone(),
             settings: self.settings.clone(),
         }
@@ -29,6 +29,10 @@ impl TableData {
             schema,
             settings,
         }
+    }
+
+    pub fn add_building_segment(&mut self, building_segment: BuildingSegment) {
+        self.building_segments.push(building_segment);
     }
 
     pub fn building_segments(&self) -> &[BuildingSegment] {

@@ -1,4 +1,5 @@
 pub mod index;
+pub mod document;
 pub mod postings;
 pub mod query;
 pub mod schema;
