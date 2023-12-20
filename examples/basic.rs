@@ -1,8 +1,9 @@
 use rindex::{
+    column::GenericColumnReader,
     document::Document,
     index::PostingIterator,
     query::Term,
-    schema::{IndexType, Schema},
+    schema::{FieldType, IndexType, Schema},
     table::{Table, TableSettings},
     DocId, END_DOCID,
 };
@@ -24,6 +25,7 @@ fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
 
 pub fn main() {
     let mut schema = Schema::new();
+    schema.add_field("title".to_string(), FieldType::Text);
     schema.add_index(
         "title".to_string(),
         IndexType::Term,
@@ -59,4 +61,13 @@ pub fn main() {
     let mut posting_iter = index_reader.lookup(&term).unwrap();
     let docids = get_all_docs(&mut *posting_iter);
     assert_eq!(docids, vec![1]);
+
+    let column_reader = reader.column_reader();
+    let title_column_reader = column_reader
+        .column("title")
+        .unwrap()
+        .downcast_ref::<GenericColumnReader<String>>()
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
+    assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
 }

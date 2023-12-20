@@ -8,31 +8,34 @@ use crate::{
 };
 
 pub struct TermIndexReader {
-    segment_readers: Vec<TermIndexSegmentReader>,
+    segments: Vec<TermIndexSegmentReader>,
 }
 
 impl TermIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
-        let mut segment_readers = vec![];
+        let mut segments = vec![];
         for building_segment in table_data.building_segments() {
-            let index_data = building_segment.index_data(index.name());
+            let index_data = building_segment
+                .index_data()
+                .index_data(index.name())
+                .unwrap();
             let term_index_data = index_data
                 .clone()
                 .downcast_arc::<TermIndexSegmentData>()
                 .ok()
                 .unwrap();
             let index_segment_reader = TermIndexSegmentReader::new(term_index_data);
-            segment_readers.push(index_segment_reader);
+            segments.push(index_segment_reader);
         }
 
-        Self { segment_readers }
+        Self { segments }
     }
 }
 
 impl IndexReader for TermIndexReader {
     fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
         let mut segment_postings = vec![];
-        for segment_reader in &self.segment_readers {
+        for segment_reader in &self.segments {
             let segment_posting = segment_reader.segment_posting(key);
             if !segment_posting.is_empty() {
                 segment_postings.push(segment_posting);

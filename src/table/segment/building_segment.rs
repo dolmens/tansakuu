@@ -1,23 +1,26 @@
-use std::{collections::HashMap, sync::Arc};
-
-use crate::index::IndexSegmentData;
+use super::{BuildingSegmentColumnData, BuildingSegmentIndexData};
 
 pub struct BuildingSegment {
-    indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
+    column_data: BuildingSegmentColumnData,
+    index_data: BuildingSegmentIndexData,
 }
 
 impl BuildingSegment {
-    pub fn new() -> Self {
+    pub fn new(
+        column_data: BuildingSegmentColumnData,
+        index_data: BuildingSegmentIndexData,
+    ) -> Self {
         Self {
-            indexes: HashMap::new(),
+            column_data,
+            index_data,
         }
     }
 
-    pub fn add_index_data(&mut self, index_name: String, data: Arc<dyn IndexSegmentData>) {
-        self.indexes.insert(index_name, data);
+    pub fn column_data(&self) -> &BuildingSegmentColumnData {
+        &self.column_data
     }
 
-    pub fn index_data(&self, index_name: &str) -> &Arc<dyn IndexSegmentData> {
-        self.indexes.get(index_name).unwrap()
+    pub fn index_data(&self) -> &BuildingSegmentIndexData {
+        &self.index_data
     }
 }

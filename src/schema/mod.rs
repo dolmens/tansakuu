@@ -1,3 +1,3 @@
 mod schema;
 
-pub use schema::{Attribute, Field, Index, IndexType, Schema, SchemaRef};
+pub use schema::{Field, FieldType, Index, IndexType, Schema, SchemaRef};

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 
 use crate::{
     index::{IndexReader, IndexReaderFactory, PostingIterator},
@@ -24,10 +24,11 @@ impl TableIndexReader {
         Self { indexes }
     }
 
+    pub fn index_reader(&self, name: &str) -> Option<&dyn IndexReader> {
+        self.indexes.get(name).map(|r| r.deref())
+    }
+
     pub fn lookup(&self, term: &Term) -> Option<Box<dyn PostingIterator>> {
-        self.indexes
-            .get(term.index_name())
-            .unwrap()
-            .lookup(term.keyword())
+        self.indexes.get(term.index_name())?.lookup(term.keyword())
     }
 }

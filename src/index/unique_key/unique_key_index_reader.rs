@@ -13,7 +13,10 @@ impl UniqueKeyIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut segment_readers = vec![];
         for building_segment in table_data.building_segments() {
-            let index_data = building_segment.index_data(index.name());
+            let index_data = building_segment
+                .index_data()
+                .index_data(index.name())
+                .unwrap();
             let unique_key_index_data = index_data
                 .clone()
                 .downcast_arc::<UniqueKeyIndexSegmentData>()
