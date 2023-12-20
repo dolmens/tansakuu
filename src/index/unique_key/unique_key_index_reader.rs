@@ -12,7 +12,10 @@ pub struct UniqueKeyIndexReader {
 impl UniqueKeyIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut segment_readers = vec![];
-        for building_segment in table_data.building_segments() {
+        for building_segment in table_data
+            .dumping_segments()
+            .chain(table_data.building_segments())
+        {
             let index_data = building_segment
                 .index_data()
                 .index_data(index.name())

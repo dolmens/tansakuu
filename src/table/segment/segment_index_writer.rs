@@ -7,12 +7,14 @@ use crate::{
     DocId,
 };
 
-pub struct TableIndexWriter {
+use super::BuildingSegmentIndexData;
+
+pub struct SegmentIndexWriter {
     indexes: HashMap<String, Box<dyn IndexWriter>>,
     schema: SchemaRef,
 }
 
-impl TableIndexWriter {
+impl SegmentIndexWriter {
     pub fn new(schema: &SchemaRef) -> Self {
         let mut indexes: HashMap<String, Box<dyn IndexWriter>> = HashMap::new();
         let index_writer_factory = IndexWriterFactory::new();
@@ -21,7 +23,10 @@ impl TableIndexWriter {
             indexes.insert(index.name().to_string(), index_writer);
         }
 
-        Self { indexes, schema: schema.clone() }
+        Self {
+            indexes,
+            schema: schema.clone(),
+        }
     }
 
     pub fn add_doc(&mut self, doc: &Document, docid: DocId) {
@@ -40,9 +45,12 @@ impl TableIndexWriter {
         }
     }
 
-    pub fn index_writers(&self) -> impl Iterator<Item = (&str, &dyn IndexWriter)> {
-        self.indexes
-            .iter()
-            .map(|(name, writer)| (name.as_str(), writer.as_ref()))
+    pub fn index_data(&self) -> BuildingSegmentIndexData {
+        let mut indexes = HashMap::new();
+        for (name, writer) in &self.indexes {
+            indexes.insert(name.to_string(), writer.index_data());
+        }
+
+        BuildingSegmentIndexData::new(indexes)
     }
 }

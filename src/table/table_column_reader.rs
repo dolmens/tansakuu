@@ -1,9 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use crate::{
-    column::{ColumnReader, ColumnReaderFactory},
-    schema,
-};
+use crate::column::{ColumnReader, ColumnReaderFactory};
 
 use super::TableData;
 

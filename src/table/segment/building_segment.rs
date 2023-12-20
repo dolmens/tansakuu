@@ -1,26 +1,19 @@
-use super::{BuildingSegmentColumnData, BuildingSegmentIndexData};
+use super::{BuildingSegmentColumnData, BuildingSegmentData, BuildingSegmentIndexData};
 
 pub struct BuildingSegment {
-    column_data: BuildingSegmentColumnData,
-    index_data: BuildingSegmentIndexData,
+    segment_data: BuildingSegmentData,
 }
 
 impl BuildingSegment {
-    pub fn new(
-        column_data: BuildingSegmentColumnData,
-        index_data: BuildingSegmentIndexData,
-    ) -> Self {
-        Self {
-            column_data,
-            index_data,
-        }
+    pub fn new(segment_data: BuildingSegmentData) -> Self {
+        Self { segment_data }
     }
 
     pub fn column_data(&self) -> &BuildingSegmentColumnData {
-        &self.column_data
+        self.segment_data.column_data()
     }
 
     pub fn index_data(&self) -> &BuildingSegmentIndexData {
-        &self.index_data
+        self.segment_data.index_data()
     }
 }

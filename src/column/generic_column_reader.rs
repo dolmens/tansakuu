@@ -11,7 +11,10 @@ pub struct GenericColumnReader<T> {
 impl<T: Send + Sync + 'static> GenericColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
         let mut segments = vec![];
-        for building_segment in table_data.building_segments() {
+        for building_segment in table_data
+            .dumping_segments()
+            .chain(table_data.building_segments())
+        {
             let column_data = building_segment
                 .column_data()
                 .column_data(field.name())

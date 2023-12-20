@@ -1,40 +1,46 @@
+use std::sync::Arc;
+
 use crate::{document::Document, DocId};
 
 use super::{
-    segment::{BuildingSegment, BuildingSegmentColumnData, BuildingSegmentIndexData},
-    Table, TableColumnWriter, TableIndexWriter,
+    segment::{BuildingSegment, SegmentWriter},
+    Table,
 };
 
 pub struct TableWriter<'a> {
     docid: DocId,
-    column_writer: TableColumnWriter,
-    index_writer: TableIndexWriter,
+    segment_writer: SegmentWriter,
+    building_segment: Arc<BuildingSegment>,
     table: &'a Table,
 }
 
 impl<'a> TableWriter<'a> {
     pub fn new(table: &'a Table) -> Self {
-        let column_writer = TableColumnWriter::new(table.schema());
-        let column_data = BuildingSegmentColumnData::new(&column_writer);
-        let index_writer = TableIndexWriter::new(table.schema());
-        let index_data = BuildingSegmentIndexData::new(&index_writer);
-
-        let building_segment = BuildingSegment::new(column_data, index_data);
-        table.add_building_segment(building_segment);
+        let segment_writer = SegmentWriter::new(table.schema());
+        let segment_data = segment_writer.building_segment_data();
+        let building_segment = Arc::new(BuildingSegment::new(segment_data));
+        table.add_building_segment(building_segment.clone());
 
         Self {
             docid: 0,
-            column_writer,
-            index_writer,
+            segment_writer,
+            building_segment,
             table,
         }
     }
 
     pub fn add_doc(&mut self, doc: &Document) {
-        self.column_writer.add_doc(doc, self.docid);
-        self.index_writer.add_doc(doc, self.docid);
-
+        self.segment_writer.add_doc(doc, self.docid);
         self.docid += 1;
+    }
+
+    pub fn new_segment(&mut self) {
+        self.table.dump_segment(self.building_segment.clone());
+
+        self.segment_writer = SegmentWriter::new(self.table.schema());
+        let segment_data = self.segment_writer.building_segment_data();
+        let building_segment = Arc::new(BuildingSegment::new(segment_data));
+        self.table.add_building_segment(building_segment.clone());
     }
 }
 

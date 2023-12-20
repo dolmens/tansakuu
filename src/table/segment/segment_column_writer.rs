@@ -7,11 +7,13 @@ use crate::{
     DocId,
 };
 
-pub struct TableColumnWriter {
+use super::BuildingSegmentColumnData;
+
+pub struct SegmentColumnWriter {
     columns: HashMap<String, Box<dyn ColumnWriter>>,
 }
 
-impl TableColumnWriter {
+impl SegmentColumnWriter {
     pub fn new(schema: &SchemaRef) -> Self {
         let mut columns: HashMap<String, Box<dyn ColumnWriter>> = HashMap::new();
         let column_writer_factory = ColumnWriterFactory::new();
@@ -31,9 +33,12 @@ impl TableColumnWriter {
         }
     }
 
-    pub fn column_writers(&self) -> impl Iterator<Item = (&str, &dyn ColumnWriter)> {
-        self.columns
-            .iter()
-            .map(|(name, writer)| (name.as_str(), writer.as_ref()))
+    pub fn column_data(&self) -> BuildingSegmentColumnData {
+        let mut columns = HashMap::new();
+        for (name, writer) in &self.columns {
+            columns.insert(name.to_string(), writer.column_data());
+        }
+
+        BuildingSegmentColumnData::new(columns)
     }
 }
