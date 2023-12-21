@@ -8,3 +8,4 @@ allocator-api2 = "0.2.16"
 arc-swap = "1.6.0"
 bumpalo = { version = "3.14.0", features = ["allocator-api2"] }
 downcast-rs = "1.2.0"
+uuid = { version = "1.6.1", features = ["v4"] }

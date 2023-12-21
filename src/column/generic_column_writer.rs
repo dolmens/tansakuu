@@ -1,17 +1,15 @@
 use std::{str::FromStr, sync::Arc};
 
-use super::{
-    generic_column_segment_data::GenericColumnSegmentData, ColumnSegmentData, ColumnWriter,
-};
+use super::{ColumnSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
 
 pub struct GenericColumnWriter<T> {
-    column_data: Arc<GenericColumnSegmentData<T>>,
+    column_data: Arc<GenericColumnBuildingSegmentData<T>>,
 }
 
 impl<T> GenericColumnWriter<T> {
     pub fn new() -> Self {
         Self {
-            column_data: Arc::new(GenericColumnSegmentData::new()),
+            column_data: Arc::new(GenericColumnBuildingSegmentData::new()),
         }
     }
 }

@@ -2,12 +2,16 @@ use std::{collections::VecDeque, sync::Arc};
 
 use crate::schema::SchemaRef;
 
-use super::{segment::BuildingSegment, TableSettingsRef};
+use super::{
+    segment::{BuildingSegment, Segment},
+    TableSettingsRef,
+};
 
 #[derive(Clone)]
 pub struct TableData {
     building_segments: Vec<Arc<BuildingSegment>>,
     dumping_segments: VecDeque<Arc<BuildingSegment>>,
+    segments: Vec<Arc<Segment>>,
     schema: SchemaRef,
     settings: TableSettingsRef,
 }
@@ -19,6 +23,7 @@ impl TableData {
         Self {
             building_segments: vec![],
             dumping_segments: VecDeque::new(),
+            segments: vec![],
             schema,
             settings,
         }

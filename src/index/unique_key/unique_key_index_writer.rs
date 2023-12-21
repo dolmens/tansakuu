@@ -2,18 +2,18 @@ use std::sync::Arc;
 
 use crate::{index::IndexWriter, DocId};
 
-use super::UniqueKeyIndexSegmentData;
+use super::UniqueKeyIndexBuildingSegmentData;
 
 pub struct UniqueKeyIndexWriter {
     key: Option<String>,
-    index_data: Arc<UniqueKeyIndexSegmentData>,
+    index_data: Arc<UniqueKeyIndexBuildingSegmentData>,
 }
 
 impl UniqueKeyIndexWriter {
     pub fn new() -> Self {
         Self {
             key: None,
-            index_data: Arc::new(UniqueKeyIndexSegmentData::new()),
+            index_data: Arc::new(UniqueKeyIndexBuildingSegmentData::new()),
         }
     }
 }

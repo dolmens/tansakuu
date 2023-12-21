@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::index::SegmentPosting;
 
-use super::TermIndexSegmentData;
+use super::TermIndexBuildingSegmentData;
 
-pub struct TermIndexSegmentReader {
-    index_data: Arc<TermIndexSegmentData>,
+pub struct TermIndexBuildingSegmentReader {
+    index_data: Arc<TermIndexBuildingSegmentData>,
 }
 
-impl TermIndexSegmentReader {
-    pub fn new(index_data: Arc<TermIndexSegmentData>) -> Self {
+impl TermIndexBuildingSegmentReader {
+    pub fn new(index_data: Arc<TermIndexBuildingSegmentData>) -> Self {
         Self { index_data }
     }
 

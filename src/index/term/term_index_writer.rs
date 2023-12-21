@@ -2,18 +2,18 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{index::IndexWriter, DocId};
 
-use super::TermIndexSegmentData;
+use super::TermIndexBuildingSegmentData;
 
 pub struct TermIndexWriter {
     fields: HashMap<String, String>,
-    index_data: Arc<TermIndexSegmentData>,
+    index_data: Arc<TermIndexBuildingSegmentData>,
 }
 
 impl TermIndexWriter {
     pub fn new() -> Self {
         Self {
             fields: HashMap::new(),
-            index_data: Arc::new(TermIndexSegmentData::new()),
+            index_data: Arc::new(TermIndexBuildingSegmentData::new()),
         }
     }
 }

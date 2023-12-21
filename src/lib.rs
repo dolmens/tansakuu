@@ -6,6 +6,7 @@ pub mod query;
 pub mod schema;
 pub mod table;
 pub mod util;
+pub mod directory;
 
 pub type DocId = i32;
 pub type RowId = usize;

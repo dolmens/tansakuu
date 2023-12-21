@@ -1,16 +1,17 @@
 use crate::{schema::Field, table::TableData, RowId};
 
 use super::{
-    ColumnReader, ColumnSegmentReader, GenericColumnSegmentData, GenericColumnSegmentReader,
+    ColumnReader, ColumnSegmentReader, GenericColumnBuildingSegmentData,
+    GenericColumnBuildingSegmentReader,
 };
 
 pub struct GenericColumnReader<T> {
-    segments: Vec<GenericColumnSegmentReader<T>>,
+    building_segments: Vec<GenericColumnBuildingSegmentReader<T>>,
 }
 
 impl<T: Send + Sync + 'static> GenericColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
-        let mut segments = vec![];
+        let mut building_segments = vec![];
         for building_segment in table_data
             .dumping_segments()
             .chain(table_data.building_segments())
@@ -21,14 +22,15 @@ impl<T: Send + Sync + 'static> GenericColumnReader<T> {
                 .unwrap();
             let generic_column_data = column_data
                 .clone()
-                .downcast_arc::<GenericColumnSegmentData<T>>()
+                .downcast_arc::<GenericColumnBuildingSegmentData<T>>()
                 .ok()
                 .unwrap();
-            let column_segment_reader = GenericColumnSegmentReader::<T>::new(generic_column_data);
-            segments.push(column_segment_reader);
+            let column_segment_reader =
+                GenericColumnBuildingSegmentReader::<T>::new(generic_column_data);
+            building_segments.push(column_segment_reader);
         }
 
-        Self { segments }
+        Self { building_segments }
     }
 
     pub fn get(&self, rowid: RowId) -> Option<T>
@@ -36,7 +38,7 @@ impl<T: Send + Sync + 'static> GenericColumnReader<T> {
         T: Clone,
     {
         let mut base_docid = 0;
-        for segment in &self.segments {
+        for segment in &self.building_segments {
             if rowid - base_docid < segment.doc_count() {
                 return segment.get(rowid - base_docid);
             }

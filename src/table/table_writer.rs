@@ -45,5 +45,7 @@ impl<'a> TableWriter<'a> {
 }
 
 impl<'a> Drop for TableWriter<'a> {
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+        // dump
+    }
 }
