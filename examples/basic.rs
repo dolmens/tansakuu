@@ -32,7 +32,7 @@ pub fn main() {
         vec!["title".to_string()],
     );
     let settings = TableSettings::new();
-    let table = Table::open_in(schema, settings, ".");
+    let table = Table::open_in(schema, settings, "./testdata");
 
     let mut writer = table.writer();
 

@@ -14,13 +14,11 @@ use crate::{
 };
 
 use super::{
-    segment::{BuildingSegment, SegmentDumper},
-    TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
+    segment::BuildingSegment, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
     reader: ArcSwap<TableReader>,
-    segment_dumper: SegmentDumper,
     table_data: Mutex<TableData>,
     directory: PathBuf,
     schema: SchemaRef,
@@ -30,16 +28,16 @@ pub struct Table {
 pub type TableRef = Arc<Table>;
 
 impl Table {
-    pub fn open_in<P: AsRef<Path>>(schema: Schema, settings: TableSettings, direcoty: P) -> Self {
+    pub fn open_in<P: AsRef<Path>>(schema: Schema, settings: TableSettings, directory: P) -> Self {
         let schema = Arc::new(schema);
         let settings = Arc::new(settings);
-        let table_data = TableData::new(schema.clone(), settings.clone());
+        let directory = directory.as_ref().to_owned();
+        let table_data = TableData::new(directory.clone(), schema.clone(), settings.clone());
         let reader = ArcSwap::from(Arc::new(TableReader::new(table_data.clone())));
         Self {
             reader,
-            segment_dumper: SegmentDumper::new(),
             table_data: Mutex::new(table_data),
-            directory: direcoty.as_ref().into(),
+            directory,
             schema,
             settings,
         }

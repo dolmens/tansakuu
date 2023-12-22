@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::schema::SchemaRef;
 
@@ -10,7 +10,6 @@ use super::{
 #[derive(Clone)]
 pub struct TableData {
     building_segments: Vec<Arc<BuildingSegment>>,
-    dumping_segments: VecDeque<Arc<BuildingSegment>>,
     segments: Vec<Arc<Segment>>,
     schema: SchemaRef,
     settings: TableSettingsRef,
@@ -19,11 +18,21 @@ pub struct TableData {
 pub type TableDataRef = Arc<TableData>;
 
 impl TableData {
-    pub fn new(schema: SchemaRef, settings: TableSettingsRef) -> Self {
+    pub fn new(directory: PathBuf, schema: SchemaRef, settings: TableSettingsRef) -> Self {
+        let mut segments = vec![];
+        let segments_directory = directory.join("segments");
+        if let Ok(entries) = fs::read_dir(segments_directory) {
+            for entry in entries {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    segments.push(Arc::new(Segment::new(&schema, path)));
+                }
+            }
+        }
+
         Self {
             building_segments: vec![],
-            dumping_segments: VecDeque::new(),
-            segments: vec![],
+            segments,
             schema,
             settings,
         }
@@ -41,15 +50,14 @@ impl TableData {
         {
             self.building_segments.remove(pos);
         }
-        self.dumping_segments.push_back(building_segment);
+    }
+
+    pub fn segments(&self) -> impl Iterator<Item = &Arc<Segment>> {
+        self.segments.iter()
     }
 
     pub fn building_segments(&self) -> impl Iterator<Item = &Arc<BuildingSegment>> {
         self.building_segments.iter()
-    }
-
-    pub fn dumping_segments(&self) -> impl Iterator<Item = &Arc<BuildingSegment>> {
-        self.dumping_segments.iter()
     }
 
     pub fn schema(&self) -> &SchemaRef {

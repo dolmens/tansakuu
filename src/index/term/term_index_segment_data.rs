@@ -1,21 +1,16 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::collections::HashMap;
 
 use crate::{index::IndexSegmentData, DocId};
 
 pub struct TermIndexSegmentData {
-    pub postings: Mutex<HashMap<String, Vec<DocId>>>,
+    pub postings: HashMap<String, Vec<DocId>>,
 }
 
 impl TermIndexSegmentData {
-    pub fn new() -> Self {
+    pub fn new(postings: HashMap<String, Vec<DocId>>) -> Self {
         Self {
-            postings: Mutex::new(HashMap::new()),
+            postings,
         }
-    }
-
-    pub fn add_doc(&self, tok: String, docid: DocId) {
-        let mut postings = self.postings.lock().unwrap();
-        postings.entry(tok).or_insert_with(Vec::new).push(docid);
     }
 }
 
