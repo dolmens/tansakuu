@@ -16,7 +16,9 @@ mod generic_column_segment_reader;
 mod generic_column_serializer;
 mod generic_column_writer;
 
-pub use column_reader::ColumnReader;
+pub use column_reader::{
+    ColumnReader, ColumnReaderSnapshot, TypedColumnReader, TypedColumnReaderSnapshot,
+};
 pub use column_reader_factory::ColumnReaderFactory;
 pub use column_segment_data::{ColumnSegmentData, ColumnSegmentDataBuilder};
 pub use column_segment_data_factory::ColumnSegmentDataFactory;

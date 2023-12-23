@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{index::IndexSegmentData, DocId, END_DOCID};
+use crate::{index::IndexSegmentData, DocId};
 
 pub struct UniqueKeyIndexSegmentData {
     keys: HashMap<String, DocId>,
@@ -11,8 +11,8 @@ impl UniqueKeyIndexSegmentData {
         Self { keys }
     }
 
-    pub fn lookup(&self, key: &str) -> DocId {
-        self.keys.get(key).cloned().unwrap_or(END_DOCID)
+    pub fn lookup(&self, key: &str) -> Option<DocId> {
+        self.keys.get(key).cloned()
     }
 }
 

@@ -1,8 +1,12 @@
-use crate::{schema::Field, table::TableData, RowId};
+use crate::{
+    schema::Field,
+    table::{TableData, TableDataSnapshot},
+    RowId,
+};
 
 use super::{
     ColumnReader, ColumnSegmentReader, GenericColumnBuildingSegmentReader,
-    GenericColumnSegmentReader,
+    GenericColumnSegmentReader, TypedColumnReader,
 };
 
 pub struct GenericColumnReader<T> {
@@ -37,27 +41,29 @@ impl<T: Send + Sync + 'static> GenericColumnReader<T> {
             building_segments,
         }
     }
+}
 
-    pub fn get(&self, rowid: RowId) -> Option<T>
-    where
-        T: Clone,
-    {
-        let mut base_docid = 0;
+impl<T: Send + Sync + 'static> ColumnReader for GenericColumnReader<T> {}
+
+impl<T: Clone + Send + Sync + 'static> TypedColumnReader for GenericColumnReader<T> {
+    type Item = T;
+    fn get(&self, rowid: RowId, data_snapshot: &TableDataSnapshot) -> Option<Self::Item> {
+        let mut segment_cursor = 0;
         for segment in &self.segments {
-            if rowid - base_docid < segment.doc_count() {
+            let base_docid = data_snapshot.segments[segment_cursor];
+            if rowid < base_docid + segment.doc_count() {
                 return segment.get(rowid - base_docid);
             }
-            base_docid += segment.doc_count();
+            segment_cursor += 1;
         }
         for segment in &self.building_segments {
-            if rowid - base_docid < segment.doc_count() {
+            let base_docid = data_snapshot.segments[segment_cursor];
+            if rowid < base_docid + segment.doc_count() {
                 return segment.get(rowid - base_docid);
             }
-            base_docid += segment.doc_count();
+            segment_cursor += 1;
         }
 
         None
     }
 }
-
-impl<T: Send + Sync + 'static> ColumnReader for GenericColumnReader<T> {}

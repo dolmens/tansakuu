@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Mutex};
 
-use crate::{index::IndexSegmentData, DocId, END_DOCID};
+use crate::{index::IndexSegmentData, DocId};
 
 pub struct UniqueKeyIndexBuildingSegmentData {
     keys: Mutex<HashMap<String, DocId>>,
@@ -18,9 +18,9 @@ impl UniqueKeyIndexBuildingSegmentData {
         keys.insert(key, docid);
     }
 
-    pub fn lookup(&self, key: &str) -> DocId {
+    pub fn lookup(&self, key: &str) -> Option<DocId> {
         let keys = self.keys.lock().unwrap();
-        keys.get(key).cloned().unwrap_or(END_DOCID)
+        keys.get(key).cloned()
     }
 
     pub fn keys(&self) -> HashMap<String, DocId> {

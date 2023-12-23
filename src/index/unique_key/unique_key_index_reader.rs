@@ -1,4 +1,8 @@
-use crate::{index::IndexReader, schema::Index, table::TableData, END_DOCID};
+use crate::{
+    index::IndexReader,
+    schema::Index,
+    table::{TableData, TableDataSnapshot},
+};
 
 use super::{
     unique_key_posting_iterator::UniqueKeyPostingIterator, UniqueKeyIndexBuildingSegmentReader,
@@ -40,16 +44,20 @@ impl UniqueKeyIndexReader {
 }
 
 impl IndexReader for UniqueKeyIndexReader {
-    fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
+    fn lookup(
+        &self,
+        key: &str,
+        data_snapshot: &TableDataSnapshot,
+    ) -> Option<Box<dyn crate::index::PostingIterator>> {
         for segment_reader in self.building_segments.iter().rev() {
             let docid = segment_reader.lookup(key);
-            if docid != END_DOCID {
+            if let Some(docid) = docid {
                 return Some(Box::new(UniqueKeyPostingIterator::new(docid)));
             }
         }
         for segment_reader in self.segments.iter().rev() {
             let docid = segment_reader.lookup(key);
-            if docid != END_DOCID {
+            if let Some(docid) = docid {
                 return Some(Box::new(UniqueKeyPostingIterator::new(docid)));
             }
         }

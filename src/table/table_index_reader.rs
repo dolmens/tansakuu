@@ -1,14 +1,18 @@
-use std::{collections::HashMap, ops::Deref};
-
 use crate::{
-    index::{IndexReader, IndexReaderFactory, PostingIterator},
+    index::{IndexReader, IndexReaderFactory, IndexReaderSnapshot, PostingIterator},
     query::Term,
 };
+use std::{collections::HashMap, ops::Deref};
 
-use super::TableData;
+use super::{TableData, TableDataSnapshot};
 
 pub struct TableIndexReader {
     indexes: HashMap<String, Box<dyn IndexReader>>,
+}
+
+pub struct TableIndexReaderSnapshot<'a> {
+    data_snapshot: &'a TableDataSnapshot,
+    index_reader: &'a TableIndexReader,
 }
 
 impl TableIndexReader {
@@ -24,11 +28,34 @@ impl TableIndexReader {
         Self { indexes }
     }
 
-    pub fn index_reader(&self, name: &str) -> Option<&dyn IndexReader> {
+    pub fn index(&self, name: &str) -> Option<&dyn IndexReader> {
         self.indexes.get(name).map(|r| r.deref())
     }
 
+    pub fn lookup(
+        &self,
+        term: &Term,
+        data_snapshot: &TableDataSnapshot,
+    ) -> Option<Box<dyn PostingIterator>> {
+        self.index(term.index_name())?
+            .lookup(term.keyword(), data_snapshot)
+    }
+}
+
+impl<'a> TableIndexReaderSnapshot<'a> {
+    pub fn new(data_snapshot: &'a TableDataSnapshot, index_reader: &'a TableIndexReader) -> Self {
+        Self {
+            data_snapshot,
+            index_reader,
+        }
+    }
+    pub fn index(&self, name: &str) -> Option<IndexReaderSnapshot> {
+        self.index_reader
+            .index(name)
+            .map(|index| IndexReaderSnapshot::new(self.data_snapshot, index))
+    }
+
     pub fn lookup(&self, term: &Term) -> Option<Box<dyn PostingIterator>> {
-        self.indexes.get(term.index_name())?.lookup(term.keyword())
+        self.index(term.index_name())?.lookup(term.keyword())
     }
 }

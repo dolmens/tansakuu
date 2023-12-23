@@ -1,4 +1,4 @@
-use crate::{index::PostingIterator, DocId, END_DOCID};
+use crate::{index::PostingIterator, DocId};
 
 pub struct UniqueKeyPostingIterator {
     docid: DocId,
@@ -11,11 +11,11 @@ impl UniqueKeyPostingIterator {
 }
 
 impl PostingIterator for UniqueKeyPostingIterator {
-    fn seek(&mut self, docid: crate::DocId) -> crate::DocId {
+    fn seek(&mut self, docid: crate::DocId) -> Option<crate::DocId> {
         if docid <= self.docid {
-            self.docid
+            Some(self.docid)
         } else {
-            END_DOCID
+            None
         }
     }
 }

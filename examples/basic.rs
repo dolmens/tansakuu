@@ -5,21 +5,22 @@ use rindex::{
     query::Term,
     schema::{FieldType, IndexType, Schema},
     table::{Table, TableSettings},
-    DocId, END_DOCID,
+    DocId,
 };
 
 fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
     let mut docids = vec![];
     let mut docid = 0;
     loop {
-        docid = posting_iter.seek(docid);
-        if docid != END_DOCID {
-            docids.push(docid);
-            docid += 1;
-        } else {
-            break;
+        match posting_iter.seek(docid) {
+            Some(seeked) => {
+                docids.push(seeked);
+                docid = seeked + 1;
+            }
+            None => break,
         }
     }
+
     docids
 }
 
@@ -64,9 +65,7 @@ pub fn main() {
 
     let column_reader = reader.column_reader();
     let title_column_reader = column_reader
-        .column("title")
-        .unwrap()
-        .downcast_ref::<GenericColumnReader<String>>()
+        .typed_column::<String, GenericColumnReader<_>>("title")
         .unwrap();
     assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
     assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));

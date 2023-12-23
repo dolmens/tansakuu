@@ -1,7 +1,4 @@
-use crate::{
-    index::{PostingIterator, SegmentPosting},
-    END_DOCID,
-};
+use crate::index::{PostingIterator, SegmentPosting};
 
 pub struct BufferedPostingIterator {
     segment_cursor: usize,
@@ -18,14 +15,14 @@ impl BufferedPostingIterator {
 }
 
 impl PostingIterator for BufferedPostingIterator {
-    fn seek(&mut self, docid: crate::DocId) -> crate::DocId {
+    fn seek(&mut self, docid: crate::DocId) -> Option<crate::DocId> {
         while self.segment_cursor < self.segment_postings.len() {
-            let res = self.segment_postings[self.segment_cursor].seek(docid);
-            if res != END_DOCID {
-                return res;
+            let seeked = self.segment_postings[self.segment_cursor].seek(docid);
+            if seeked.is_some() {
+                return seeked;
             }
             self.segment_cursor += 1;
         }
-        END_DOCID
+        None
     }
 }

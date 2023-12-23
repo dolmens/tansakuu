@@ -16,6 +16,6 @@ impl TermIndexBuildingSegmentReader {
     pub fn segment_posting(&self, tok: &str) -> crate::index::SegmentPosting {
         let postings = self.index_data.postings.lock().unwrap();
         let docids = postings.get(tok).cloned().unwrap_or_default();
-        SegmentPosting { docids }
+        SegmentPosting::new(0, docids)
     }
 }

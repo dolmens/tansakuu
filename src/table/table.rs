@@ -14,7 +14,8 @@ use crate::{
 };
 
 use super::{
-    segment::BuildingSegment, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
+    segment::{BuildingSegment, SegmentMeta},
+    TableData, TableReader, TableReaderSnapshot, TableSettings, TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
@@ -43,8 +44,9 @@ impl Table {
         }
     }
 
-    pub fn reader(&self) -> Arc<TableReader> {
-        self.reader.load_full()
+    pub fn reader(&self) -> TableReaderSnapshot {
+        let reader = self.reader.load_full();
+        TableReaderSnapshot::new(&self, reader)
     }
 
     pub fn writer(&self) -> TableWriter {
@@ -97,6 +99,9 @@ impl Table {
             index_serializer.serialize(&index_directory);
         }
 
+        let meta = SegmentMeta::new(building_segment.doc_count());
+        meta.save(dumping_segment_directory.join("meta.json"));
+
         let mut table_data = self.table_data.lock().unwrap();
         let current_version = table_data.version();
         let mut version = current_version.new_version();
@@ -122,21 +127,22 @@ mod tests {
         query::Term,
         schema::{FieldType, IndexType, Schema},
         table::{Table, TableSettings},
-        DocId, END_DOCID,
+        DocId,
     };
 
     fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
         let mut docids = vec![];
         let mut docid = 0;
         loop {
-            docid = posting_iter.seek(docid);
-            if docid != END_DOCID {
-                docids.push(docid);
-                docid += 1;
-            } else {
-                break;
+            match posting_iter.seek(docid) {
+                Some(seeked) => {
+                    docids.push(seeked);
+                    docid = seeked + 1;
+                }
+                None => break,
             }
         }
+
         docids
     }
 
@@ -182,9 +188,7 @@ mod tests {
 
         let column_reader = reader.column_reader();
         let title_column_reader = column_reader
-            .column("title")
-            .unwrap()
-            .downcast_ref::<GenericColumnReader<String>>()
+            .typed_column::<String, GenericColumnReader<_>>("title")
             .unwrap();
         assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
         assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
@@ -232,9 +236,7 @@ mod tests {
 
         let column_reader = reader.column_reader();
         let title_column_reader = column_reader
-            .column("title")
-            .unwrap()
-            .downcast_ref::<GenericColumnReader<String>>()
+            .typed_column::<String, GenericColumnReader<_>>("title")
             .unwrap();
         assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
         assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));

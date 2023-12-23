@@ -6,17 +6,22 @@ use crate::{
     schema::SchemaRef,
 };
 
+use super::SegmentMeta;
+
 pub struct Segment {
-    segment_name: String,
+    name: String,
+    meta: SegmentMeta,
     indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
     columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
 }
 
 impl Segment {
-    pub fn new(segment_name: String,schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
+    pub fn new(segment_name: String, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
+        let directory = directory.as_ref();
+        let meta = SegmentMeta::load(directory.join("meta.json"));
         let mut indexes = HashMap::new();
         let index_segment_data_factory = IndexSegmentDataFactory::new();
-        let index_directory = directory.as_ref().join("index");
+        let index_directory = directory.join("index");
         for index in schema.indexes() {
             let index_segment_data_builder = index_segment_data_factory.create_builder(index);
             let index_path = index_directory.join(index.name());
@@ -26,7 +31,7 @@ impl Segment {
 
         let mut columns = HashMap::new();
         let column_segment_data_factory = ColumnSegmentDataFactory::new();
-        let column_directory = directory.as_ref().join("column");
+        let column_directory = directory.join("column");
         for field in schema.columns() {
             let column_segment_data_builder = column_segment_data_factory.create_builder(field);
             let column_path = column_directory.join(field.name());
@@ -34,11 +39,20 @@ impl Segment {
             columns.insert(field.name().to_string(), column_segment_data.into());
         }
 
-        Self { segment_name, indexes, columns }
+        Self {
+            name: segment_name,
+            meta,
+            indexes,
+            columns,
+        }
     }
 
-    pub fn segment_name(&self) -> &str {
-        &self.segment_name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn doc_count(&self) -> usize {
+        self.meta.doc_count()
     }
 
     pub fn index_data(&self, index: &str) -> &Arc<dyn IndexSegmentData> {

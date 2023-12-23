@@ -9,10 +9,10 @@ mod table_writer;
 mod version;
 
 pub use table::{Table, TableRef};
-pub use table_column_reader::TableColumnReader;
+pub use table_column_reader::{TableColumnReader, TableColumnReaderSnapshot};
 pub use table_data::{TableData, TableDataRef};
-pub use table_index_reader::TableIndexReader;
-pub use table_reader::TableReader;
+pub use table_index_reader::{TableIndexReader, TableIndexReaderSnapshot};
+pub use table_reader::{TableDataSnapshot, TableReader, TableReaderSnapshot};
 pub use table_settings::{TableSettings, TableSettingsRef};
 pub use table_writer::TableWriter;
 pub use version::Version;

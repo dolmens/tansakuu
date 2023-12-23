@@ -48,10 +48,10 @@ impl TableData {
             let new_segments_set: HashSet<_> =
                 version.segments().iter().map(|s| s.as_str()).collect();
             self.segments
-                .retain(|segment| new_segments_set.contains(segment.segment_name()));
+                .retain(|segment| new_segments_set.contains(segment.name()));
             let current_segments_set: HashSet<_> = self
                 .segments()
-                .map(|segment| segment.segment_name().to_string())
+                .map(|segment| segment.name().to_string())
                 .collect();
             for segment_name in version.segments() {
                 if !current_segments_set.contains(segment_name) {

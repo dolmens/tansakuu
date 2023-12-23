@@ -17,7 +17,7 @@ pub struct TableWriter<'a> {
 impl<'a> TableWriter<'a> {
     pub fn new(table: &'a Table) -> Self {
         let segment_writer = SegmentWriter::new(table.schema());
-        let segment_data = segment_writer.building_segment_data();
+        let segment_data = segment_writer.building_segment_data().clone();
         let building_segment = Arc::new(BuildingSegment::new(segment_data));
         table.add_building_segment(building_segment.clone());
 
@@ -38,7 +38,7 @@ impl<'a> TableWriter<'a> {
         self.table.dump_segment(self.building_segment.clone());
 
         self.segment_writer = SegmentWriter::new(self.table.schema());
-        let segment_data = self.segment_writer.building_segment_data();
+        let segment_data = self.segment_writer.building_segment_data().clone();
         let building_segment = Arc::new(BuildingSegment::new(segment_data));
         self.table.add_building_segment(building_segment.clone());
     }

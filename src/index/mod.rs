@@ -11,7 +11,7 @@ mod segment_posting;
 mod term;
 mod unique_key;
 
-pub use index_reader::IndexReader;
+pub use index_reader::{IndexReader, IndexReaderSnapshot};
 pub use index_reader_factory::IndexReaderFactory;
 pub use index_segment_data::{IndexSegmentData, IndexSegmentDataBuilder};
 pub use index_segment_data_factory::IndexSegmentDataFactory;

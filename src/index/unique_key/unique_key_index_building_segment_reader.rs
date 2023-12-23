@@ -13,7 +13,7 @@ impl UniqueKeyIndexBuildingSegmentReader {
         Self { index_data }
     }
 
-    pub fn lookup(&self, key: &str) -> DocId {
+    pub fn lookup(&self, key: &str) -> Option<DocId> {
         self.index_data.lookup(key)
     }
 }

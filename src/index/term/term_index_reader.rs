@@ -4,7 +4,8 @@ use crate::{
         IndexReader,
     },
     schema::Index,
-    table::TableData,
+    table::{TableData, TableDataSnapshot},
+    DocId,
 };
 
 pub struct TermIndexReader {
@@ -41,19 +42,28 @@ impl TermIndexReader {
 }
 
 impl IndexReader for TermIndexReader {
-    fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
+    fn lookup(
+        &self,
+        key: &str,
+        data_snapshot: &TableDataSnapshot,
+    ) -> Option<Box<dyn crate::index::PostingIterator>> {
         let mut segment_postings = vec![];
+        let mut segment_cursor = 0;
         for segment_reader in &self.segments {
-            let segment_posting = segment_reader.segment_posting(key);
+            let mut segment_posting = segment_reader.segment_posting(key);
             if !segment_posting.is_empty() {
+                segment_posting.set_base_docid(data_snapshot.segments[segment_cursor] as DocId);
                 segment_postings.push(segment_posting);
             }
+            segment_cursor += 1;
         }
         for segment_reader in &self.building_segments {
-            let segment_posting = segment_reader.segment_posting(key);
+            let mut segment_posting = segment_reader.segment_posting(key);
             if !segment_posting.is_empty() {
+                segment_posting.set_base_docid(data_snapshot.segments[segment_cursor] as DocId);
                 segment_postings.push(segment_posting);
             }
+            segment_cursor += 1;
         }
         if !segment_postings.is_empty() {
             Some(Box::new(BufferedPostingIterator::new(segment_postings)))

@@ -20,6 +20,6 @@ impl TermIndexSegmentReader {
             .get(tok)
             .cloned()
             .unwrap_or_default();
-        SegmentPosting { docids }
+        SegmentPosting::new(0, docids)
     }
 }
