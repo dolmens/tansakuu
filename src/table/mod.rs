@@ -6,6 +6,7 @@ mod table_index_reader;
 mod table_reader;
 mod table_settings;
 mod table_writer;
+mod version;
 
 pub use table::{Table, TableRef};
 pub use table_column_reader::TableColumnReader;
@@ -14,3 +15,4 @@ pub use table_index_reader::TableIndexReader;
 pub use table_reader::TableReader;
 pub use table_settings::{TableSettings, TableSettingsRef};
 pub use table_writer::TableWriter;
+pub use version::Version;

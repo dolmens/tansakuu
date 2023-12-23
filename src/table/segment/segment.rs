@@ -7,12 +7,13 @@ use crate::{
 };
 
 pub struct Segment {
+    segment_name: String,
     indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
     columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
 }
 
 impl Segment {
-    pub fn new(schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
+    pub fn new(segment_name: String,schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
         let mut indexes = HashMap::new();
         let index_segment_data_factory = IndexSegmentDataFactory::new();
         let index_directory = directory.as_ref().join("index");
@@ -33,7 +34,11 @@ impl Segment {
             columns.insert(field.name().to_string(), column_segment_data.into());
         }
 
-        Self { indexes, columns }
+        Self { segment_name, indexes, columns }
+    }
+
+    pub fn segment_name(&self) -> &str {
+        &self.segment_name
     }
 
     pub fn index_data(&self, index: &str) -> &Arc<dyn IndexSegmentData> {

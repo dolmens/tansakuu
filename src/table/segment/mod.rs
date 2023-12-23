@@ -5,7 +5,6 @@ mod building_segment_index_data;
 mod segment;
 mod segment_column_writer;
 mod segment_dumper;
-mod segment_id;
 mod segment_index_writer;
 mod segment_writer;
 

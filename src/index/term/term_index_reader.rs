@@ -1,9 +1,6 @@
 use crate::{
     index::{
-        term::{
-            BufferedPostingIterator, TermIndexBuildingSegmentData, TermIndexBuildingSegmentReader,
-            TermIndexSegmentReader,
-        },
+        term::{BufferedPostingIterator, TermIndexBuildingSegmentReader, TermIndexSegmentReader},
         IndexReader,
     },
     schema::Index,

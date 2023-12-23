@@ -69,7 +69,7 @@ impl Table {
         let segment_uuid = Uuid::new_v4();
         let segment_uuid_string = segment_uuid.as_simple().to_string();
         let segment_directory = self.directory.join("segments");
-        let dumping_segment_directory = segment_directory.join(segment_uuid_string);
+        let dumping_segment_directory = segment_directory.join(&segment_uuid_string);
 
         let column_directory = dumping_segment_directory.join("column");
         fs::create_dir_all(&column_directory).unwrap();
@@ -96,6 +96,15 @@ impl Table {
             let index_serializer = index_serializer_factory.create(index, index_data);
             index_serializer.serialize(&index_directory);
         }
+
+        let mut table_data = self.table_data.lock().unwrap();
+        let current_version = table_data.version();
+        let mut version = current_version.new_version();
+        version.add_segment(segment_uuid_string);
+        version.save(&self.directory);
+        table_data.remove_building_segment(&building_segment);
+        table_data.reload();
+        self.reinit_reader(table_data.clone());
     }
 
     pub(crate) fn reinit_reader(&self, table_data: TableData) {
