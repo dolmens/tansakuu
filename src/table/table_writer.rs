@@ -37,6 +37,7 @@ impl<'a> TableWriter<'a> {
     pub fn new_segment(&mut self) {
         self.table.dump_segment(self.building_segment.clone());
 
+        self.docid = 0;
         self.segment_writer = SegmentWriter::new(self.table.schema());
         let segment_data = self.segment_writer.building_segment_data().clone();
         let building_segment = Arc::new(BuildingSegment::new(segment_data));
@@ -46,6 +47,6 @@ impl<'a> TableWriter<'a> {
 
 impl<'a> Drop for TableWriter<'a> {
     fn drop(&mut self) {
-        // dump
+        self.table.dump_segment(self.building_segment.clone());
     }
 }
