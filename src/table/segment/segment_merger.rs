@@ -18,7 +18,7 @@ impl SegmentMerger {
         let segments: Vec<_> = version
             .segments()
             .iter()
-            .map(|segment_name| Segment::new(segment_name.clone(), schema, &segment_directory))
+            .map(|segment_name| Segment::open(segment_name.clone(), schema, &segment_directory))
             .collect();
 
         let segment_uuid = Uuid::new_v4();

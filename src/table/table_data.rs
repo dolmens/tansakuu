@@ -25,7 +25,7 @@ impl TableData {
         let mut segments = vec![];
         let segment_directory = directory.join("segments");
         for segment_name in version.segments() {
-            segments.push(Arc::new(Segment::new(
+            segments.push(Arc::new(Segment::open(
                 segment_name.clone(),
                 &schema,
                 &segment_directory,
@@ -56,7 +56,7 @@ impl TableData {
             let segment_directory = self.directory.join("segments");
             for segment_name in version.segments() {
                 if !current_segments_set.contains(segment_name) {
-                    self.segments.push(Arc::new(Segment::new(
+                    self.segments.push(Arc::new(Segment::open(
                         segment_name.clone(),
                         &self.schema,
                         &segment_directory,

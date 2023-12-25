@@ -49,6 +49,7 @@ impl IndexReader for UniqueKeyIndexReader {
         key: &str,
         data_snapshot: &TableDataSnapshot,
     ) -> Option<Box<dyn crate::index::PostingIterator>> {
+        let _ = data_snapshot;
         for segment_reader in self.building_segments.iter().rev() {
             let docid = segment_reader.lookup(key);
             if let Some(docid) = docid {

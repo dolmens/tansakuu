@@ -19,7 +19,7 @@ impl TermIndexBuildingSegmentData {
     }
 
     pub fn postings(&self) -> HashMap<String, Vec<DocId>> {
-        let mut postings = self.postings.lock().unwrap();
+        let postings = self.postings.lock().unwrap();
         postings.clone()
     }
 }

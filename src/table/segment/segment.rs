@@ -1,48 +1,27 @@
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
-use crate::{
-    column::{ColumnSegmentData, ColumnSegmentDataFactory},
-    index::{IndexSegmentData, IndexSegmentDataFactory},
-    schema::SchemaRef,
-};
+use crate::{column::ColumnSegmentData, index::IndexSegmentData, schema::SchemaRef};
 
-use super::{SegmentColumnData, SegmentMeta, SegmentIndexData};
+use super::{SegmentColumnData, SegmentIndexData, SegmentMeta};
 
 pub struct Segment {
     name: String,
     meta: SegmentMeta,
     index_data: SegmentIndexData,
-    // indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
     column_data: SegmentColumnData,
-    // columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
 }
 
 impl Segment {
-    pub fn new(segment_name: String, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
+    pub fn open(segment_name: String, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
         let directory = directory.as_ref();
         let segment_directory = directory.join(&segment_name);
         let meta = SegmentMeta::load(segment_directory.join("meta.json"));
-        let mut indexes = HashMap::new();
-        let index_segment_data_factory = IndexSegmentDataFactory::new();
-        let index_directory = segment_directory.join("index");
-        for index in schema.indexes() {
-            let index_segment_data_builder = index_segment_data_factory.create_builder(index);
-            let index_path = index_directory.join(index.name());
-            let index_segment_data = index_segment_data_builder.build(index, &index_path);
-            indexes.insert(index.name().to_string(), index_segment_data.into());
-        }
-        let index_data = SegmentIndexData::new(indexes);
 
-        let mut columns = HashMap::new();
-        let column_segment_data_factory = ColumnSegmentDataFactory::new();
+        let index_directory = segment_directory.join("index");
+        let index_data = SegmentIndexData::open(index_directory, schema);
+
         let column_directory = segment_directory.join("column");
-        for field in schema.columns() {
-            let column_segment_data_builder = column_segment_data_factory.create_builder(field);
-            let column_path = column_directory.join(field.name());
-            let column_segment_data = column_segment_data_builder.build(field, &column_path);
-            columns.insert(field.name().to_string(), column_segment_data.into());
-        }
-        let column_data = SegmentColumnData::new(columns);
+        let column_data = SegmentColumnData::open(column_directory, schema);
 
         Self {
             name: segment_name,
