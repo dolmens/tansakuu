@@ -46,10 +46,11 @@ impl Version {
     }
 
     pub fn new_version(&self) -> Self {
-        let version_id = SystemTime::now()
+        let version_id = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_millis() as VersionId;
+            .as_millis() as VersionId)
+            .max(self.version_id + 1);
 
         Self {
             version_id,
