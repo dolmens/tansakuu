@@ -6,13 +6,15 @@ use crate::{
     schema::SchemaRef,
 };
 
-use super::SegmentMeta;
+use super::{SegmentColumnData, SegmentMeta, SegmentIndexData};
 
 pub struct Segment {
     name: String,
     meta: SegmentMeta,
-    indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
-    columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
+    index_data: SegmentIndexData,
+    // indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
+    column_data: SegmentColumnData,
+    // columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
 }
 
 impl Segment {
@@ -29,6 +31,7 @@ impl Segment {
             let index_segment_data = index_segment_data_builder.build(index, &index_path);
             indexes.insert(index.name().to_string(), index_segment_data.into());
         }
+        let index_data = SegmentIndexData::new(indexes);
 
         let mut columns = HashMap::new();
         let column_segment_data_factory = ColumnSegmentDataFactory::new();
@@ -39,12 +42,13 @@ impl Segment {
             let column_segment_data = column_segment_data_builder.build(field, &column_path);
             columns.insert(field.name().to_string(), column_segment_data.into());
         }
+        let column_data = SegmentColumnData::new(columns);
 
         Self {
             name: segment_name,
             meta,
-            indexes,
-            columns,
+            index_data,
+            column_data,
         }
     }
 
@@ -57,10 +61,10 @@ impl Segment {
     }
 
     pub fn index_data(&self, index: &str) -> &Arc<dyn IndexSegmentData> {
-        self.indexes.get(index).unwrap()
+        self.index_data.index(index).unwrap()
     }
 
     pub fn column_data(&self, column: &str) -> &Arc<dyn ColumnSegmentData> {
-        self.columns.get(column).unwrap()
+        self.column_data.column(column).unwrap()
     }
 }

@@ -1,27 +1,38 @@
-use super::{BuildingSegmentColumnData, BuildingSegmentData, BuildingSegmentIndexData};
+use crate::util::AcqRelUsize;
+
+use super::{BuildingSegmentColumnData, BuildingSegmentIndexData};
 
 pub struct BuildingSegment {
-    segment_data: BuildingSegmentData,
+    doc_count: AcqRelUsize,
+    column_data: BuildingSegmentColumnData,
+    index_data: BuildingSegmentIndexData,
 }
 
 impl BuildingSegment {
-    pub fn new(segment_data: BuildingSegmentData) -> Self {
-        Self { segment_data }
+    pub fn new(
+        column_data: BuildingSegmentColumnData,
+        index_data: BuildingSegmentIndexData,
+    ) -> Self {
+        Self {
+            doc_count: AcqRelUsize::new(0),
+            column_data,
+            index_data,
+        }
     }
 
     pub fn doc_count(&self) -> usize {
-        self.segment_data.doc_count()
+        self.doc_count.load()
     }
 
-    pub fn segment_data(&self) -> &BuildingSegmentData {
-        &self.segment_data
+    pub(super) fn set_doc_count(&self, doc_count: usize) {
+        self.doc_count.store(doc_count);
     }
 
     pub fn column_data(&self) -> &BuildingSegmentColumnData {
-        self.segment_data.column_data()
+        &self.column_data
     }
 
     pub fn index_data(&self) -> &BuildingSegmentIndexData {
-        self.segment_data.index_data()
+        &self.index_data
     }
 }
