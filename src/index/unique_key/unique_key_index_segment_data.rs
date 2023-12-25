@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{index::IndexSegmentData, DocId};
 
 pub struct UniqueKeyIndexSegmentData {
-    keys: HashMap<String, DocId>,
+    pub keys: HashMap<String, DocId>,
 }
 
 impl UniqueKeyIndexSegmentData {

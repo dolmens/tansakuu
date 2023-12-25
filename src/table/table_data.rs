@@ -23,12 +23,12 @@ impl TableData {
     pub fn new(directory: PathBuf, schema: SchemaRef, settings: TableSettingsRef) -> Self {
         let version = Version::load_lastest(&directory);
         let mut segments = vec![];
+        let segment_directory = directory.join("segments");
         for segment_name in version.segments() {
-            let segment_directory = directory.join("segments").join(segment_name);
             segments.push(Arc::new(Segment::new(
                 segment_name.clone(),
                 &schema,
-                segment_directory,
+                &segment_directory,
             )));
         }
 
@@ -53,17 +53,18 @@ impl TableData {
                 .segments()
                 .map(|segment| segment.name().to_string())
                 .collect();
+            let segment_directory = self.directory.join("segments");
             for segment_name in version.segments() {
                 if !current_segments_set.contains(segment_name) {
-                    let segment_directory = self.directory.join("segments").join(segment_name);
                     self.segments.push(Arc::new(Segment::new(
                         segment_name.clone(),
                         &self.schema,
-                        segment_directory,
+                        &segment_directory,
                     )));
                 }
             }
         }
+        self.version = version;
     }
 
     pub fn add_building_segment(&mut self, building_segment: Arc<BuildingSegment>) {

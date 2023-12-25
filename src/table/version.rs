@@ -73,6 +73,10 @@ impl Version {
         &self.segments
     }
 
+    pub fn remove_segment(&mut self, segment: &str) {
+        self.segments.retain(|s| s != segment);
+    }
+
     pub fn add_segment(&mut self, segment: String) {
         self.segments.push(segment);
     }

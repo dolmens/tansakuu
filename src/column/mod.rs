@@ -1,3 +1,5 @@
+mod column_merger;
+mod column_merger_factory;
 mod column_reader;
 mod column_reader_factory;
 mod column_segment_data;
@@ -9,6 +11,7 @@ mod column_writer;
 mod column_writer_factory;
 mod generic_column_building_segment_data;
 mod generic_column_building_segment_reader;
+mod generic_column_merger;
 mod generic_column_reader;
 mod generic_column_segment_data;
 mod generic_column_segment_data_builder;
@@ -16,6 +19,8 @@ mod generic_column_segment_reader;
 mod generic_column_serializer;
 mod generic_column_writer;
 
+pub use column_merger::ColumnMerger;
+pub use column_merger_factory::ColumnMergerFactory;
 pub use column_reader::{
     ColumnReader, ColumnReaderSnapshot, TypedColumnReader, TypedColumnReaderSnapshot,
 };
@@ -29,6 +34,7 @@ pub use column_writer::ColumnWriter;
 pub use column_writer_factory::ColumnWriterFactory;
 pub use generic_column_building_segment_data::GenericColumnBuildingSegmentData;
 pub use generic_column_building_segment_reader::GenericColumnBuildingSegmentReader;
+pub use generic_column_merger::GenericColumnMerger;
 pub use generic_column_reader::GenericColumnReader;
 pub use generic_column_segment_data::GenericColumnSegmentData;
 pub use generic_column_segment_data_builder::GenericColumnSegmentDataBuilder;

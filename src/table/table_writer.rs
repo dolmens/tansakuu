@@ -10,21 +10,17 @@ use super::{
 pub struct TableWriter<'a> {
     docid: DocId,
     segment_writer: SegmentWriter,
-    building_segment: Arc<BuildingSegment>,
     table: &'a Table,
 }
 
 impl<'a> TableWriter<'a> {
     pub fn new(table: &'a Table) -> Self {
         let segment_writer = SegmentWriter::new(table.schema());
-        let segment_data = segment_writer.building_segment_data().clone();
-        let building_segment = Arc::new(BuildingSegment::new(segment_data));
-        table.add_building_segment(building_segment.clone());
+        table.add_building_segment(segment_writer.building_segment().clone());
 
         Self {
             docid: 0,
             segment_writer,
-            building_segment,
             table,
         }
     }
@@ -35,18 +31,23 @@ impl<'a> TableWriter<'a> {
     }
 
     pub fn new_segment(&mut self) {
-        self.table.dump_segment(self.building_segment.clone());
+        self.table.dump_segment(self.building_segment());
 
         self.docid = 0;
         self.segment_writer = SegmentWriter::new(self.table.schema());
-        let segment_data = self.segment_writer.building_segment_data().clone();
-        let building_segment = Arc::new(BuildingSegment::new(segment_data));
-        self.table.add_building_segment(building_segment.clone());
+        self.table
+            .add_building_segment(self.building_segment().clone());
+    }
+
+    pub fn building_segment(&self) -> &Arc<BuildingSegment> {
+        self.segment_writer.building_segment()
     }
 }
 
 impl<'a> Drop for TableWriter<'a> {
     fn drop(&mut self) {
-        self.table.dump_segment(self.building_segment.clone());
+        if self.docid > 0 {
+            self.table.dump_segment(self.building_segment());
+        }
     }
 }

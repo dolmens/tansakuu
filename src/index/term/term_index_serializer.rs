@@ -23,9 +23,9 @@ impl IndexSerializer for TermIndexSerializer {
         let path = directory.join(&self.index_name);
         let mut file = File::create(path).unwrap();
         let postings = self.index_data.postings();
-        for (term, docids) in &postings {
+        for (term, posting) in &postings {
             write!(file, "{} ", term).unwrap();
-            for docid in docids {
+            for docid in posting {
                 write!(file, "{} ", docid).unwrap();
             }
             writeln!(file).unwrap();

@@ -18,10 +18,11 @@ pub struct Segment {
 impl Segment {
     pub fn new(segment_name: String, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
         let directory = directory.as_ref();
-        let meta = SegmentMeta::load(directory.join("meta.json"));
+        let segment_directory = directory.join(&segment_name);
+        let meta = SegmentMeta::load(segment_directory.join("meta.json"));
         let mut indexes = HashMap::new();
         let index_segment_data_factory = IndexSegmentDataFactory::new();
-        let index_directory = directory.join("index");
+        let index_directory = segment_directory.join("index");
         for index in schema.indexes() {
             let index_segment_data_builder = index_segment_data_factory.create_builder(index);
             let index_path = index_directory.join(index.name());
@@ -31,7 +32,7 @@ impl Segment {
 
         let mut columns = HashMap::new();
         let column_segment_data_factory = ColumnSegmentDataFactory::new();
-        let column_directory = directory.join("column");
+        let column_directory = segment_directory.join("column");
         for field in schema.columns() {
             let column_segment_data_builder = column_segment_data_factory.create_builder(field);
             let column_path = column_directory.join(field.name());

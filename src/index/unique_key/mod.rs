@@ -1,5 +1,6 @@
 mod unique_key_index_building_segment_data;
 mod unique_key_index_building_segment_reader;
+mod unique_key_index_merger;
 mod unique_key_index_reader;
 mod unique_key_index_segment_data;
 mod unique_key_index_segment_data_builder;
@@ -10,6 +11,7 @@ mod unique_key_posting_iterator;
 
 pub use unique_key_index_building_segment_data::UniqueKeyIndexBuildingSegmentData;
 pub use unique_key_index_building_segment_reader::UniqueKeyIndexBuildingSegmentReader;
+pub use unique_key_index_merger::UniqueKeyIndexMerger;
 pub use unique_key_index_reader::UniqueKeyIndexReader;
 pub use unique_key_index_segment_data::UniqueKeyIndexSegmentData;
 pub use unique_key_index_segment_data_builder::UniqueKeyIndexSegmentDataBuilder;

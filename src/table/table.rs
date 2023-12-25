@@ -14,8 +14,9 @@ use crate::{
 };
 
 use super::{
-    segment::{BuildingSegment, SegmentMeta},
+    segment::{BuildingSegment, SegmentMeta, SegmentMerger},
     TableData, TableReader, TableReaderSnapshot, TableSettings, TableSettingsRef, TableWriter,
+    Version,
 };
 
 pub struct Table {
@@ -67,13 +68,12 @@ impl Table {
         self.reinit_reader(table_data.clone());
     }
 
-    pub(crate) fn dump_segment(&self, building_segment: Arc<BuildingSegment>) {
+    pub(crate) fn dump_segment(&self, building_segment: &Arc<BuildingSegment>) {
         let segment_uuid = Uuid::new_v4();
         let segment_uuid_string = segment_uuid.as_simple().to_string();
-        let segment_directory = self.directory.join("segments");
-        let dumping_segment_directory = segment_directory.join(&segment_uuid_string);
+        let segment_directory = self.directory.join("segments").join(&segment_uuid_string);
 
-        let column_directory = dumping_segment_directory.join("column");
+        let column_directory = segment_directory.join("column");
         fs::create_dir_all(&column_directory).unwrap();
         let column_serializer_factory = ColumnSerializerFactory::new();
         for field in self.schema.columns() {
@@ -86,7 +86,7 @@ impl Table {
             column_serializer.serialize(&column_directory);
         }
 
-        let index_directory = dumping_segment_directory.join("index");
+        let index_directory = segment_directory.join("index");
         fs::create_dir_all(&index_directory).unwrap();
         let index_serializer_factory = IndexSerializerFactory::new();
         for index in self.schema.indexes() {
@@ -100,16 +100,25 @@ impl Table {
         }
 
         let meta = SegmentMeta::new(building_segment.doc_count());
-        meta.save(dumping_segment_directory.join("meta.json"));
+        meta.save(segment_directory.join("meta.json"));
 
         let mut table_data = self.table_data.lock().unwrap();
         let current_version = table_data.version();
         let mut version = current_version.new_version();
         version.add_segment(segment_uuid_string);
         version.save(&self.directory);
-        table_data.remove_building_segment(&building_segment);
+        if version.segments().len() > 1 {
+            let mut version_merged = version.new_version();
+            self.merge_segments(&mut version_merged);
+        }
+        table_data.remove_building_segment(building_segment);
         table_data.reload();
         self.reinit_reader(table_data.clone());
+    }
+
+    pub fn merge_segments(&self, version: &mut Version) {
+        let segment_merger = SegmentMerger::default();
+        segment_merger.merge(&self.directory, &self.schema, version);
     }
 
     pub(crate) fn reinit_reader(&self, table_data: TableData) {
@@ -258,5 +267,7 @@ mod tests {
         let mut posting_iter = index_reader.lookup(&term).unwrap();
         let docids = get_all_docs(&mut *posting_iter);
         assert_eq!(docids, vec![0, 2]);
+
+        // writer.new_segment();
     }
 }
