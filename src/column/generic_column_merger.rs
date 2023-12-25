@@ -1,6 +1,6 @@
-use std::{fs::File, io::Write, marker::PhantomData};
+use std::marker::PhantomData;
 
-use super::{ColumnMerger, GenericColumnSegmentData};
+use super::{ColumnMerger, GenericColumnSegmentData, GenericColumnSerializerWriter};
 
 #[derive(Default)]
 pub struct GenericColumnMerger<T> {
@@ -16,14 +16,14 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
         doc_counts: &[usize],
     ) {
         let path = directory.join(field.name());
-        let mut file = File::create(path).unwrap();
+        let mut writer = GenericColumnSerializerWriter::<T>::new(path);
 
         for (&segment, &doc_count) in segments.iter().zip(doc_counts.iter()) {
             let segment_data = segment
                 .downcast_ref::<GenericColumnSegmentData<T>>()
                 .unwrap();
             for i in 0..doc_count {
-                writeln!(file, "{}", segment_data.get(i).unwrap().to_string()).unwrap();
+                writer.write(segment_data.get(i).unwrap());
             }
         }
     }

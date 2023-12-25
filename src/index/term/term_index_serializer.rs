@@ -1,8 +1,8 @@
-use std::{fs::File, io::Write, sync::Arc};
+use std::sync::Arc;
 
-use crate::{index::index_serializer::IndexSerializer, schema::Index};
+use crate::{index::IndexSerializer, schema::Index};
 
-use super::TermIndexBuildingSegmentData;
+use super::{TermIndexBuildingSegmentData, TermIndexSerializerWriter};
 
 pub struct TermIndexSerializer {
     index_name: String,
@@ -21,14 +21,14 @@ impl TermIndexSerializer {
 impl IndexSerializer for TermIndexSerializer {
     fn serialize(&self, directory: &std::path::Path) {
         let path = directory.join(&self.index_name);
-        let mut file = File::create(path).unwrap();
+        let mut writer = TermIndexSerializerWriter::new(path);
         let postings = self.index_data.postings();
         for (term, posting) in &postings {
-            write!(file, "{} ", term).unwrap();
-            for docid in posting {
-                write!(file, "{} ", docid).unwrap();
+            writer.start_term(term.to_string());
+            for &docid in posting {
+                writer.add_doc(&term, docid);
             }
-            writeln!(file).unwrap();
+            writer.end_term(&term);
         }
     }
 }

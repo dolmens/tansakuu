@@ -1,8 +1,11 @@
-use std::{fs::File, io::Write, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use crate::schema::Field;
 
-use super::{column_serializer::ColumnSerializer, GenericColumnBuildingSegmentData};
+use super::{
+    column_serializer::ColumnSerializer, GenericColumnBuildingSegmentData,
+    GenericColumnSerializerWriter,
+};
 
 pub struct GenericColumnSerializer<T> {
     field_name: String,
@@ -21,10 +24,10 @@ impl<T> GenericColumnSerializer<T> {
 impl<T: Clone + ToString> ColumnSerializer for GenericColumnSerializer<T> {
     fn serialize(&self, directory: &Path) {
         let path = directory.join(&self.field_name);
-        let mut file = File::create(path).unwrap();
+        let mut writer = GenericColumnSerializerWriter::<T>::new(path);
         let values = self.column_data.values();
         for value in &values {
-            writeln!(file, "{}", value.to_string()).unwrap();
+            writer.write(value.clone());
         }
     }
 }

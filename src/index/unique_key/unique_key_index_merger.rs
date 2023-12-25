@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fs::File, io::Write};
+use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::UniqueKeyIndexSegmentData;
+use super::{UniqueKeyIndexSegmentData, UniqueKeyIndexSerializerWriter};
 
 #[derive(Default)]
 pub struct UniqueKeyIndexMerger {}
@@ -16,7 +16,7 @@ impl IndexMerger for UniqueKeyIndexMerger {
         _doc_counts: &[usize],
     ) {
         let path = directory.join(index.name());
-        let mut file = File::create(path).unwrap();
+        let mut writer = UniqueKeyIndexSerializerWriter::new(path);
         let mut keys = HashMap::<String, DocId>::new();
         for &segment in segments {
             let segment_data = segment.downcast_ref::<UniqueKeyIndexSegmentData>().unwrap();
@@ -26,7 +26,7 @@ impl IndexMerger for UniqueKeyIndexMerger {
         }
 
         for (key, docid) in keys {
-            writeln!(file, "{} {}", docid, key).unwrap();
+            writer.write(&key, docid);
         }
     }
 }

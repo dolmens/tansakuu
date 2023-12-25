@@ -17,6 +17,7 @@ mod generic_column_segment_data;
 mod generic_column_segment_data_builder;
 mod generic_column_segment_reader;
 mod generic_column_serializer;
+mod generic_column_serializer_writer;
 mod generic_column_writer;
 
 pub use column_merger::ColumnMerger;
@@ -40,4 +41,5 @@ pub use generic_column_segment_data::GenericColumnSegmentData;
 pub use generic_column_segment_data_builder::GenericColumnSegmentDataBuilder;
 pub use generic_column_segment_reader::GenericColumnSegmentReader;
 pub use generic_column_serializer::GenericColumnSerializer;
+pub use generic_column_serializer_writer::GenericColumnSerializerWriter;
 pub use generic_column_writer::GenericColumnWriter;

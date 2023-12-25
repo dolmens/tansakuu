@@ -1,8 +1,8 @@
-use std::{fs::File, io::Write, sync::Arc};
+use std::sync::Arc;
 
-use crate::{index::index_serializer::IndexSerializer, schema::Index};
+use crate::{index::IndexSerializer, schema::Index};
 
-use super::UniqueKeyIndexBuildingSegmentData;
+use super::{UniqueKeyIndexBuildingSegmentData, UniqueKeyIndexSerializerWriter};
 
 pub struct UniqueKeyIndexSerializer {
     index_name: String,
@@ -21,10 +21,10 @@ impl UniqueKeyIndexSerializer {
 impl IndexSerializer for UniqueKeyIndexSerializer {
     fn serialize(&self, directory: &std::path::Path) {
         let path = directory.join(&self.index_name);
-        let mut file = File::create(path).unwrap();
+        let mut writer = UniqueKeyIndexSerializerWriter::new(path);
         let keys = self.index_data.keys();
-        for (key, docid) in &keys {
-            writeln!(file, "{} {}", docid, key.clone()).unwrap();
+        for (key, &docid) in &keys {
+            writer.write(key, docid);
         }
     }
 }

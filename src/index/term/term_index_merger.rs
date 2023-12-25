@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fs::File, io::Write};
+use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::TermIndexSegmentData;
+use super::{TermIndexSegmentData, TermIndexSerializerWriter};
 
 #[derive(Default)]
 pub struct TermIndexMerger {}
@@ -16,7 +16,7 @@ impl IndexMerger for TermIndexMerger {
         doc_counts: &[usize],
     ) {
         let path = directory.join(index.name());
-        let mut file = File::create(path).unwrap();
+        let mut writer = TermIndexSerializerWriter::new(path);
         let mut postings = HashMap::<String, Vec<DocId>>::new();
         let mut base_docid = 0;
         for (&segment, &doc_count) in segments.iter().zip(doc_counts.iter()) {
@@ -35,11 +35,11 @@ impl IndexMerger for TermIndexMerger {
         }
 
         for (term, posting) in &postings {
-            write!(file, "{} ", term).unwrap();
-            for docid in posting {
-                write!(file, "{} ", docid).unwrap();
+            writer.start_term(term.to_string());
+            for &docid in posting {
+                writer.add_doc(&term, docid);
             }
-            writeln!(file).unwrap();
+            writer.end_term(&term);
         }
     }
 }
