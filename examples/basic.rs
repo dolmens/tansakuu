@@ -3,7 +3,7 @@ use rindex::{
     document::Document,
     index::PostingIterator,
     query::Term,
-    schema::{FieldType, IndexType, Schema},
+    schema::{SchemaBuilder, COLUMN, INDEXED},
     table::{Table, TableSettings},
     DocId,
 };
@@ -25,13 +25,9 @@ fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
 }
 
 pub fn main() {
-    let mut schema = Schema::new();
-    schema.add_field("title".to_string(), FieldType::Text);
-    schema.add_index(
-        "title".to_string(),
-        IndexType::Term,
-        vec!["title".to_string()],
-    );
+    let mut schema_builder = SchemaBuilder::new();
+    schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+    let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::open_in(schema, settings, "./testdata");
 

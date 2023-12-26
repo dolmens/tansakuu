@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    segment::{BuildingSegment, SegmentMeta, SegmentMerger},
+    segment::{BuildingSegment, SegmentMerger, SegmentMeta},
     TableData, TableReader, TableReaderSnapshot, TableSettings, TableSettingsRef, TableWriter,
     Version,
 };
@@ -134,7 +134,7 @@ mod tests {
         document::Document,
         index::PostingIterator,
         query::Term,
-        schema::{FieldType, IndexType, Schema},
+        schema::{SchemaBuilder, COLUMN, INDEXED},
         table::{Table, TableSettings},
         DocId,
     };
@@ -157,13 +157,9 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let mut schema = Schema::new();
-        schema.add_field("title".to_string(), FieldType::Text);
-        schema.add_index(
-            "title".to_string(),
-            IndexType::Term,
-            vec!["title".to_string()],
-        );
+        let mut schema_builder = SchemaBuilder::new();
+        schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+        let schema = schema_builder.build();
         let settings = TableSettings::new();
         let table = Table::open_in(schema, settings, "./testdata");
 
@@ -205,13 +201,9 @@ mod tests {
 
     #[test]
     fn test_new_segment() {
-        let mut schema = Schema::new();
-        schema.add_field("title".to_string(), FieldType::Text);
-        schema.add_index(
-            "title".to_string(),
-            IndexType::Term,
-            vec!["title".to_string()],
-        );
+        let mut schema_builder = SchemaBuilder::new();
+        schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+        let schema = schema_builder.build();
         let settings = TableSettings::new();
         let table = Table::open_in(schema, settings, "./testdata");
 
