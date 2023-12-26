@@ -19,7 +19,7 @@ pub struct TableColumnReaderSnapshot<'a> {
 impl TableColumnReader {
     pub fn new(table_data: &TableData) -> Self {
         let mut columns = HashMap::new();
-        let column_reader_factory = ColumnReaderFactory::new();
+        let column_reader_factory = ColumnReaderFactory::default();
         let schema = table_data.schema();
         for field in schema.columns() {
             let column_reader = column_reader_factory.create(field, table_data);

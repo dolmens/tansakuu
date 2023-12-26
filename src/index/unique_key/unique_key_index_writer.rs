@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{index::IndexWriter, DocId};
+use crate::{document::Value, index::IndexWriter, DocId};
 
 use super::UniqueKeyIndexBuildingSegmentData;
 
@@ -19,9 +19,9 @@ impl UniqueKeyIndexWriter {
 }
 
 impl IndexWriter for UniqueKeyIndexWriter {
-    fn add_field(&mut self, _field: &str, value: &str) {
+    fn add_field(&mut self, _field: &str, value: &Value) {
         assert!(self.key.is_none());
-        self.key = Some(value.into());
+        self.key = Some(value.to_string());
     }
 
     fn end_document(&mut self, docid: DocId) {

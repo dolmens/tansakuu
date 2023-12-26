@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use super::Value;
+
 pub struct Document {
-    fields: HashMap<String, String>,
+    fields: HashMap<String, Value>,
 }
 
 impl Document {
@@ -11,11 +13,12 @@ impl Document {
         }
     }
 
-    pub fn add_field(&mut self, name: String, value: String) {
-        self.fields.insert(name, value);
+    pub fn add_field<I: Into<Value>>(&mut self, name: String, value: I) {
+        self.fields.insert(name, value.into());
     }
 
-    pub fn fields(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.fields.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    pub fn fields(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.fields.iter().map(|(k, v)| (k.as_str(), v))
     }
 }
+

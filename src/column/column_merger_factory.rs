@@ -8,7 +8,8 @@ pub struct ColumnMergerFactory {}
 impl ColumnMergerFactory {
     pub fn create(&self, field: &Field) -> Box<dyn ColumnMerger> {
         match field.field_type() {
-            FieldType::Text => Box::new(GenericColumnMerger::<String>::default()),
+            FieldType::Str => Box::new(GenericColumnMerger::<String>::default()),
+            FieldType::I64 => Box::new(GenericColumnMerger::<i64>::default()),
         }
     }
 }

@@ -75,7 +75,7 @@ impl Table {
 
         let column_directory = segment_directory.join("column");
         fs::create_dir_all(&column_directory).unwrap();
-        let column_serializer_factory = ColumnSerializerFactory::new();
+        let column_serializer_factory = ColumnSerializerFactory::default();
         for field in self.schema.columns() {
             let column_data = building_segment
                 .column_data()
@@ -88,7 +88,7 @@ impl Table {
 
         let index_directory = segment_directory.join("index");
         fs::create_dir_all(&index_directory).unwrap();
-        let index_serializer_factory = IndexSerializerFactory::new();
+        let index_serializer_factory = IndexSerializerFactory::default();
         for index in self.schema.indexes() {
             let index_data = building_segment
                 .index_data()
@@ -166,11 +166,11 @@ mod tests {
         let mut writer = table.writer();
 
         let mut doc1 = Document::new();
-        doc1.add_field("title".to_string(), "hello world".to_string());
+        doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
         let mut doc2 = Document::new();
-        doc2.add_field("title".to_string(), "world peace".to_string());
+        doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
 
         let reader = table.reader();
@@ -210,11 +210,11 @@ mod tests {
         let mut writer = table.writer();
 
         let mut doc1 = Document::new();
-        doc1.add_field("title".to_string(), "hello world".to_string());
+        doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
         let mut doc2 = Document::new();
-        doc2.add_field("title".to_string(), "world peace".to_string());
+        doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
 
         let reader = table.reader();
@@ -245,7 +245,7 @@ mod tests {
         writer.new_segment();
 
         let mut doc3 = Document::new();
-        doc3.add_field("title".to_string(), "hello".to_string());
+        doc3.add_field("title".to_string(), "hello");
         writer.add_doc(&doc3);
 
         // Still OLD Readers

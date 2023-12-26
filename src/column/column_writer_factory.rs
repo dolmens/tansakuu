@@ -5,16 +5,14 @@ use crate::{
 
 use super::ColumnWriter;
 
+#[derive(Default)]
 pub struct ColumnWriterFactory {}
 
 impl ColumnWriterFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-
     pub fn create(&self, field: &Field) -> Box<dyn ColumnWriter> {
         match field.field_type() {
-            FieldType::Text => Box::new(GenericColumnWriter::<String>::new()),
+            FieldType::Str => Box::new(GenericColumnWriter::<String>::new()),
+            FieldType::I64 => Box::new(GenericColumnWriter::<i64>::new()),
         }
     }
 }

@@ -17,7 +17,7 @@ pub struct SegmentIndexWriter {
 impl SegmentIndexWriter {
     pub fn new(schema: &SchemaRef) -> Self {
         let mut indexes: HashMap<String, Box<dyn IndexWriter>> = HashMap::new();
-        let index_writer_factory = IndexWriterFactory::new();
+        let index_writer_factory = IndexWriterFactory::default();
         for index in schema.indexes() {
             let index_writer = index_writer_factory.create(index);
             indexes.insert(index.name().to_string(), index_writer);

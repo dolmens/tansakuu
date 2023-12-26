@@ -8,13 +8,10 @@ use super::{
     IndexSegmentData, IndexSerializer,
 };
 
+#[derive(Default)]
 pub struct IndexSerializerFactory {}
 
 impl IndexSerializerFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-
     pub fn create(
         &self,
         index: &Index,

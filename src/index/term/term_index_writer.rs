@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{index::IndexWriter, DocId};
+use crate::{index::IndexWriter, DocId, document::Value};
 
 use super::TermIndexBuildingSegmentData;
 
@@ -19,7 +19,7 @@ impl TermIndexWriter {
 }
 
 impl IndexWriter for TermIndexWriter {
-    fn add_field(&mut self, field: &str, value: &str) {
+    fn add_field(&mut self, field: &str, value: &Value) {
         self.fields.insert(field.to_string(), value.to_string());
     }
 

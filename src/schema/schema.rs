@@ -19,7 +19,8 @@ pub type SchemaRef = Arc<Schema>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FieldType {
-    Text,
+    Str,
+    I64,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -82,10 +83,18 @@ impl SchemaBuilder {
     }
 
     pub fn add_text_field(&mut self, field_name: String, options: FieldOptions) {
+        self.add_field(field_name, FieldType::Str, options);
+    }
+
+    pub fn add_i64_field(&mut self, field_name: String, options: FieldOptions) {
+        self.add_field(field_name, FieldType::I64, options);
+    }
+
+    pub fn add_field(&mut self, field_name: String, field_type: FieldType, options: FieldOptions) {
         assert!(!self.fields_map.contains_key(&field_name));
         let field = Field {
             name: field_name.clone(),
-            field_type: FieldType::Text,
+            field_type,
             column: options.column,
             indexes: vec![],
         };
@@ -95,11 +104,11 @@ impl SchemaBuilder {
 
         if options.indexed {
             let fields = vec![field_name.clone()];
-            self.add_text_index(field_name, &fields);
+            self.add_index(field_name, &fields);
         }
     }
 
-    pub fn add_text_index(&mut self, index_name: String, fields: &[String]) {
+    pub fn add_index(&mut self, index_name: String, fields: &[String]) {
         assert!(!self.indexes_map.contains_key(&index_name));
         let field_entries: Vec<_> = fields
             .iter()
@@ -223,7 +232,7 @@ mod tests {
             builder.fields[0],
             Field {
                 name: "f1".to_string(),
-                field_type: FieldType::Text,
+                field_type: FieldType::Str,
                 column: true,
                 indexes: vec![IndexEntry(0)],
             }
@@ -245,7 +254,7 @@ mod tests {
             builder.fields[1],
             Field {
                 name: "f2".to_string(),
-                field_type: FieldType::Text,
+                field_type: FieldType::Str,
                 column: true,
                 indexes: vec![],
             }
@@ -254,12 +263,12 @@ mod tests {
         assert_eq!(builder.indexes_map.get("f2"), None);
 
         // add index
-        builder.add_text_index("f2".to_string(), &vec!["f2".to_string()]);
+        builder.add_index("f2".to_string(), &vec!["f2".to_string()]);
         assert_eq!(
             builder.fields[1],
             Field {
                 name: "f2".to_string(),
-                field_type: FieldType::Text,
+                field_type: FieldType::Str,
                 column: true,
                 indexes: vec![IndexEntry(1)],
             }
@@ -275,12 +284,12 @@ mod tests {
         assert_eq!(builder.indexes_map.get("f2"), Some(&IndexEntry(1)));
 
         // add union index
-        builder.add_text_index("f3".to_string(), &vec!["f1".to_string(), "f2".to_string()]);
+        builder.add_index("f3".to_string(), &vec!["f1".to_string(), "f2".to_string()]);
         assert_eq!(
             builder.fields[0],
             Field {
                 name: "f1".to_string(),
-                field_type: FieldType::Text,
+                field_type: FieldType::Str,
                 column: true,
                 indexes: vec![IndexEntry(0), IndexEntry(2)],
             }
@@ -289,7 +298,7 @@ mod tests {
             builder.fields[1],
             Field {
                 name: "f2".to_string(),
-                field_type: FieldType::Text,
+                field_type: FieldType::Str,
                 column: true,
                 indexes: vec![IndexEntry(1), IndexEntry(2)],
             }

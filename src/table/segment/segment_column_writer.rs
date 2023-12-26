@@ -16,7 +16,7 @@ pub struct SegmentColumnWriter {
 impl SegmentColumnWriter {
     pub fn new(schema: &SchemaRef) -> Self {
         let mut columns: HashMap<String, Box<dyn ColumnWriter>> = HashMap::new();
-        let column_writer_factory = ColumnWriterFactory::new();
+        let column_writer_factory = ColumnWriterFactory::default();
         for column in schema.columns() {
             let column_writer = column_writer_factory.create(column);
             columns.insert(column.name().to_string(), column_writer);
@@ -28,7 +28,7 @@ impl SegmentColumnWriter {
     pub fn add_doc(&mut self, doc: &Document, _docid: DocId) {
         for (name, value) in doc.fields() {
             if let Some(writer) = self.columns.get_mut(name) {
-                writer.add_doc(value);
+                writer.add_doc(value.clone());
             }
         }
     }

@@ -1,4 +1,6 @@
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
+
+use crate::document::Value;
 
 use super::{ColumnSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
 
@@ -14,9 +16,12 @@ impl<T> GenericColumnWriter<T> {
     }
 }
 
-impl<T: FromStr + Send + Sync + 'static> ColumnWriter for GenericColumnWriter<T> {
-    fn add_doc(&mut self, value: &str) {
-        self.column_data.push(T::from_str(value).ok().unwrap());
+impl<T: Send + Sync + 'static> ColumnWriter for GenericColumnWriter<T>
+where
+    Value: TryInto<T>,
+{
+    fn add_doc(&mut self, value: Value) {
+        self.column_data.push(value.try_into().ok().unwrap());
     }
 
     fn column_data(&self) -> Arc<dyn ColumnSegmentData> {

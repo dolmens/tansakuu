@@ -5,13 +5,10 @@ use crate::{
 
 use super::{IndexReader, TermIndexReader, UniqueKeyIndexReader};
 
+#[derive(Default)]
 pub struct IndexReaderFactory {}
 
 impl IndexReaderFactory {
-    pub fn new() -> Self {
-        Self {}
-    }
-
     pub fn create(&self, index: &Index, table_data: &TableData) -> Box<dyn IndexReader> {
         match index.index_type() {
             IndexType::Term => Box::new(TermIndexReader::new(index, table_data)),

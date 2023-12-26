@@ -5,7 +5,7 @@ use rindex::{
     document::Document,
     index::PostingIterator,
     query::Term,
-    schema::{FieldType, IndexType, Schema, SchemaBuilder, COLUMN, INDEXED},
+    schema::{SchemaBuilder, COLUMN, INDEXED},
     table::{Table, TableSettings},
     DocId,
 };
@@ -38,11 +38,11 @@ pub fn main() {
         let mut writer = table_ref.writer();
 
         let mut doc1 = Document::new();
-        doc1.add_field("title".to_string(), "hello world".to_string());
+        doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
         let mut doc2 = Document::new();
-        doc2.add_field("title".to_string(), "world peace".to_string());
+        doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
     });
 
