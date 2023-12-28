@@ -5,8 +5,7 @@ use crate::{
 };
 
 use super::{
-    ColumnReader, ColumnSegmentReader, GenericColumnBuildingSegmentReader,
-    GenericColumnSegmentReader, TypedColumnReader,
+    ColumnReader, GenericColumnBuildingSegmentReader, GenericColumnSegmentReader, TypedColumnReader,
 };
 
 pub struct GenericColumnReader<T> {
@@ -48,19 +47,22 @@ impl<T: Send + Sync + 'static> ColumnReader for GenericColumnReader<T> {}
 impl<T: Clone + Send + Sync + 'static> TypedColumnReader for GenericColumnReader<T> {
     type Item = T;
     fn get(&self, rowid: RowId, data_snapshot: &TableDataSnapshot) -> Option<Self::Item> {
+        let mut rowid = rowid;
         let mut segment_cursor = 0;
         for segment in &self.segments {
-            let base_docid = data_snapshot.segments[segment_cursor];
-            if rowid < base_docid + segment.doc_count() {
-                return segment.get(rowid - base_docid);
+            let segment_snapshot = &data_snapshot.segments[segment_cursor];
+            if rowid < segment_snapshot.doc_count {
+                return segment.get(rowid);
             }
+            rowid -= segment_snapshot.doc_count;
             segment_cursor += 1;
         }
         for segment in &self.building_segments {
-            let base_docid = data_snapshot.segments[segment_cursor];
-            if rowid < base_docid + segment.doc_count() {
-                return segment.get(rowid - base_docid);
+            let segment_snapshot = &data_snapshot.segments[segment_cursor];
+            if rowid < segment_snapshot.doc_count {
+                return segment.get(rowid);
             }
+            rowid -= segment_snapshot.doc_count;
             segment_cursor += 1;
         }
 

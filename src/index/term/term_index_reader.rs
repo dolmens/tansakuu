@@ -5,7 +5,6 @@ use crate::{
     },
     schema::Index,
     table::{TableData, TableDataSnapshot},
-    DocId,
 };
 
 pub struct TermIndexReader {
@@ -52,7 +51,8 @@ impl IndexReader for TermIndexReader {
         for segment_reader in &self.segments {
             let mut segment_posting = segment_reader.segment_posting(key);
             if !segment_posting.is_empty() {
-                segment_posting.set_base_docid(data_snapshot.segments[segment_cursor] as DocId);
+                let segment_snapshot = &data_snapshot.segments[segment_cursor];
+                segment_posting.set_base_docid(segment_snapshot.base_docid);
                 segment_postings.push(segment_posting);
             }
             segment_cursor += 1;
@@ -60,7 +60,8 @@ impl IndexReader for TermIndexReader {
         for segment_reader in &self.building_segments {
             let mut segment_posting = segment_reader.segment_posting(key);
             if !segment_posting.is_empty() {
-                segment_posting.set_base_docid(data_snapshot.segments[segment_cursor] as DocId);
+                let segment_snapshot = &data_snapshot.segments[segment_cursor];
+                segment_posting.set_base_docid(segment_snapshot.base_docid);
                 segment_postings.push(segment_posting);
             }
             segment_cursor += 1;

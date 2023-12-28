@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::RowId;
 
-use super::{ColumnSegmentReader, GenericColumnSegmentData};
+use super::GenericColumnSegmentData;
 
 pub struct GenericColumnSegmentReader<T> {
     column_data: Arc<GenericColumnSegmentData<T>>,
@@ -18,11 +18,5 @@ impl<T> GenericColumnSegmentReader<T> {
         T: Clone,
     {
         self.column_data.get(rowid)
-    }
-}
-
-impl<T> ColumnSegmentReader for GenericColumnSegmentReader<T> {
-    fn doc_count(&self) -> usize {
-        self.column_data.doc_count()
     }
 }

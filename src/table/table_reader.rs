@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
+use crate::DocId;
+
 use super::{
-    Table, TableColumnReader, TableColumnReaderSnapshot, TableData, TableIndexReader,
-    TableIndexReaderSnapshot,
+    table_data::SegmentDataSnapshot, Table, TableColumnReader, TableColumnReaderSnapshot,
+    TableData, TableDataSnapshot, TableIndexReader, TableIndexReaderSnapshot,
 };
 
 pub struct TableReader {
     index_reader: TableIndexReader,
     column_reader: TableColumnReader,
     table_data: TableData,
-}
-
-pub struct TableDataSnapshot {
-    pub segments: Vec<usize>,
 }
 
 pub struct TableReaderSnapshot<'a> {
@@ -39,23 +37,25 @@ impl TableReader {
     }
 }
 
-impl TableDataSnapshot {
-    pub fn new() -> Self {
-        Self { segments: vec![] }
-    }
-}
-
 impl<'a> TableReaderSnapshot<'a> {
     pub fn new(table: &'a Table, reader: Arc<TableReader>) -> Self {
         let mut data_snapshot = TableDataSnapshot::new();
         let mut base_docid = 0;
         for segment in reader.table_data.segments() {
-            data_snapshot.segments.push(base_docid);
-            base_docid += segment.doc_count();
+            let doc_count = segment.doc_count();
+            data_snapshot.segments.push(SegmentDataSnapshot {
+                base_docid,
+                doc_count,
+            });
+            base_docid += doc_count as DocId;
         }
         for segment in reader.table_data.building_segments() {
-            data_snapshot.segments.push(base_docid);
-            base_docid += segment.doc_count();
+            let doc_count = segment.doc_count();
+            data_snapshot.segments.push(SegmentDataSnapshot {
+                base_docid,
+                doc_count,
+            });
+            base_docid += doc_count as DocId;
         }
 
         Self {

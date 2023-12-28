@@ -1,6 +1,6 @@
 use std::{collections::HashSet, path::PathBuf, sync::Arc};
 
-use crate::schema::SchemaRef;
+use crate::{schema::SchemaRef, DocId};
 
 use super::{
     segment::{BuildingSegment, Segment},
@@ -18,6 +18,17 @@ pub struct TableData {
 }
 
 pub type TableDataRef = Arc<TableData>;
+
+#[derive(Default)]
+pub struct SegmentDataSnapshot {
+    pub base_docid: DocId,
+    pub doc_count: usize,
+}
+
+#[derive(Default)]
+pub struct TableDataSnapshot {
+    pub segments: Vec<SegmentDataSnapshot>,
+}
 
 impl TableData {
     pub fn new(directory: PathBuf, schema: SchemaRef, settings: TableSettingsRef) -> Self {
@@ -104,5 +115,11 @@ impl TableData {
 
     pub fn settings(&self) -> &TableSettingsRef {
         &self.settings
+    }
+}
+
+impl TableDataSnapshot {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
