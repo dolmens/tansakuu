@@ -11,8 +11,8 @@ pub struct TableIndexReader {
 }
 
 pub struct TableIndexReaderSnapshot<'a> {
-    data_snapshot: &'a TableDataSnapshot,
-    index_reader: &'a TableIndexReader,
+    reader: &'a TableIndexReader,
+    snapshot: &'a TableDataSnapshot,
 }
 
 impl TableIndexReader {
@@ -43,16 +43,13 @@ impl TableIndexReader {
 }
 
 impl<'a> TableIndexReaderSnapshot<'a> {
-    pub fn new(data_snapshot: &'a TableDataSnapshot, index_reader: &'a TableIndexReader) -> Self {
-        Self {
-            data_snapshot,
-            index_reader,
-        }
+    pub fn new(reader: &'a TableIndexReader, snapshot: &'a TableDataSnapshot) -> Self {
+        Self { snapshot, reader }
     }
     pub fn index(&self, name: &str) -> Option<IndexReaderSnapshot> {
-        self.index_reader
+        self.reader
             .index(name)
-            .map(|index| IndexReaderSnapshot::new(self.data_snapshot, index))
+            .map(|index| IndexReaderSnapshot::new(self.snapshot, index))
     }
 
     pub fn lookup(&self, term: &Term) -> Option<Box<dyn PostingIterator>> {

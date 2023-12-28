@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use crate::RowId;
+
 use super::{ColumnMerger, GenericColumnSegmentData, GenericColumnSerializerWriter};
 
 #[derive(Default)]
@@ -23,7 +25,7 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
                 .downcast_ref::<GenericColumnSegmentData<T>>()
                 .unwrap();
             for i in 0..doc_count {
-                writer.write(segment_data.get(i).unwrap());
+                writer.write(segment_data.get(i as RowId).unwrap());
             }
         }
     }

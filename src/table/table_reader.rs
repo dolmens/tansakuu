@@ -3,8 +3,9 @@ use std::sync::Arc;
 use crate::DocId;
 
 use super::{
-    table_data::SegmentDataSnapshot, Table, TableColumnReader, TableColumnReaderSnapshot,
-    TableData, TableDataSnapshot, TableIndexReader, TableIndexReaderSnapshot,
+    table_data::SegmentDataSnapshot, PrimaryKeyReaderSnapshot, Table, TableColumnReader,
+    TableColumnReaderSnapshot, TableData, TableDataSnapshot, TableIndexReader,
+    TableIndexReaderSnapshot,
 };
 
 pub struct TableReader {
@@ -14,16 +15,19 @@ pub struct TableReader {
 }
 
 pub struct TableReaderSnapshot<'a> {
-    data_snapshot: TableDataSnapshot,
     reader: Arc<TableReader>,
+    snapshot: TableDataSnapshot,
     _table: &'a Table,
 }
 
 impl TableReader {
     pub fn new(table_data: TableData) -> Self {
+        let index_reader = TableIndexReader::new(&table_data);
+        let column_reader = TableColumnReader::new(&table_data);
+
         Self {
-            index_reader: TableIndexReader::new(&table_data),
-            column_reader: TableColumnReader::new(&table_data),
+            index_reader,
+            column_reader,
             table_data,
         }
     }
@@ -59,17 +63,26 @@ impl<'a> TableReaderSnapshot<'a> {
         }
 
         Self {
-            data_snapshot,
             reader,
+            snapshot: data_snapshot,
             _table: table,
         }
     }
 
     pub fn index_reader(&self) -> TableIndexReaderSnapshot {
-        TableIndexReaderSnapshot::new(&self.data_snapshot, self.reader.index_reader())
+        TableIndexReaderSnapshot::new(self.reader.index_reader(), &self.snapshot)
     }
 
     pub fn column_reader(&self) -> TableColumnReaderSnapshot {
-        TableColumnReaderSnapshot::new(&self.data_snapshot, self.reader.column_reader())
+        TableColumnReaderSnapshot::new(&self.snapshot, self.reader.column_reader())
+    }
+
+    pub fn primary_key_reader(&self) -> Option<PrimaryKeyReaderSnapshot> {
+        self.reader
+            .table_data
+            .schema()
+            .primary_key()
+            .and_then(|(pk, _)| self.reader.column_reader.column(&pk))
+            .map(|reader| PrimaryKeyReaderSnapshot::new(reader, &self.snapshot))
     }
 }

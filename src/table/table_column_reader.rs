@@ -49,7 +49,7 @@ impl<'a> TableColumnReaderSnapshot<'a> {
     pub fn column(&self, name: &str) -> Option<ColumnReaderSnapshot> {
         self.column_reader
             .column(name)
-            .map(|column| ColumnReaderSnapshot::new(self.data_snapshot, column))
+            .map(|column| ColumnReaderSnapshot::new(column, self.data_snapshot))
     }
 
     pub fn typed_column<T, R: TypedColumnReader<Item = T>>(
@@ -58,6 +58,6 @@ impl<'a> TableColumnReaderSnapshot<'a> {
     ) -> Option<TypedColumnReaderSnapshot<'_, T, R>> {
         self.column_reader
             .typed_column::<T, R>(name)
-            .map(|column| TypedColumnReaderSnapshot::new(self.data_snapshot, column))
+            .map(|column| TypedColumnReaderSnapshot::new(column, self.data_snapshot))
     }
 }

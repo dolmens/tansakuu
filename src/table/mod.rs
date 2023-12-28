@@ -1,3 +1,4 @@
+mod primary_key_reader;
 mod segment;
 mod table;
 mod table_column_reader;
@@ -8,6 +9,7 @@ mod table_settings;
 mod table_writer;
 mod version;
 
+pub use primary_key_reader::{PrimaryKeyReaderSnapshot, TypedPrimaryKeyReaderSnapshot};
 pub use table::{Table, TableRef};
 pub use table_column_reader::{TableColumnReader, TableColumnReaderSnapshot};
 pub use table_data::{TableData, TableDataRef, TableDataSnapshot};

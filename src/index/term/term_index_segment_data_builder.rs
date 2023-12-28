@@ -29,7 +29,7 @@ impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
             let line = line.unwrap();
             let mut tok_and_docids = line.split_whitespace();
             let tok = tok_and_docids.next().unwrap();
-            let docids: Vec<_> = tok_and_docids.map(|s| s.parse::<i32>().unwrap()).collect();
+            let docids: Vec<_> = tok_and_docids.map(|s| s.parse::<u32>().unwrap()).collect();
             postings.insert(tok.to_string(), docids);
         }
 

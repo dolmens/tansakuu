@@ -11,41 +11,35 @@ pub trait TypedColumnReader: ColumnReader {
 }
 
 pub struct ColumnReaderSnapshot<'a> {
-    data_snapshot: &'a TableDataSnapshot,
-    column_reader: &'a dyn ColumnReader,
+    reader: &'a dyn ColumnReader,
+    snapshot: &'a TableDataSnapshot,
 }
 
 pub struct TypedColumnReaderSnapshot<'a, T, R: TypedColumnReader<Item = T>> {
-    data_snapshot: &'a TableDataSnapshot,
-    column_reader: &'a R,
+    reader: &'a R,
+    snapshot: &'a TableDataSnapshot,
 }
 
 impl<'a> ColumnReaderSnapshot<'a> {
-    pub fn new(data_snapshot: &'a TableDataSnapshot, column_reader: &'a dyn ColumnReader) -> Self {
-        Self {
-            data_snapshot,
-            column_reader,
-        }
+    pub fn new(reader: &'a dyn ColumnReader, snapshot: &'a TableDataSnapshot) -> Self {
+        Self { reader, snapshot }
     }
 
     pub fn downcast<T, R: TypedColumnReader<Item = T>>(
         &self,
     ) -> Option<TypedColumnReaderSnapshot<'_, T, R>> {
         Some(TypedColumnReaderSnapshot {
-            data_snapshot: &self.data_snapshot,
-            column_reader: self.column_reader.downcast_ref()?,
+            reader: self.reader.downcast_ref()?,
+            snapshot: &self.snapshot,
         })
     }
 }
 impl<'a, T, R: TypedColumnReader<Item = T>> TypedColumnReaderSnapshot<'a, T, R> {
-    pub fn new(data_snapshot: &'a TableDataSnapshot, column_reader: &'a R) -> Self {
-        Self {
-            data_snapshot,
-            column_reader,
-        }
+    pub fn new(reader: &'a R, snapshot: &'a TableDataSnapshot) -> Self {
+        Self { reader, snapshot }
     }
 
     pub fn get(&self, rowid: RowId) -> Option<T> {
-        self.column_reader.get(rowid, self.data_snapshot)
+        self.reader.get(rowid, self.snapshot)
     }
 }

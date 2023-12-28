@@ -8,13 +8,14 @@ pub mod schema;
 pub mod table;
 pub mod util;
 
-pub type DocId = i32;
-pub type RowId = usize;
-pub type TermFreq = i32;
-pub type DocFreq = i32;
+pub type DocId = u32;
+pub type DocUniqueId = u64;
+pub type RowId = u32;
+pub type TermFreq = u32;
+pub type DocFreq = u32;
 pub type FieldMask = u8;
-pub type VersionId = i64;
-pub type SegmentId = i64;
+pub type VersionId = u64;
+pub type SegmentId = u64;
 
 pub const DOC_BLOCK_LEN: usize = 128;
 pub const INVALID_VERSION_ID: VersionId = 0;

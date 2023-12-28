@@ -51,18 +51,18 @@ impl<T: Clone + Send + Sync + 'static> TypedColumnReader for GenericColumnReader
         let mut segment_cursor = 0;
         for segment in &self.segments {
             let segment_snapshot = &data_snapshot.segments[segment_cursor];
-            if rowid < segment_snapshot.doc_count {
+            if rowid < (segment_snapshot.doc_count as RowId) {
                 return segment.get(rowid);
             }
-            rowid -= segment_snapshot.doc_count;
+            rowid -= segment_snapshot.doc_count as RowId;
             segment_cursor += 1;
         }
         for segment in &self.building_segments {
             let segment_snapshot = &data_snapshot.segments[segment_cursor];
-            if rowid < segment_snapshot.doc_count {
+            if rowid < (segment_snapshot.doc_count as RowId) {
                 return segment.get(rowid);
             }
-            rowid -= segment_snapshot.doc_count;
+            rowid -= segment_snapshot.doc_count as RowId;
             segment_cursor += 1;
         }
 

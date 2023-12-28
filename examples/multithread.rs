@@ -31,7 +31,7 @@ pub fn main() {
     schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
-    let table = Arc::new(Table::open_in(schema, settings, "."));
+    let table = Arc::new(Table::open(schema, settings, "."));
 
     let table_ref = table.clone();
     let writer = thread::spawn(move || {
