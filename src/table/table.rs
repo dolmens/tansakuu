@@ -1,22 +1,15 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 use arc_swap::ArcSwap;
-use uuid::Uuid;
 
-use crate::{
-    column::ColumnSerializerFactory,
-    index::IndexSerializerFactory,
-    schema::{Schema, SchemaRef},
-};
+use crate::schema::{Schema, SchemaRef};
 
 use super::{
-    segment::{BuildingSegment, SegmentMerger, SegmentMeta},
-    TableData, TableReader, TableReaderSnapshot, TableSettings, TableSettingsRef, TableWriter,
-    Version,
+    segment::BuildingSegment, TableData, TableReader, TableReaderSnapshot, TableSettings,
+    TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
@@ -68,57 +61,20 @@ impl Table {
         self.reinit_reader(table_data.clone());
     }
 
-    pub(crate) fn dump_segment(&self, building_segment: &Arc<BuildingSegment>) {
-        let segment_uuid = Uuid::new_v4();
-        let segment_uuid_string = segment_uuid.as_simple().to_string();
-        let segment_directory = self.directory.join("segments").join(&segment_uuid_string);
-
-        let column_directory = segment_directory.join("column");
-        fs::create_dir_all(&column_directory).unwrap();
-        let column_serializer_factory = ColumnSerializerFactory::default();
-        for field in self.schema.columns() {
-            let column_data = building_segment
-                .column_data()
-                .column_data(field.name())
-                .unwrap()
-                .clone();
-            let column_serializer = column_serializer_factory.create(field, column_data);
-            column_serializer.serialize(&column_directory);
-        }
-
-        let index_directory = segment_directory.join("index");
-        fs::create_dir_all(&index_directory).unwrap();
-        let index_serializer_factory = IndexSerializerFactory::default();
-        for index in self.schema.indexes() {
-            let index_data = building_segment
-                .index_data()
-                .index_data(index.name())
-                .unwrap()
-                .clone();
-            let index_serializer = index_serializer_factory.create(index, index_data);
-            index_serializer.serialize(&index_directory);
-        }
-
-        let meta = SegmentMeta::new(building_segment.doc_count());
-        meta.save(segment_directory.join("meta.json"));
-
+    pub(crate) fn dump_building_segment(&self, building_segment: Arc<BuildingSegment>) {
         let mut table_data = self.table_data.lock().unwrap();
-        let current_version = table_data.version();
-        let mut version = current_version.new_version();
-        version.add_segment(segment_uuid_string);
-        version.save(&self.directory);
-        if version.segments().len() > 1 {
-            let mut version_merged = version.new_version();
-            self.merge_segments(&mut version_merged);
-        }
-        table_data.remove_building_segment(building_segment);
-        table_data.reload();
+        table_data.dump_building_segment(building_segment);
         self.reinit_reader(table_data.clone());
     }
 
-    pub fn merge_segments(&self, version: &mut Version) {
-        let segment_merger = SegmentMerger::default();
-        segment_merger.merge(&self.directory, &self.schema, version);
+    pub fn dump_and_add_building_segment(
+        &self,
+        building_segment: Arc<BuildingSegment>,
+        new_segment: Arc<BuildingSegment>,
+    ) {
+        let mut table_data = self.table_data.lock().unwrap();
+        table_data.dump_and_add_building_segment(building_segment, new_segment);
+        self.reinit_reader(table_data.clone());
     }
 
     pub(crate) fn reinit_reader(&self, table_data: TableData) {

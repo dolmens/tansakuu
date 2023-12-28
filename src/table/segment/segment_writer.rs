@@ -28,7 +28,8 @@ impl SegmentWriter {
         }
     }
 
-    pub fn add_doc(&mut self, doc: &Document, docid: DocId) {
+    pub fn add_doc(&mut self, doc: &Document) {
+        let docid = self.doc_count as DocId;
         self.column_writer.add_doc(doc, docid);
         self.index_writer.add_doc(doc, docid);
         self.doc_count += 1;
@@ -37,5 +38,9 @@ impl SegmentWriter {
 
     pub fn building_segment(&self) -> &Arc<BuildingSegment> {
         &self.building_segment
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.doc_count == 0
     }
 }
