@@ -5,22 +5,21 @@ use crate::{
 };
 
 use super::{
-    unique_key_posting_iterator::UniqueKeyPostingIterator, UniqueKeyIndexBuildingSegmentReader,
-    UniqueKeyIndexSegmentReader,
+    PrimaryKeyIndexBuildingSegmentReader, PrimaryKeyIndexSegmentReader, PrimaryKeyPostingIterator,
 };
 
-pub struct UniqueKeyIndexReader {
-    segments: Vec<UniqueKeyIndexSegmentReader>,
-    building_segments: Vec<UniqueKeyIndexBuildingSegmentReader>,
+pub struct PrimaryKeyIndexReader {
+    segments: Vec<PrimaryKeyIndexSegmentReader>,
+    building_segments: Vec<PrimaryKeyIndexBuildingSegmentReader>,
 }
 
-impl UniqueKeyIndexReader {
+impl PrimaryKeyIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut segments = vec![];
         for segment in table_data.segments() {
             let index_data = segment.index_data(index.name());
-            let unique_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader = UniqueKeyIndexSegmentReader::new(unique_key_index_data);
+            let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let index_segment_reader = PrimaryKeyIndexSegmentReader::new(primary_key_index_data);
             segments.push(index_segment_reader);
         }
 
@@ -30,10 +29,10 @@ impl UniqueKeyIndexReader {
                 .index_data()
                 .index_data(index.name())
                 .unwrap();
-            let unique_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let unique_key_segment_reader =
-                UniqueKeyIndexBuildingSegmentReader::new(unique_key_index_data);
-            building_segments.push(unique_key_segment_reader);
+            let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let primary_key_segment_reader =
+                PrimaryKeyIndexBuildingSegmentReader::new(primary_key_index_data);
+            building_segments.push(primary_key_segment_reader);
         }
 
         Self {
@@ -43,7 +42,7 @@ impl UniqueKeyIndexReader {
     }
 }
 
-impl IndexReader for UniqueKeyIndexReader {
+impl IndexReader for PrimaryKeyIndexReader {
     fn lookup(
         &self,
         key: &str,
@@ -53,13 +52,13 @@ impl IndexReader for UniqueKeyIndexReader {
         for segment_reader in self.building_segments.iter().rev() {
             let docid = segment_reader.lookup(key);
             if let Some(docid) = docid {
-                return Some(Box::new(UniqueKeyPostingIterator::new(docid)));
+                return Some(Box::new(PrimaryKeyPostingIterator::new(docid)));
             }
         }
         for segment_reader in self.segments.iter().rev() {
             let docid = segment_reader.lookup(key);
             if let Some(docid) = docid {
-                return Some(Box::new(UniqueKeyPostingIterator::new(docid)));
+                return Some(Box::new(PrimaryKeyPostingIterator::new(docid)));
             }
         }
         None

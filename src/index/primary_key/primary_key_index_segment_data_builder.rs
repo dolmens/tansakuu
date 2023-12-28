@@ -6,17 +6,17 @@ use std::{
 
 use crate::{index::IndexSegmentDataBuilder, schema::Index, DocId};
 
-use super::UniqueKeyIndexSegmentData;
+use super::PrimaryKeyIndexSegmentData;
 
-pub struct UniqueKeyIndexSegmentDataBuilder {}
+pub struct PrimaryKeyIndexSegmentDataBuilder {}
 
-impl UniqueKeyIndexSegmentDataBuilder {
+impl PrimaryKeyIndexSegmentDataBuilder {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl IndexSegmentDataBuilder for UniqueKeyIndexSegmentDataBuilder {
+impl IndexSegmentDataBuilder for PrimaryKeyIndexSegmentDataBuilder {
     fn build(
         &self,
         index: &Index,
@@ -33,6 +33,6 @@ impl IndexSegmentDataBuilder for UniqueKeyIndexSegmentDataBuilder {
             keys.insert(key.to_string(), docid);
         }
 
-        Box::new(UniqueKeyIndexSegmentData::new(keys))
+        Box::new(PrimaryKeyIndexSegmentData::new(keys))
     }
 }

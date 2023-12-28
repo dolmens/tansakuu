@@ -2,23 +2,23 @@ use std::sync::Arc;
 
 use crate::{document::Value, index::IndexWriter, DocId};
 
-use super::UniqueKeyIndexBuildingSegmentData;
+use super::PrimaryKeyIndexBuildingSegmentData;
 
-pub struct UniqueKeyIndexWriter {
+pub struct PrimaryKeyIndexWriter {
     key: Option<String>,
-    index_data: Arc<UniqueKeyIndexBuildingSegmentData>,
+    index_data: Arc<PrimaryKeyIndexBuildingSegmentData>,
 }
 
-impl UniqueKeyIndexWriter {
+impl PrimaryKeyIndexWriter {
     pub fn new() -> Self {
         Self {
             key: None,
-            index_data: Arc::new(UniqueKeyIndexBuildingSegmentData::new()),
+            index_data: Arc::new(PrimaryKeyIndexBuildingSegmentData::new()),
         }
     }
 }
 
-impl IndexWriter for UniqueKeyIndexWriter {
+impl IndexWriter for PrimaryKeyIndexWriter {
     fn add_field(&mut self, _field: &str, value: &Value) {
         assert!(self.key.is_none());
         self.key = Some(value.to_string());

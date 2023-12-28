@@ -2,11 +2,11 @@ use std::{fs::File, io::Write, path::Path};
 
 use crate::DocId;
 
-pub struct UniqueKeyIndexSerializerWriter {
+pub struct PrimaryKeyIndexSerializerWriter {
     file: File,
 }
 
-impl UniqueKeyIndexSerializerWriter {
+impl PrimaryKeyIndexSerializerWriter {
     pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
             file: File::create(path).unwrap(),

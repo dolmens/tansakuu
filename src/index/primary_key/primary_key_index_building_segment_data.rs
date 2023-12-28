@@ -2,11 +2,11 @@ use std::{collections::HashMap, sync::Mutex};
 
 use crate::{index::IndexSegmentData, DocId};
 
-pub struct UniqueKeyIndexBuildingSegmentData {
+pub struct PrimaryKeyIndexBuildingSegmentData {
     keys: Mutex<HashMap<String, DocId>>,
 }
 
-impl UniqueKeyIndexBuildingSegmentData {
+impl PrimaryKeyIndexBuildingSegmentData {
     pub fn new() -> Self {
         Self {
             keys: Mutex::new(HashMap::new()),
@@ -29,4 +29,4 @@ impl UniqueKeyIndexBuildingSegmentData {
     }
 }
 
-impl IndexSegmentData for UniqueKeyIndexBuildingSegmentData {}
+impl IndexSegmentData for PrimaryKeyIndexBuildingSegmentData {}

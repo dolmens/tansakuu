@@ -1,16 +1,16 @@
 use crate::{index::PostingIterator, DocId};
 
-pub struct UniqueKeyPostingIterator {
+pub struct PrimaryKeyPostingIterator {
     docid: DocId,
 }
 
-impl UniqueKeyPostingIterator {
+impl PrimaryKeyPostingIterator {
     pub fn new(docid: DocId) -> Self {
         Self { docid }
     }
 }
 
-impl PostingIterator for UniqueKeyPostingIterator {
+impl PostingIterator for PrimaryKeyPostingIterator {
     fn seek(&mut self, docid: crate::DocId) -> Option<crate::DocId> {
         if docid <= self.docid {
             Some(self.docid)

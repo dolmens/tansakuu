@@ -40,7 +40,7 @@ pub struct Field {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexType {
     Term,
-    UniqueKey,
+    PrimaryKey,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

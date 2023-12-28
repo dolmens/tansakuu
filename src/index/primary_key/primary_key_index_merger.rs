@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::{UniqueKeyIndexSegmentData, UniqueKeyIndexSerializerWriter};
+use super::{PrimaryKeyIndexSegmentData, PrimaryKeyIndexSerializerWriter};
 
 #[derive(Default)]
-pub struct UniqueKeyIndexMerger {}
+pub struct PrimaryKeyIndexMerger {}
 
-impl IndexMerger for UniqueKeyIndexMerger {
+impl IndexMerger for PrimaryKeyIndexMerger {
     fn merge(
         &self,
         directory: &std::path::Path,
@@ -16,10 +16,10 @@ impl IndexMerger for UniqueKeyIndexMerger {
         _doc_counts: &[usize],
     ) {
         let path = directory.join(index.name());
-        let mut writer = UniqueKeyIndexSerializerWriter::new(path);
+        let mut writer = PrimaryKeyIndexSerializerWriter::new(path);
         let mut keys = HashMap::<String, DocId>::new();
         for &segment in segments {
-            let segment_data = segment.downcast_ref::<UniqueKeyIndexSegmentData>().unwrap();
+            let segment_data = segment.downcast_ref::<PrimaryKeyIndexSegmentData>().unwrap();
             for (key, &docid) in segment_data.keys.iter() {
                 keys.insert(key.clone(), docid);
             }

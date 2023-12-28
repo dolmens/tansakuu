@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::{index::IndexSegmentData, DocId};
 
-pub struct UniqueKeyIndexSegmentData {
+pub struct PrimaryKeyIndexSegmentData {
     pub keys: HashMap<String, DocId>,
 }
 
-impl UniqueKeyIndexSegmentData {
+impl PrimaryKeyIndexSegmentData {
     pub fn new(keys: HashMap<String, DocId>) -> Self {
         Self { keys }
     }
@@ -16,4 +16,4 @@ impl UniqueKeyIndexSegmentData {
     }
 }
 
-impl IndexSegmentData for UniqueKeyIndexSegmentData {}
+impl IndexSegmentData for PrimaryKeyIndexSegmentData {}

@@ -1,7 +1,7 @@
 use crate::schema::{Index, IndexType};
 
 use super::{
-    term::TermIndexSegmentDataBuilder, unique_key::UniqueKeyIndexSegmentDataBuilder,
+    primary_key::PrimaryKeyIndexSegmentDataBuilder, term::TermIndexSegmentDataBuilder,
     IndexSegmentDataBuilder,
 };
 
@@ -12,7 +12,7 @@ impl IndexSegmentDataFactory {
     pub fn create_builder(&self, index: &Index) -> Box<dyn IndexSegmentDataBuilder> {
         match index.index_type() {
             IndexType::Term => Box::new(TermIndexSegmentDataBuilder::new()),
-            IndexType::UniqueKey => Box::new(UniqueKeyIndexSegmentDataBuilder::new()),
+            IndexType::PrimaryKey => Box::new(PrimaryKeyIndexSegmentDataBuilder::new()),
         }
     }
 }
