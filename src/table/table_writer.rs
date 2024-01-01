@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::document::Document;
 
 use super::{
-    segment::{BuildingSegment, SegmentWriter},
+    segment::{BuildingSegmentData, SegmentWriter},
     Table, TableReader,
 };
 
@@ -45,7 +45,7 @@ impl<'a> TableWriter<'a> {
         self.table_reader = self.table.reader();
     }
 
-    pub fn building_segment(&self) -> &Arc<BuildingSegment> {
+    pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {
         self.segment_writer.building_segment()
     }
 }

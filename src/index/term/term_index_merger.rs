@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::{TermIndexSegmentData, TermIndexSerializerWriter};
+use super::{TermIndexPersistentSegmentData, TermIndexSerializerWriter};
 
 #[derive(Default)]
 pub struct TermIndexMerger {}
@@ -19,7 +19,7 @@ impl IndexMerger for TermIndexMerger {
         let mut writer = TermIndexSerializerWriter::new(path);
         let mut postings = HashMap::<String, Vec<DocId>>::new();
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
-            let term_index_segment_data = segment.downcast_ref::<TermIndexSegmentData>().unwrap();
+            let term_index_segment_data = segment.downcast_ref::<TermIndexPersistentSegmentData>().unwrap();
             for (term, segment_posting) in &term_index_segment_data.postings {
                 let segment_posting = segment_posting
                     .iter()

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::DocId;
 
-use super::{ColumnMerger, GenericColumnSegmentData, GenericColumnSerializerWriter};
+use super::{ColumnMerger, GenericColumnPersistentSegmentData, GenericColumnSerializerWriter};
 
 #[derive(Default)]
 pub struct GenericColumnMerger<T> {
@@ -22,7 +22,7 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
 
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
-                .downcast_ref::<GenericColumnSegmentData<T>>()
+                .downcast_ref::<GenericColumnPersistentSegmentData<T>>()
                 .unwrap();
             for docid in segment_docid_mappings {
                 if let Some(docid) = docid.clone() {

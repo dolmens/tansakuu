@@ -2,9 +2,15 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use crate::{deletionmap::BuildingDeletionMap, util::AcqRelUsize};
 
-use super::{BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId};
+use super::{BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta};
 
+#[derive(Clone)]
 pub struct BuildingSegment {
+    meta: SegmentMeta,
+    segment: Arc<BuildingSegmentData>,
+}
+
+pub struct BuildingSegmentData {
     segment_id: SegmentId,
     doc_count: AcqRelUsize,
     dumping: AtomicBool,
@@ -14,6 +20,28 @@ pub struct BuildingSegment {
 }
 
 impl BuildingSegment {
+    pub fn new(meta: SegmentMeta, segment: Arc<BuildingSegmentData>) -> Self {
+        Self { meta, segment }
+    }
+
+    pub fn meta(&self) -> &SegmentMeta {
+        &self.meta
+    }
+
+    pub fn meta_mut(&mut self) -> &mut SegmentMeta {
+        &mut self.meta
+    }
+
+    pub fn segment(&self) -> &Arc<BuildingSegmentData> {
+        &self.segment
+    }
+
+    pub fn segment_id(&self) -> &SegmentId {
+        self.segment.segment_id()
+    }
+}
+
+impl BuildingSegmentData {
     pub fn new(
         column_data: BuildingSegmentColumnData,
         index_data: BuildingSegmentIndexData,

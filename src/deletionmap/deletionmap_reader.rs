@@ -1,50 +1,50 @@
 use std::sync::Arc;
 
 use crate::{
-    table::{SegmentId, SegmentMetaInfo, TableData},
+    table::{SegmentId, SegmentMeta, TableData},
     DocId,
 };
 
 use super::{BuildingDeletionMap, DeletionMap};
 
 pub struct DeletionMapReader {
-    segments_meta_info: Vec<SegmentMetaInfo>,
+    segment_metas: Vec<SegmentMeta>,
     building_segments: Vec<Arc<BuildingDeletionMap>>,
-    segments: Vec<Arc<DeletionMap>>,
+    persistent_segments: Vec<Arc<DeletionMap>>,
 }
 
 impl DeletionMapReader {
     pub fn new(table_data: &TableData) -> Self {
-        let mut segments_meta_info = vec![];
+        let mut segment_metas = vec![];
         let mut building_segments = vec![];
-        let mut segments = vec![];
+        let mut persistent_segments = vec![];
 
-        for segment in table_data.segments() {
-            segments_meta_info.push(segment.meta_info().clone());
+        for segment in table_data.persistent_segments() {
+            segment_metas.push(segment.meta().clone());
             segment
                 .segment()
                 .deletionmap()
-                .map(|deletionmap| segments.push(deletionmap.clone()));
+                .map(|deletionmap| persistent_segments.push(deletionmap.clone()));
         }
 
-        for building_segment in table_data.building_segments() {
-            segments_meta_info.push(building_segment.meta_info().clone());
-            building_segments.push(building_segment.segment().deletemap().clone());
+        for segment in table_data.building_segments() {
+            segment_metas.push(segment.meta().clone());
+            building_segments.push(segment.segment().deletemap().clone());
         }
 
         Self {
-            segments_meta_info,
+            segment_metas,
             building_segments,
-            segments,
+            persistent_segments,
         }
     }
 
     pub fn is_deleted(&self, docid: DocId) -> bool {
         let (segment_id, docid) = self
-            .segments_meta_info
+            .segment_metas
             .iter()
-            .find(|&meta_info| docid < meta_info.end_docid())
-            .map(|meta_info| (meta_info.segment_id(), meta_info.inner_docid(docid)))
+            .find(|&meta| docid < meta.end_docid())
+            .map(|meta| (meta.segment_id(), meta.inner_docid(docid)))
             .unwrap();
         self.is_deleted_in_segment(segment_id, docid)
     }
@@ -55,7 +55,7 @@ impl DeletionMapReader {
                 return true;
             }
         }
-        for deletionmap in self.segments.iter().rev() {
+        for deletionmap in self.persistent_segments.iter().rev() {
             if deletionmap.is_deleted(segment_id, docid) {
                 return true;
             }

@@ -11,9 +11,10 @@ mod version;
 
 pub use primary_key_reader::{PrimaryKeyReader, TypedPrimaryKeyReader};
 pub use segment::SegmentId;
+pub use segment::SegmentMeta;
 pub use table::{Table, TableRef};
 pub use table_column_reader::TableColumnReader;
-pub use table_data::{SegmentMetaInfo, TableData, TableDataRef};
+pub use table_data::{TableData, TableDataRef};
 pub use table_index_reader::TableIndexReader;
 pub use table_reader::TableReader;
 pub use table_settings::{TableSettings, TableSettingsRef};

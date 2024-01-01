@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::{PrimaryKeyIndexSegmentData, PrimaryKeyIndexSerializerWriter};
+use super::{PrimaryKeyIndexPersistentSegmentData, PrimaryKeyIndexSerializerWriter};
 
 #[derive(Default)]
 pub struct PrimaryKeyIndexMerger {}
@@ -20,7 +20,7 @@ impl IndexMerger for PrimaryKeyIndexMerger {
         let mut keys = HashMap::<String, DocId>::new();
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
-                .downcast_ref::<PrimaryKeyIndexSegmentData>()
+                .downcast_ref::<PrimaryKeyIndexPersistentSegmentData>()
                 .unwrap();
             for (key, &docid) in segment_data.keys.iter() {
                 if let Some(docid) = segment_docid_mappings[docid as usize] {

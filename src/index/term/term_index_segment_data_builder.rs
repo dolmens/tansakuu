@@ -6,7 +6,7 @@ use std::{
 
 use crate::{index::IndexSegmentDataBuilder, schema::Index};
 
-use super::TermIndexSegmentData;
+use super::TermIndexPersistentSegmentData;
 
 pub struct TermIndexSegmentDataBuilder {}
 
@@ -34,6 +34,6 @@ impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
             postings.insert(tok.to_string(), docids);
         }
 
-        Box::new(TermIndexSegmentData::new(postings))
+        Box::new(TermIndexPersistentSegmentData::new(postings))
     }
 }

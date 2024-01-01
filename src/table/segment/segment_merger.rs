@@ -5,7 +5,7 @@ use crate::{
     schema::SchemaRef, table::Version, DocId,
 };
 
-use super::{Segment, SegmentId, SegmentMeta};
+use super::{PersistentSegmentData, SegmentId, SegmentMetaData};
 
 #[derive(Default)]
 pub struct SegmentMerger {}
@@ -17,7 +17,7 @@ impl SegmentMerger {
         let segments: Vec<_> = version
             .segments()
             .iter()
-            .map(|segment_id| Segment::open(segment_id.clone(), schema, &segment_directory))
+            .map(|segment_id| PersistentSegmentData::open(segment_id.clone(), schema, &segment_directory))
             .collect();
 
         let segment_id = SegmentId::new();
@@ -90,7 +90,7 @@ impl SegmentMerger {
             .flatten()
             .filter(|&docid| docid.is_some())
             .count();
-        let meta = SegmentMeta::new(doc_count);
+        let meta = SegmentMetaData::new(doc_count);
         meta.save(segment_directory.join("meta.json"));
 
         for segment in segments.iter() {

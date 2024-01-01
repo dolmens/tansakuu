@@ -4,27 +4,50 @@ use crate::{
     column::ColumnSegmentData, deletionmap::DeletionMap, index::IndexSegmentData, schema::SchemaRef,
 };
 
-use super::{SegmentColumnData, SegmentId, SegmentIndexData, SegmentMeta};
+use super::{
+    PersistentSegmentColumnData, PersistentSegmentIndexData, SegmentId, SegmentMeta,
+    SegmentMetaData,
+};
 
-pub struct Segment {
-    segment_id: SegmentId,
+#[derive(Clone)]
+pub struct PersistentSegment {
     meta: SegmentMeta,
-    index_data: SegmentIndexData,
-    column_data: SegmentColumnData,
+    segment: Arc<PersistentSegmentData>,
+}
+
+pub struct PersistentSegmentData {
+    segment_id: SegmentId,
+    meta: SegmentMetaData,
+    index_data: PersistentSegmentIndexData,
+    column_data: PersistentSegmentColumnData,
     deletionmap: Option<Arc<DeletionMap>>,
 }
 
-impl Segment {
+impl PersistentSegment {
+    pub fn new(meta: SegmentMeta, segment: Arc<PersistentSegmentData>) -> Self {
+        Self { meta, segment }
+    }
+
+    pub fn meta(&self) -> &SegmentMeta {
+        &self.meta
+    }
+
+    pub fn segment(&self) -> &Arc<PersistentSegmentData> {
+        &self.segment
+    }
+}
+
+impl PersistentSegmentData {
     pub fn open(segment_id: SegmentId, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
         let directory = directory.as_ref();
         let segment_directory = directory.join(segment_id.as_str());
-        let meta = SegmentMeta::load(segment_directory.join("meta.json"));
+        let meta = SegmentMetaData::load(segment_directory.join("meta.json"));
 
         let index_directory = segment_directory.join("index");
-        let index_data = SegmentIndexData::open(index_directory, schema);
+        let index_data = PersistentSegmentIndexData::open(index_directory, schema);
 
         let column_directory = segment_directory.join("column");
-        let column_data = SegmentColumnData::open(column_directory, schema);
+        let column_data = PersistentSegmentColumnData::open(column_directory, schema);
 
         let deletionmap_path = segment_directory.join("deletionmap");
         let deletionmap = if deletionmap_path.exists() {

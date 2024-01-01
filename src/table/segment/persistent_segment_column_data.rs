@@ -5,11 +5,11 @@ use crate::{
     schema::SchemaRef,
 };
 
-pub struct SegmentColumnData {
+pub struct PersistentSegmentColumnData {
     columns: HashMap<String, Arc<dyn ColumnSegmentData>>,
 }
 
-impl SegmentColumnData {
+impl PersistentSegmentColumnData {
     pub fn open(directory: impl AsRef<Path>, schema: &SchemaRef) -> Self {
         let directory = directory.as_ref();
         let mut columns = HashMap::new();

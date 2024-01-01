@@ -5,11 +5,11 @@ use crate::{
     schema::SchemaRef,
 };
 
-pub struct SegmentIndexData {
+pub struct PersistentSegmentIndexData {
     indexes: HashMap<String, Arc<dyn IndexSegmentData>>,
 }
 
-impl SegmentIndexData {
+impl PersistentSegmentIndexData {
     pub fn open(directory: impl AsRef<Path>, schema: &SchemaRef) -> Self {
         let directory = directory.as_ref();
         let mut indexes = HashMap::new();

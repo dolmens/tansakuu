@@ -6,7 +6,7 @@ use std::{
 
 use crate::{index::IndexSegmentDataBuilder, schema::Index, DocId};
 
-use super::PrimaryKeyIndexSegmentData;
+use super::PrimaryKeyIndexPersistentSegmentData;
 
 pub struct PrimaryKeyIndexSegmentDataBuilder {}
 
@@ -34,6 +34,6 @@ impl IndexSegmentDataBuilder for PrimaryKeyIndexSegmentDataBuilder {
             keys.insert(key.to_string(), docid);
         }
 
-        Box::new(PrimaryKeyIndexSegmentData::new(keys))
+        Box::new(PrimaryKeyIndexPersistentSegmentData::new(keys))
     }
 }

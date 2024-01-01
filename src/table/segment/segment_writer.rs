@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::{deletionmap::DeletionMapWriter, document::Document, schema::SchemaRef, DocId};
 
-use super::{BuildingSegment, SegmentColumnWriter, SegmentIndexWriter, SegmentId};
+use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter, SegmentId};
 
 pub struct SegmentWriter {
     doc_count: usize,
     column_writer: SegmentColumnWriter,
     index_writer: SegmentIndexWriter,
     deletionmap_writer: DeletionMapWriter,
-    building_segment: Arc<BuildingSegment>,
+    building_segment: Arc<BuildingSegmentData>,
 }
 
 impl SegmentWriter {
@@ -17,7 +17,7 @@ impl SegmentWriter {
         let column_writer = SegmentColumnWriter::new(schema);
         let index_writer = SegmentIndexWriter::new(schema);
         let deletionmap_writer = DeletionMapWriter::new();
-        let building_segment = Arc::new(BuildingSegment::new(
+        let building_segment = Arc::new(BuildingSegmentData::new(
             column_writer.column_data(),
             index_writer.index_data(),
             deletionmap_writer.deletionmap().clone(),
@@ -45,7 +45,7 @@ impl SegmentWriter {
         self.deletionmap_writer.delete_doc(segment_id, docid);
     }
 
-    pub fn building_segment(&self) -> &Arc<BuildingSegment> {
+    pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {
         &self.building_segment
     }
 

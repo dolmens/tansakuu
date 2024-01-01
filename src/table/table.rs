@@ -8,7 +8,7 @@ use arc_swap::ArcSwap;
 use crate::schema::{Schema, SchemaRef};
 
 use super::{
-    segment::BuildingSegment, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
+    segment::BuildingSegmentData, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
@@ -51,13 +51,13 @@ impl Table {
         &self.settings
     }
 
-    pub(crate) fn add_building_segment(&self, building_segment: Arc<BuildingSegment>) {
+    pub(crate) fn add_building_segment(&self, building_segment: Arc<BuildingSegmentData>) {
         let mut table_data = self.table_data.lock().unwrap();
         table_data.add_building_segment(building_segment);
         self.reinit_reader(table_data.clone());
     }
 
-    pub(crate) fn dump_building_segment(&self, building_segment: Arc<BuildingSegment>) {
+    pub(crate) fn dump_building_segment(&self, building_segment: Arc<BuildingSegmentData>) {
         let mut table_data = self.table_data.lock().unwrap();
         table_data.dump_building_segment(building_segment);
         self.reinit_reader(table_data.clone());

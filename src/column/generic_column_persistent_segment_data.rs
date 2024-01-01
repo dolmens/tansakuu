@@ -2,11 +2,11 @@ use crate::DocId;
 
 use super::ColumnSegmentData;
 
-pub struct GenericColumnSegmentData<T> {
+pub struct GenericColumnPersistentSegmentData<T> {
     pub values: Vec<T>,
 }
 
-impl<T> GenericColumnSegmentData<T> {
+impl<T> GenericColumnPersistentSegmentData<T> {
     pub fn new(values: Vec<T>) -> Self {
         Self { values }
     }
@@ -30,4 +30,4 @@ impl<T> GenericColumnSegmentData<T> {
     }
 }
 
-impl<T: Send + Sync + 'static> ColumnSegmentData for GenericColumnSegmentData<T> {}
+impl<T: Send + Sync + 'static> ColumnSegmentData for GenericColumnPersistentSegmentData<T> {}

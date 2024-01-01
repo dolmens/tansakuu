@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-use super::{ColumnSegmentDataBuilder, GenericColumnSegmentData};
+use super::{ColumnSegmentDataBuilder, GenericColumnPersistentSegmentData};
 
 pub struct GenericColumnSegmentDataBuilder<T> {
     _phan: PhantomData<T>,
@@ -33,6 +33,6 @@ impl<T: FromStr + Send + Sync + 'static> ColumnSegmentDataBuilder
             values.push(T::from_str(&line).ok().unwrap());
         }
 
-        Box::new(GenericColumnSegmentData::new(values))
+        Box::new(GenericColumnPersistentSegmentData::new(values))
     }
 }
