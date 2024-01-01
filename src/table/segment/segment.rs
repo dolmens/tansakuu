@@ -1,20 +1,23 @@
 use std::{path::Path, sync::Arc};
 
-use crate::{column::ColumnSegmentData, index::IndexSegmentData, schema::SchemaRef};
+use crate::{
+    column::ColumnSegmentData, deletionmap::DeletionMap, index::IndexSegmentData, schema::SchemaRef,
+};
 
-use super::{SegmentColumnData, SegmentIndexData, SegmentMeta};
+use super::{SegmentColumnData, SegmentId, SegmentIndexData, SegmentMeta};
 
 pub struct Segment {
-    name: String,
+    segment_id: SegmentId,
     meta: SegmentMeta,
     index_data: SegmentIndexData,
     column_data: SegmentColumnData,
+    deletionmap: Option<Arc<DeletionMap>>,
 }
 
 impl Segment {
-    pub fn open(segment_name: String, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
+    pub fn open(segment_id: SegmentId, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
         let directory = directory.as_ref();
-        let segment_directory = directory.join(&segment_name);
+        let segment_directory = directory.join(segment_id.as_str());
         let meta = SegmentMeta::load(segment_directory.join("meta.json"));
 
         let index_directory = segment_directory.join("index");
@@ -23,16 +26,24 @@ impl Segment {
         let column_directory = segment_directory.join("column");
         let column_data = SegmentColumnData::open(column_directory, schema);
 
+        let deletionmap_path = segment_directory.join("deletionmap");
+        let deletionmap = if deletionmap_path.exists() {
+            Some(Arc::new(DeletionMap::load(deletionmap_path)))
+        } else {
+            None
+        };
+
         Self {
-            name: segment_name,
+            segment_id,
             meta,
             index_data,
             column_data,
+            deletionmap,
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn segment_id(&self) -> &SegmentId {
+        &self.segment_id
     }
 
     pub fn doc_count(&self) -> usize {
@@ -45,5 +56,9 @@ impl Segment {
 
     pub fn column_data(&self, column: &str) -> &Arc<dyn ColumnSegmentData> {
         self.column_data.column(column).unwrap()
+    }
+
+    pub fn deletionmap(&self) -> Option<&Arc<DeletionMap>> {
+        self.deletionmap.as_ref()
     }
 }

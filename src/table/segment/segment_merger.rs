@@ -1,12 +1,11 @@
-use std::{fs, path::Path};
-
-use uuid::Uuid;
+use std::{collections::HashSet, fs, path::Path};
 
 use crate::{
-    column::ColumnMergerFactory, index::IndexMergerFactory, schema::SchemaRef, table::Version,
+    column::ColumnMergerFactory, deletionmap::DeletionMap, index::IndexMergerFactory,
+    schema::SchemaRef, table::Version, DocId,
 };
 
-use super::{Segment, SegmentMeta};
+use super::{Segment, SegmentId, SegmentMeta};
 
 #[derive(Default)]
 pub struct SegmentMerger {}
@@ -18,14 +17,29 @@ impl SegmentMerger {
         let segments: Vec<_> = version
             .segments()
             .iter()
-            .map(|segment_name| Segment::open(segment_name.clone(), schema, &segment_directory))
+            .map(|segment_id| Segment::open(segment_id.clone(), schema, &segment_directory))
             .collect();
 
-        let segment_uuid = Uuid::new_v4();
-        let segment_uuid_string = segment_uuid.as_simple().to_string();
-        let segment_directory = segment_directory.join(&segment_uuid_string);
+        let segment_id = SegmentId::new();
+        let segment_directory = segment_directory.join(segment_id.as_str());
 
-        let doc_counts: Vec<_> = segments.iter().map(|seg| seg.doc_count()).collect();
+        let mut docid = 0;
+        let mut docid_mappings = Vec::<Vec<Option<DocId>>>::new();
+        for segment in segments.iter() {
+            let mut segment_docid_mappings = vec![];
+            let deletionmap = segment.deletionmap();
+            for i in 0..segment.doc_count() {
+                if deletionmap.is_some_and(|deletionmap| {
+                    deletionmap.is_deleted(segment.segment_id(), i as DocId)
+                }) {
+                    segment_docid_mappings.push(Some(docid));
+                    docid += 1;
+                } else {
+                    segment_docid_mappings.push(None);
+                }
+            }
+            docid_mappings.push(segment_docid_mappings);
+        }
 
         let column_directory = segment_directory.join("column");
         fs::create_dir_all(&column_directory).unwrap();
@@ -36,7 +50,7 @@ impl SegmentMerger {
                 .iter()
                 .map(|seg| seg.column_data(field.name()).as_ref())
                 .collect();
-            column_merger.merge(&column_directory, field, &column_data, &doc_counts);
+            column_merger.merge(&column_directory, field, &column_data, &docid_mappings);
         }
 
         let index_directory = segment_directory.join("index");
@@ -48,16 +62,41 @@ impl SegmentMerger {
                 .iter()
                 .map(|seg| seg.index_data(index.name()).as_ref())
                 .collect();
-            index_merger.merge(&index_directory, index, &index_data, &doc_counts);
+            index_merger.merge(&index_directory, index, &index_data, &docid_mappings);
         }
 
-        let meta = SegmentMeta::new(doc_counts.iter().sum());
+        let segment_ids: HashSet<_> = segments
+            .iter()
+            .map(|segment| segment.segment_id())
+            .cloned()
+            .collect();
+        let deletionmap = segments
+            .iter()
+            .map(|segment| segment.deletionmap())
+            .map(|deletionmap| {
+                deletionmap.map(|deletionmap| deletionmap.remove_segments_cloned(&segment_ids))
+            })
+            .filter(|deletionmap| deletionmap.is_some())
+            .fold(DeletionMap::default(), |acc, deletionmap| {
+                acc.merge(deletionmap.as_ref().unwrap())
+            });
+        if !deletionmap.is_empty() {
+            let deletionmap_path = segment_directory.join("deletionmap");
+            deletionmap.save(deletionmap_path);
+        }
+
+        let doc_count = docid_mappings
+            .iter()
+            .flatten()
+            .filter(|&docid| docid.is_some())
+            .count();
+        let meta = SegmentMeta::new(doc_count);
         meta.save(segment_directory.join("meta.json"));
 
         for segment in segments.iter() {
-            version.remove_segment(segment.name());
+            version.remove_segment(segment.segment_id());
         }
-        version.add_segment(segment_uuid_string);
+        version.add_segment(segment_id);
         version.save(directory);
     }
 }

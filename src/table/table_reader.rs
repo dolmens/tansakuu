@@ -1,33 +1,46 @@
 use std::sync::Arc;
 
-use crate::DocId;
+use crate::{deletionmap::DeletionMapReader, index::PrimaryKeyIndexReader, DocId};
 
-use super::{
-    table_data::SegmentDataSnapshot, PrimaryKeyReaderSnapshot, Table, TableColumnReader,
-    TableColumnReaderSnapshot, TableData, TableDataSnapshot, TableIndexReader,
-    TableIndexReaderSnapshot,
-};
+use super::{segment::SegmentId, PrimaryKeyReader, TableColumnReader, TableData, TableIndexReader};
 
 pub struct TableReader {
     index_reader: TableIndexReader,
     column_reader: TableColumnReader,
+    primary_key_reader: Option<PrimaryKeyReader>,
+    primary_key_index_reader: Option<Arc<PrimaryKeyIndexReader>>,
+    deletionmap_reader: Option<DeletionMapReader>,
     table_data: TableData,
-}
-
-pub struct TableReaderSnapshot<'a> {
-    reader: Arc<TableReader>,
-    snapshot: TableDataSnapshot,
-    _table: &'a Table,
 }
 
 impl TableReader {
     pub fn new(table_data: TableData) -> Self {
         let index_reader = TableIndexReader::new(&table_data);
         let column_reader = TableColumnReader::new(&table_data);
+        let primary_key_reader = table_data
+            .schema()
+            .primary_key()
+            .and_then(|(primary_key, _)| {
+                column_reader
+                    .column_ref(&primary_key)
+                    .map(|r| PrimaryKeyReader::new(r))
+            });
+        let primary_key_index_reader = table_data
+            .schema()
+            .primary_key()
+            .and_then(|(_, primary_key)| index_reader.index_ref(&primary_key))
+            .and_then(|reader| reader.downcast_arc().ok());
+        let deletionmap_reader = table_data
+            .schema()
+            .primary_key()
+            .map(|_| DeletionMapReader::new(&table_data));
 
         Self {
             index_reader,
             column_reader,
+            primary_key_reader,
+            primary_key_index_reader,
+            deletionmap_reader,
             table_data,
         }
     }
@@ -39,50 +52,20 @@ impl TableReader {
     pub fn column_reader(&self) -> &TableColumnReader {
         &self.column_reader
     }
-}
 
-impl<'a> TableReaderSnapshot<'a> {
-    pub fn new(table: &'a Table, reader: Arc<TableReader>) -> Self {
-        let mut data_snapshot = TableDataSnapshot::new();
-        let mut base_docid = 0;
-        for segment in reader.table_data.segments() {
-            let doc_count = segment.doc_count();
-            data_snapshot.segments.push(SegmentDataSnapshot {
-                base_docid,
-                doc_count,
-            });
-            base_docid += doc_count as DocId;
-        }
-        for segment in reader.table_data.building_segments() {
-            let doc_count = segment.doc_count();
-            data_snapshot.segments.push(SegmentDataSnapshot {
-                base_docid,
-                doc_count,
-            });
-            base_docid += doc_count as DocId;
-        }
-
-        Self {
-            reader,
-            snapshot: data_snapshot,
-            _table: table,
-        }
+    pub fn primary_key_reader(&self) -> Option<&PrimaryKeyReader> {
+        self.primary_key_reader.as_ref()
     }
 
-    pub fn index_reader(&self) -> TableIndexReaderSnapshot {
-        TableIndexReaderSnapshot::new(self.reader.index_reader(), &self.snapshot)
+    pub fn primary_key_index_reader(&self) -> Option<&Arc<PrimaryKeyIndexReader>> {
+        self.primary_key_index_reader.as_ref()
     }
 
-    pub fn column_reader(&self) -> TableColumnReaderSnapshot {
-        TableColumnReaderSnapshot::new(&self.snapshot, self.reader.column_reader())
+    pub fn deletionmap_reader(&self) -> Option<&DeletionMapReader> {
+        self.deletionmap_reader.as_ref()
     }
 
-    pub fn primary_key_reader(&self) -> Option<PrimaryKeyReaderSnapshot> {
-        self.reader
-            .table_data
-            .schema()
-            .primary_key()
-            .and_then(|(pk, _)| self.reader.column_reader.column(&pk))
-            .map(|reader| PrimaryKeyReaderSnapshot::new(reader, &self.snapshot))
+    pub fn segment_of_docid(&self, docid: DocId) -> Option<(&SegmentId, DocId)> {
+        self.table_data.segment_of_docid(docid)
     }
 }

@@ -8,10 +8,12 @@ use crate::VersionId;
 
 use serde::{Deserialize, Serialize};
 
+use super::segment::SegmentId;
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Default, Debug)]
 pub struct Version {
     version_id: VersionId,
-    segments: Vec<String>,
+    segments: Vec<SegmentId>,
 }
 
 impl Version {
@@ -45,7 +47,7 @@ impl Version {
         })
     }
 
-    pub fn new_version(&self) -> Self {
+    pub fn next_version(&self) -> Self {
         let version_id = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -70,15 +72,15 @@ impl Version {
         self.version_id
     }
 
-    pub fn segments(&self) -> &[String] {
+    pub fn segments(&self) -> &[SegmentId] {
         &self.segments
     }
 
-    pub fn remove_segment(&mut self, segment: &str) {
+    pub fn remove_segment(&mut self, segment: &SegmentId) {
         self.segments.retain(|s| s != segment);
     }
 
-    pub fn add_segment(&mut self, segment: String) {
+    pub fn add_segment(&mut self, segment: SegmentId) {
         self.segments.push(segment);
     }
 }

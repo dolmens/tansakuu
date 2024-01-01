@@ -1,31 +1,27 @@
+use std::sync::Arc;
+
 use crate::{
-    column::{ColumnReader, ColumnReaderSnapshot, GenericColumnReader, TypedColumnReaderSnapshot},
+    column::{ColumnReader, GenericColumnReader},
     DocId,
 };
 
-use super::TableDataSnapshot;
+pub struct PrimaryKeyReader(Arc<dyn ColumnReader>);
 
-pub struct PrimaryKeyReaderSnapshot<'a>(ColumnReaderSnapshot<'a>);
+pub struct TypedPrimaryKeyReader<'a, T: Clone + Send + Sync + 'static>(&'a GenericColumnReader<T>);
 
-pub struct TypedPrimaryKeyReaderSnapshot<'a, T: Clone + Send + Sync + 'static>(
-    TypedColumnReaderSnapshot<'a, T, GenericColumnReader<T>>,
-);
-
-impl<'a> PrimaryKeyReaderSnapshot<'a> {
-    pub fn new(reader: &'a dyn ColumnReader, snapshot: &'a TableDataSnapshot) -> Self {
-        Self(ColumnReaderSnapshot::new(reader, snapshot))
+impl PrimaryKeyReader {
+    pub fn new(primary_key_reader: Arc<dyn ColumnReader>) -> Self {
+        Self(primary_key_reader)
     }
 
-    pub fn get_typed_reader<T: Clone + Send + Sync + 'static>(
+    pub fn typed_reader<T: Clone + Send + Sync + 'static>(
         &self,
-    ) -> Option<TypedPrimaryKeyReaderSnapshot<'_, T>> {
-        self.0
-            .downcast::<T, GenericColumnReader<_>>()
-            .map(|reader| TypedPrimaryKeyReaderSnapshot(reader))
+    ) -> Option<TypedPrimaryKeyReader<T>> {
+        self.0.downcast_ref().map(|r| TypedPrimaryKeyReader(r))
     }
 }
 
-impl<'a, T: Clone + Send + Sync + 'static> TypedPrimaryKeyReaderSnapshot<'a, T> {
+impl<'a, T: Clone + Send + Sync + 'static> TypedPrimaryKeyReader<'a, T> {
     pub fn get(&self, docid: DocId) -> Option<T> {
         self.0.get(docid)
     }

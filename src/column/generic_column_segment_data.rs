@@ -1,4 +1,4 @@
-use crate::RowId;
+use crate::DocId;
 
 use super::ColumnSegmentData;
 
@@ -11,11 +11,11 @@ impl<T> GenericColumnSegmentData<T> {
         Self { values }
     }
 
-    pub fn get(&self, rowid: RowId) -> Option<T>
+    pub fn get(&self, docid: DocId) -> Option<T>
     where
         T: Clone,
     {
-        self.values.get(rowid as usize).cloned()
+        self.values.get(docid as usize).cloned()
     }
 
     pub fn values(&self) -> Vec<T>

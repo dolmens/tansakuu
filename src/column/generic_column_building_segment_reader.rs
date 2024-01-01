@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::RowId;
+use crate::DocId;
 
 use super::GenericColumnBuildingSegmentData;
 
@@ -13,10 +13,14 @@ impl<T> GenericColumnBuildingSegmentReader<T> {
         Self { column_data }
     }
 
-    pub fn get(&self, rowid: RowId) -> Option<T>
+    pub fn get(&self, docid: DocId) -> Option<T>
     where
         T: Clone,
     {
-        self.column_data.get(rowid)
+        self.column_data.get(docid)
+    }
+
+    pub fn doc_count(&self) -> usize {
+        self.column_data.doc_count()
     }
 }

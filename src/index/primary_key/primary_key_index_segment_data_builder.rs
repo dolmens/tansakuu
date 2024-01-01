@@ -22,6 +22,7 @@ impl IndexSegmentDataBuilder for PrimaryKeyIndexSegmentDataBuilder {
         index: &Index,
         path: &std::path::Path,
     ) -> Box<dyn crate::index::IndexSegmentData> {
+        let _ = index;
         let mut keys = HashMap::new();
         let file = File::open(path).unwrap();
         let file_reader = BufReader::new(file);

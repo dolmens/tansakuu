@@ -9,12 +9,13 @@ mod table_settings;
 mod table_writer;
 mod version;
 
-pub use primary_key_reader::{PrimaryKeyReaderSnapshot, TypedPrimaryKeyReaderSnapshot};
+pub use primary_key_reader::{PrimaryKeyReader, TypedPrimaryKeyReader};
+pub use segment::SegmentId;
 pub use table::{Table, TableRef};
-pub use table_column_reader::{TableColumnReader, TableColumnReaderSnapshot};
-pub use table_data::{TableData, TableDataRef, TableDataSnapshot};
-pub use table_index_reader::{TableIndexReader, TableIndexReaderSnapshot};
-pub use table_reader::{TableReader, TableReaderSnapshot};
+pub use table_column_reader::TableColumnReader;
+pub use table_data::{SegmentMetaInfo, TableData, TableDataRef};
+pub use table_index_reader::TableIndexReader;
+pub use table_reader::TableReader;
 pub use table_settings::{TableSettings, TableSettingsRef};
 pub use table_writer::TableWriter;
 pub use version::Version;

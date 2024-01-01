@@ -1,7 +1,6 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use rindex::{
-    column::GenericColumnReader,
     document::Document,
     index::PostingIterator,
     query::Term,
@@ -68,9 +67,7 @@ pub fn main() {
                 assert_eq!(docids, vec![0, 1]);
 
                 let column_reader = reader.column_reader();
-                let title_column_reader = column_reader
-                    .typed_column::<String, GenericColumnReader<_>>("title")
-                    .unwrap();
+                let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
                 assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
                 assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
 

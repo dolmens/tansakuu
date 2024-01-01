@@ -1,5 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -8,14 +8,12 @@ use arc_swap::ArcSwap;
 use crate::schema::{Schema, SchemaRef};
 
 use super::{
-    segment::BuildingSegment, TableData, TableReader, TableReaderSnapshot, TableSettings,
-    TableSettingsRef, TableWriter,
+    segment::BuildingSegment, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
     reader: ArcSwap<TableReader>,
     table_data: Mutex<TableData>,
-    directory: PathBuf,
     schema: SchemaRef,
     settings: TableSettingsRef,
 }
@@ -27,20 +25,18 @@ impl Table {
         let schema = Arc::new(schema);
         let settings = Arc::new(settings);
         let directory = directory.as_ref().to_owned();
-        let table_data = TableData::new(directory.clone(), schema.clone(), settings.clone());
+        let table_data = TableData::open(directory.clone(), schema.clone(), settings.clone());
         let reader = ArcSwap::from(Arc::new(TableReader::new(table_data.clone())));
         Self {
             reader,
             table_data: Mutex::new(table_data),
-            directory,
             schema,
             settings,
         }
     }
 
-    pub fn reader(&self) -> TableReaderSnapshot {
-        let reader = self.reader.load_full();
-        TableReaderSnapshot::new(&self, reader)
+    pub fn reader(&self) -> Arc<TableReader> {
+        self.reader.load_full()
     }
 
     pub fn writer(&self) -> TableWriter {
@@ -67,16 +63,6 @@ impl Table {
         self.reinit_reader(table_data.clone());
     }
 
-    pub fn dump_and_add_building_segment(
-        &self,
-        building_segment: Arc<BuildingSegment>,
-        new_segment: Arc<BuildingSegment>,
-    ) {
-        let mut table_data = self.table_data.lock().unwrap();
-        table_data.dump_and_add_building_segment(building_segment, new_segment);
-        self.reinit_reader(table_data.clone());
-    }
-
     pub(crate) fn reinit_reader(&self, table_data: TableData) {
         let reader = Arc::new(TableReader::new(table_data));
         self.reader.store(reader);
@@ -86,12 +72,11 @@ impl Table {
 #[cfg(test)]
 mod tests {
     use crate::{
-        column::GenericColumnReader,
         document::Document,
         index::PostingIterator,
         query::Term,
         schema::{SchemaBuilder, COLUMN, INDEXED, PRIMARY_KEY},
-        table::{primary_key_reader, Table, TableSettings},
+        table::{Table, TableSettings},
         DocId,
     };
 
@@ -148,9 +133,7 @@ mod tests {
         assert_eq!(docids, vec![1]);
 
         let column_reader = reader.column_reader();
-        let title_column_reader = column_reader
-            .typed_column::<String, GenericColumnReader<_>>("title")
-            .unwrap();
+        let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
         assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
         assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
     }
@@ -204,18 +187,84 @@ mod tests {
         let docids = get_all_docs(&mut *posting_iter);
         assert_eq!(docids, vec![1]);
 
-
         let column_reader = reader.column_reader();
-        let title_column_reader = column_reader
-            .typed_column::<String, GenericColumnReader<_>>("title")
-            .unwrap();
+        let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
         assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
         assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
 
         let primary_key_reader = reader.primary_key_reader().unwrap();
-        let primary_key_reader = primary_key_reader.get_typed_reader::<i64>().unwrap();
+        let primary_key_reader = primary_key_reader.typed_reader::<i64>().unwrap();
         assert_eq!(primary_key_reader.get(0), Some(100));
         assert_eq!(primary_key_reader.get(1), Some(200));
+    }
+
+    #[test]
+    fn test_delete_doc() {
+        let mut schema_builder = SchemaBuilder::new();
+        schema_builder.add_i64_field("item_id".to_string(), COLUMN | INDEXED | PRIMARY_KEY);
+        schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+        let schema = schema_builder.build();
+        let settings = TableSettings::new();
+        let table = Table::open(schema, settings, "./testdata");
+
+        let mut writer = table.writer();
+
+        let mut doc1 = Document::new();
+        doc1.add_field("item_id".to_string(), 100 as i64);
+        doc1.add_field("title".to_string(), "hello world");
+        writer.add_doc(&doc1);
+
+        let mut doc2 = Document::new();
+        doc2.add_field("item_id".to_string(), 200 as i64);
+        doc2.add_field("title".to_string(), "world peace");
+        writer.add_doc(&doc2);
+
+        let reader = table.reader();
+        let deletionmap_reader = reader.deletionmap_reader().unwrap();
+
+        assert!(!deletionmap_reader.is_deleted(0));
+        assert!(!deletionmap_reader.is_deleted(1));
+
+        writer.delete_doc("200");
+
+        assert!(!deletionmap_reader.is_deleted(0));
+        assert!(deletionmap_reader.is_deleted(1));
+
+        writer.new_segment();
+
+        let mut doc3 = Document::new();
+        doc3.add_field("item_id".to_string(), 300 as i64);
+        doc3.add_field("title".to_string(), "hello world 3");
+        writer.add_doc(&doc3);
+
+        let mut doc4 = Document::new();
+        doc4.add_field("item_id".to_string(), 400 as i64);
+        doc4.add_field("title".to_string(), "world peace 4");
+        writer.add_doc(&doc4);
+
+        let reader = table.reader();
+        let deletionmap_reader = reader.deletionmap_reader().unwrap();
+
+        assert!(!deletionmap_reader.is_deleted(0));
+        assert!(deletionmap_reader.is_deleted(1));
+        assert!(!deletionmap_reader.is_deleted(2));
+        assert!(!deletionmap_reader.is_deleted(3));
+
+        writer.delete_doc("300");
+
+        assert!(!deletionmap_reader.is_deleted(0));
+        assert!(deletionmap_reader.is_deleted(1));
+        assert!(deletionmap_reader.is_deleted(2));
+        assert!(!deletionmap_reader.is_deleted(3));
+
+        // trigger merge
+        writer.new_segment();
+
+        let reader = table.reader();
+        let deletionmap_reader = reader.deletionmap_reader().unwrap();
+
+        assert!(!deletionmap_reader.is_deleted(0));
+        assert!(!deletionmap_reader.is_deleted(1));
     }
 
     #[test]
@@ -255,9 +304,7 @@ mod tests {
         assert_eq!(docids, vec![1]);
 
         let column_reader = reader.column_reader();
-        let title_column_reader = column_reader
-            .typed_column::<String, GenericColumnReader<_>>("title")
-            .unwrap();
+        let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
         assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
         assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
 

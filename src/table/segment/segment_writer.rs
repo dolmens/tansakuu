@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use crate::{document::Document, schema::SchemaRef, DocId};
+use crate::{deletionmap::DeletionMapWriter, document::Document, schema::SchemaRef, DocId};
 
-use super::{BuildingSegment, SegmentColumnWriter, SegmentIndexWriter};
+use super::{BuildingSegment, SegmentColumnWriter, SegmentIndexWriter, SegmentId};
 
 pub struct SegmentWriter {
     doc_count: usize,
     column_writer: SegmentColumnWriter,
     index_writer: SegmentIndexWriter,
+    deletionmap_writer: DeletionMapWriter,
     building_segment: Arc<BuildingSegment>,
 }
 
@@ -15,25 +16,33 @@ impl SegmentWriter {
     pub fn new(schema: &SchemaRef) -> Self {
         let column_writer = SegmentColumnWriter::new(schema);
         let index_writer = SegmentIndexWriter::new(schema);
+        let deletionmap_writer = DeletionMapWriter::new();
         let building_segment = Arc::new(BuildingSegment::new(
             column_writer.column_data(),
             index_writer.index_data(),
+            deletionmap_writer.deletionmap().clone(),
         ));
 
         Self {
             doc_count: 0,
             column_writer,
             index_writer,
+            deletionmap_writer,
             building_segment,
         }
     }
 
     pub fn add_doc(&mut self, doc: &Document) {
         let docid = self.doc_count as DocId;
+        // First column then index, so that indexed documents must be in column.
         self.column_writer.add_doc(doc, docid);
         self.index_writer.add_doc(doc, docid);
         self.doc_count += 1;
         self.building_segment.set_doc_count(self.doc_count);
+    }
+
+    pub fn delete_doc(&mut self, segment_id: SegmentId, docid: DocId) {
+        self.deletionmap_writer.delete_doc(segment_id, docid);
     }
 
     pub fn building_segment(&self) -> &Arc<BuildingSegment> {

@@ -22,6 +22,7 @@ impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
         index: &Index,
         path: &std::path::Path,
     ) -> Box<dyn crate::index::IndexSegmentData> {
+        let _ = index;
         let mut postings = HashMap::new();
         let file = File::open(path).unwrap();
         let file_reader = BufReader::new(file);

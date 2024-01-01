@@ -13,15 +13,19 @@ impl IndexMerger for PrimaryKeyIndexMerger {
         directory: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&dyn crate::index::IndexSegmentData],
-        _doc_counts: &[usize],
+        docid_mappings: &[Vec<Option<DocId>>],
     ) {
         let path = directory.join(index.name());
         let mut writer = PrimaryKeyIndexSerializerWriter::new(path);
         let mut keys = HashMap::<String, DocId>::new();
-        for &segment in segments {
-            let segment_data = segment.downcast_ref::<PrimaryKeyIndexSegmentData>().unwrap();
+        for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
+            let segment_data = segment
+                .downcast_ref::<PrimaryKeyIndexSegmentData>()
+                .unwrap();
             for (key, &docid) in segment_data.keys.iter() {
-                keys.insert(key.clone(), docid);
+                if let Some(docid) = segment_docid_mappings[docid as usize] {
+                    keys.insert(key.clone(), docid);
+                }
             }
         }
 

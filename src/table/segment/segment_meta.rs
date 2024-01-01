@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct SegmentMeta {
     doc_count: usize,
 }

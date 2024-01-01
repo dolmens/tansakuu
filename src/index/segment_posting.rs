@@ -14,10 +14,6 @@ impl SegmentPosting {
         return self.docids.is_empty();
     }
 
-    pub fn set_base_docid(&mut self, base_docid: DocId) {
-        self.base_docid = base_docid;
-    }
-
     pub fn seek(&self, docid: DocId) -> Option<DocId> {
         let docid = std::cmp::max(self.base_docid, docid);
         let docid = docid - self.base_docid;

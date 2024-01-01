@@ -13,25 +13,23 @@ impl IndexMerger for TermIndexMerger {
         directory: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&dyn crate::index::IndexSegmentData],
-        doc_counts: &[usize],
+        docid_mappings: &[Vec<Option<DocId>>],
     ) {
         let path = directory.join(index.name());
         let mut writer = TermIndexSerializerWriter::new(path);
         let mut postings = HashMap::<String, Vec<DocId>>::new();
-        let mut base_docid = 0;
-        for (&segment, &doc_count) in segments.iter().zip(doc_counts.iter()) {
+        for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
             let term_index_segment_data = segment.downcast_ref::<TermIndexSegmentData>().unwrap();
             for (term, segment_posting) in &term_index_segment_data.postings {
                 let segment_posting = segment_posting
                     .iter()
-                    .map(|&docid| docid + base_docid)
+                    .filter_map(|&docid| segment_docid_mappings[docid as usize])
                     .collect();
                 postings
                     .entry(term.to_string())
                     .and_modify(|p| p.extend(&segment_posting))
                     .or_insert(segment_posting);
             }
-            base_docid += doc_count as DocId;
         }
 
         for (term, posting) in &postings {

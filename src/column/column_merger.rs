@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::schema::Field;
+use crate::{schema::Field, DocId};
 
 use super::ColumnSegmentData;
 
@@ -10,6 +10,6 @@ pub trait ColumnMerger {
         directory: &Path,
         field: &Field,
         segments: &[&dyn ColumnSegmentData],
-        doc_counts: &[usize],
+        docid_mappings: &[Vec<Option<DocId>>],
     );
 }

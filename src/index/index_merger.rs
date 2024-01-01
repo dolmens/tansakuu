@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::schema::Index;
+use crate::{schema::Index, DocId};
 
 use super::IndexSegmentData;
 
@@ -10,6 +10,6 @@ pub trait IndexMerger {
         directory: &Path,
         index: &Index,
         segments: &[&dyn IndexSegmentData],
-        doc_counts: &[usize],
+        docid_mappings: &[Vec<Option<DocId>>],
     );
 }

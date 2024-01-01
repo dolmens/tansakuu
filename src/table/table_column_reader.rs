@@ -1,19 +1,11 @@
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::column::{
-    ColumnReader, ColumnReaderFactory, ColumnReaderSnapshot, TypedColumnReader,
-    TypedColumnReaderSnapshot,
-};
+use crate::column::{ColumnReader, ColumnReaderFactory, GenericColumnReader};
 
-use super::{TableData, TableDataSnapshot};
+use super::TableData;
 
 pub struct TableColumnReader {
-    columns: HashMap<String, Box<dyn ColumnReader>>,
-}
-
-pub struct TableColumnReaderSnapshot<'a> {
-    data_snapshot: &'a TableDataSnapshot,
-    column_reader: &'a TableColumnReader,
+    columns: HashMap<String, Arc<dyn ColumnReader>>,
 }
 
 impl TableColumnReader {
@@ -23,7 +15,7 @@ impl TableColumnReader {
         let schema = table_data.schema();
         for field in schema.columns() {
             let column_reader = column_reader_factory.create(field, table_data);
-            columns.insert(field.name().to_string(), column_reader);
+            columns.insert(field.name().to_string(), column_reader.into());
         }
 
         Self { columns }
@@ -33,31 +25,14 @@ impl TableColumnReader {
         self.columns.get(name).map(|r| r.deref())
     }
 
-    pub fn typed_column<T, R: TypedColumnReader<Item = T>>(&self, name: &str) -> Option<&R> {
-        self.column(name).and_then(|column| column.downcast_ref())
-    }
-}
-
-impl<'a> TableColumnReaderSnapshot<'a> {
-    pub fn new(data_snapshot: &'a TableDataSnapshot, column_reader: &'a TableColumnReader) -> Self {
-        Self {
-            data_snapshot,
-            column_reader,
-        }
-    }
-
-    pub fn column(&self, name: &str) -> Option<ColumnReaderSnapshot> {
-        self.column_reader
-            .column(name)
-            .map(|column| ColumnReaderSnapshot::new(column, self.data_snapshot))
-    }
-
-    pub fn typed_column<T, R: TypedColumnReader<Item = T>>(
+    pub fn typed_column<T: Clone + Send + Sync + 'static>(
         &self,
         name: &str,
-    ) -> Option<TypedColumnReaderSnapshot<'_, T, R>> {
-        self.column_reader
-            .typed_column::<T, R>(name)
-            .map(|column| TypedColumnReaderSnapshot::new(column, self.data_snapshot))
+    ) -> Option<&GenericColumnReader<T>> {
+        self.column(name).and_then(|column| column.downcast_ref())
+    }
+
+    pub(crate) fn column_ref(&self, name: &str) -> Option<Arc<dyn ColumnReader>> {
+        self.columns.get(name).map(|r| r.clone())
     }
 }
