@@ -15,7 +15,7 @@ pub struct BuildingDeletionMap {
 }
 
 impl BuildingDeletionMap {
-    pub fn is_deleted(&self, segment_id: SegmentId, docid: DocId) -> bool {
+    pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {
         self.deleted
             .lock()
             .unwrap()

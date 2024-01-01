@@ -29,7 +29,7 @@ impl DeletionMapReader {
 
         for segment in table_data.building_segments() {
             segment_metas.push(segment.meta().clone());
-            building_segments.push(segment.segment().deletemap().clone());
+            building_segments.push(segment.data().deletemap().clone());
         }
 
         Self {
@@ -51,7 +51,7 @@ impl DeletionMapReader {
 
     pub(crate) fn is_deleted_in_segment(&self, segment_id: &SegmentId, docid: DocId) -> bool {
         for deletionmap in self.building_segments.iter().rev() {
-            if deletionmap.is_deleted(segment_id.clone(), docid) {
+            if deletionmap.is_deleted(segment_id, docid) {
                 return true;
             }
         }

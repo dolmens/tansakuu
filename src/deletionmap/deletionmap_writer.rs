@@ -19,7 +19,7 @@ impl DeletionMapWriter {
         &self.deletionmap
     }
 
-    pub fn is_deleted(&self, segment_id: SegmentId, docid: DocId) -> bool {
+    pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {
         self.deletionmap.is_deleted(segment_id, docid)
     }
 

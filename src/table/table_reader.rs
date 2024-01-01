@@ -57,8 +57,8 @@ impl TableReader {
         self.primary_key_reader.as_ref()
     }
 
-    pub fn primary_key_index_reader(&self) -> Option<&Arc<PrimaryKeyIndexReader>> {
-        self.primary_key_index_reader.as_ref()
+    pub fn primary_key_index_reader(&self) -> Option<&PrimaryKeyIndexReader> {
+        self.primary_key_index_reader.as_deref()
     }
 
     pub fn deletionmap_reader(&self) -> Option<&DeletionMapReader> {

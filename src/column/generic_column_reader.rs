@@ -23,7 +23,7 @@ impl<T: Send + Sync + 'static> GenericColumnReader<T> {
         let mut building_segments = vec![];
         for building_segment in table_data.building_segments() {
             let column_data = building_segment
-                .segment()
+                .data()
                 .column_data()
                 .column_data(field.name())
                 .unwrap();

@@ -26,8 +26,8 @@ impl PrimaryKeyIndexReader {
         let mut building_segments = vec![];
         for segment in table_data.building_segments() {
             let meta = segment.meta();
-            let segment_data = segment.segment();
-            let index_data = segment_data.index_data().index_data(index.name()).unwrap();
+            let data = segment.data();
+            let index_data = data.index_data().index_data(index.name()).unwrap();
             let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
                 PrimaryKeyIndexBuildingSegmentReader::new(meta.clone(), primary_key_index_data);

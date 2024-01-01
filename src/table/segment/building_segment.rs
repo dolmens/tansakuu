@@ -7,7 +7,7 @@ use super::{BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, Segm
 #[derive(Clone)]
 pub struct BuildingSegment {
     meta: SegmentMeta,
-    segment: Arc<BuildingSegmentData>,
+    data: Arc<BuildingSegmentData>,
 }
 
 pub struct BuildingSegmentData {
@@ -20,8 +20,8 @@ pub struct BuildingSegmentData {
 }
 
 impl BuildingSegment {
-    pub fn new(meta: SegmentMeta, segment: Arc<BuildingSegmentData>) -> Self {
-        Self { meta, segment }
+    pub fn new(meta: SegmentMeta, data: Arc<BuildingSegmentData>) -> Self {
+        Self { meta, data }
     }
 
     pub fn meta(&self) -> &SegmentMeta {
@@ -32,12 +32,8 @@ impl BuildingSegment {
         &mut self.meta
     }
 
-    pub fn segment(&self) -> &Arc<BuildingSegmentData> {
-        &self.segment
-    }
-
-    pub fn segment_id(&self) -> &SegmentId {
-        self.segment.segment_id()
+    pub fn data(&self) -> &Arc<BuildingSegmentData> {
+        &self.data
     }
 }
 
@@ -74,7 +70,8 @@ impl BuildingSegmentData {
     }
 
     pub(crate) fn set_dumping_start(&self) {
-        self.dumping.store(true, std::sync::atomic::Ordering::Release);
+        self.dumping
+            .store(true, std::sync::atomic::Ordering::Release);
     }
 
     pub fn column_data(&self) -> &BuildingSegmentColumnData {

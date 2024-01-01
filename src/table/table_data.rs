@@ -95,8 +95,8 @@ impl TableData {
 
     pub fn add_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {
         if let Some(building_segment) = self.building_segments.last() {
-            if !building_segment.segment().dumping() {
-                let building_segment = building_segment.segment().clone();
+            if !building_segment.data().dumping() {
+                let building_segment = building_segment.data().clone();
                 self.dump_building_segment(building_segment)
             }
         }
@@ -117,7 +117,7 @@ impl TableData {
 
     pub fn dump_building_segment(&mut self, building_segment_data: Arc<BuildingSegmentData>) {
         assert!(Arc::ptr_eq(
-            self.building_segments.last().unwrap().segment(),
+            self.building_segments.last().unwrap().data(),
             &building_segment_data
         ));
         building_segment_data.set_dumping_start();
@@ -177,7 +177,7 @@ impl TableData {
 
     pub fn remove_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {
         self.building_segments
-            .retain(|segment| !Arc::ptr_eq(segment.segment(), &building_segment));
+            .retain(|segment| !Arc::ptr_eq(segment.data(), &building_segment));
     }
 
     pub fn merge_segments(&mut self, version: &mut Version) {
