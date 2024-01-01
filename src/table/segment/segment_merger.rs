@@ -17,7 +17,9 @@ impl SegmentMerger {
         let segments: Vec<_> = version
             .segments()
             .iter()
-            .map(|segment_id| PersistentSegmentData::open(segment_id.clone(), schema, &segment_directory))
+            .map(|segment_id| {
+                PersistentSegmentData::open(segment_id.clone(), schema, &segment_directory)
+            })
             .collect();
 
         let segment_id = SegmentId::new();
@@ -74,11 +76,12 @@ impl SegmentMerger {
             .iter()
             .map(|segment| segment.deletionmap())
             .map(|deletionmap| {
-                deletionmap.map(|deletionmap| deletionmap.remove_segments_cloned(&segment_ids))
+                deletionmap.map_or(DeletionMap::default(), |deletionmap| {
+                    deletionmap.remove_segments_cloned(&segment_ids)
+                })
             })
-            .filter(|deletionmap| deletionmap.is_some())
             .fold(DeletionMap::default(), |acc, deletionmap| {
-                acc.merge(deletionmap.as_ref().unwrap())
+                acc.merge(&deletionmap)
             });
         if !deletionmap.is_empty() {
             let deletionmap_path = segment_directory.join("deletionmap");
