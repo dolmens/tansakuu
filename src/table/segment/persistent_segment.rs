@@ -12,7 +12,7 @@ use super::{
 #[derive(Clone)]
 pub struct PersistentSegment {
     meta: SegmentMeta,
-    segment: Arc<PersistentSegmentData>,
+    data: Arc<PersistentSegmentData>,
 }
 
 pub struct PersistentSegmentData {
@@ -24,16 +24,16 @@ pub struct PersistentSegmentData {
 }
 
 impl PersistentSegment {
-    pub fn new(meta: SegmentMeta, segment: Arc<PersistentSegmentData>) -> Self {
-        Self { meta, segment }
+    pub fn new(meta: SegmentMeta, data: Arc<PersistentSegmentData>) -> Self {
+        Self { meta, data }
     }
 
     pub fn meta(&self) -> &SegmentMeta {
         &self.meta
     }
 
-    pub fn segment(&self) -> &Arc<PersistentSegmentData> {
-        &self.segment
+    pub fn data(&self) -> &Arc<PersistentSegmentData> {
+        &self.data
     }
 }
 

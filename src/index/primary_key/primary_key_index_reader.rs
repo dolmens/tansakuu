@@ -15,12 +15,12 @@ impl PrimaryKeyIndexReader {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
-            let segment_data = segment.segment();
-            let index_data = segment_data.index_data(index.name());
+            let data = segment.data();
+            let index_data = data.index_data(index.name());
             let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader =
+            let primary_key_segment_reader =
                 PrimaryKeyIndexPersistentSegmentReader::new(meta.clone(), primary_key_index_data);
-            persistent_segments.push(index_segment_reader);
+            persistent_segments.push(primary_key_segment_reader);
         }
 
         let mut building_segments = vec![];

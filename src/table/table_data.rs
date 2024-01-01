@@ -62,8 +62,8 @@ impl TableData {
                 .iter()
                 .map(|segment| {
                     (
-                        segment.segment().segment_id().clone(),
-                        segment.segment().clone(),
+                        segment.data().segment_id().clone(),
+                        segment.data().clone(),
                     )
                 })
                 .collect();

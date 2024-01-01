@@ -22,7 +22,7 @@ impl DeletionMapReader {
         for segment in table_data.persistent_segments() {
             segment_metas.push(segment.meta().clone());
             segment
-                .segment()
+                .data()
                 .deletionmap()
                 .map(|deletionmap| persistent_segments.push(deletionmap.clone()));
         }

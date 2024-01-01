@@ -13,7 +13,7 @@ impl<T: Send + Sync + 'static> GenericColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
-            let column_data = segment.segment().column_data(field.name());
+            let column_data = segment.data().column_data(field.name());
             let generic_column_data = column_data.clone().downcast_arc().ok().unwrap();
             let column_segment_reader =
                 GenericColumnPersistentSegmentReader::<T>::new(generic_column_data);

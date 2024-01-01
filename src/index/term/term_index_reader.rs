@@ -20,8 +20,8 @@ impl TermIndexReader {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
-            let segment_data = segment.segment();
-            let index_data = segment_data.index_data(index.name());
+            let data = segment.data();
+            let index_data = data.index_data(index.name());
             let term_index_data = index_data.clone().downcast_arc().ok().unwrap();
             let index_segment_reader =
                 TermIndexPersistentSegmentReader::new(meta.base_docid(), term_index_data);
