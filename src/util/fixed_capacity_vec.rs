@@ -66,7 +66,7 @@ impl<T> FixedCapacityVec<T> {
         self.len.load()
     }
 
-    pub fn push(&self, elem: T) {
+    pub unsafe fn push(&self, elem: T) {
         let len = self.len();
         if len == self.capacity() {
             panic!("FixedCapacityVec overflow");
@@ -118,7 +118,9 @@ mod tests {
         let v = FixedCapacityVec::with_capacity(capacity);
         assert_eq!(v.len(), 0);
         for i in 0..capacity {
-            v.push((i + 1) * 10);
+            unsafe {
+                v.push((i + 1) * 10);
+            }
             assert_eq!(v.len(), i + 1);
         }
         for i in 0..capacity {
@@ -143,7 +145,9 @@ mod tests {
             });
 
             for i in 0..capacity {
-                v.push((i + 1) * 10);
+                unsafe {
+                    v.push((i + 1) * 10);
+                }
                 assert_eq!(v.len(), i + 1);
             }
             for i in 0..capacity {

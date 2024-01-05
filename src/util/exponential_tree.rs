@@ -31,17 +31,17 @@ impl<T> ExponentialTree<T> {
         }
     }
 
-    pub fn insert(&self, value: T) {
+    pub unsafe fn insert(&self, value: T) {
         let index = self.size();
         let root = self.root_growup_if_needed(index);
         root.insert(index, value);
         self.size.store(index + 1);
     }
 
-    pub fn search(&self, index: usize) -> Option<&T> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.size() {
             let root = unsafe { self.root().as_ref() };
-            Some(root.search(index))
+            Some(root.get(index))
         } else {
             None
         }
@@ -105,7 +105,7 @@ impl<T> ExponentialTreeNode<T> {
         node.add_value(index, value);
     }
 
-    fn search(&self, index: usize) -> &T {
+    fn get(&self, index: usize) -> &T {
         let mut node = self;
         let mut index = index;
         while node.height > 0 {
@@ -143,7 +143,9 @@ impl<T> ExponentialTreeNode<T> {
                 } else {
                     debug_assert_eq!(index, v.len());
                     let child = Box::new(ExponentialTreeNode::new(self.height - 1, self.exponent));
-                    v.push(unsafe { NonNull::new_unchecked(Box::into_raw(child)) });
+                    unsafe {
+                        v.push(NonNull::new_unchecked(Box::into_raw(child)));
+                    }
                     unsafe { v[index].as_ref() }
                 }
             }
@@ -157,7 +159,9 @@ impl<T> ExponentialTreeNode<T> {
         match &self.data {
             ExponentialTreeNodeData::InternalNode(v) => {
                 debug_assert_eq!(index, v.len());
-                v.push(child);
+                unsafe {
+                    v.push(child);
+                }
             }
             ExponentialTreeNodeData::LeafNode(_) => {
                 panic!("ExponentialTreeNode:LeafNode add_child");
@@ -178,7 +182,9 @@ impl<T> ExponentialTreeNode<T> {
         match &self.data {
             ExponentialTreeNodeData::LeafNode(v) => {
                 debug_assert_eq!(index, v.len());
-                v.push(value);
+                unsafe {
+                    v.push(value);
+                }
             }
             ExponentialTreeNodeData::InternalNode(_) => {
                 panic!("ExponentialTreeNode::InternalNode add_value");
@@ -222,12 +228,14 @@ mod tests {
         assert_eq!(tree.size(), 0);
         let count = 1024;
         for i in 0..count {
-            tree.insert(i * 10);
+            unsafe {
+                tree.insert(i * 10);
+            }
         }
         for i in 0..count {
-            assert_eq!(tree.search(i).unwrap().clone(), i * 10);
+            assert_eq!(tree.get(i).unwrap().clone(), i * 10);
         }
-        assert!(tree.search(count).is_none());
+        assert!(tree.get(count).is_none());
     }
 
     #[test]
@@ -239,7 +247,7 @@ mod tests {
             let t = scope.spawn(|| loop {
                 let size = tree.size();
                 for i in 0..size {
-                    assert_eq!(tree.search(i).unwrap().clone(), i * 10);
+                    assert_eq!(tree.get(i).unwrap().clone(), i * 10);
                 }
                 if size == count {
                     break;
@@ -248,12 +256,14 @@ mod tests {
             });
 
             for i in 0..count {
-                tree.insert(i * 10);
+                unsafe {
+                    tree.insert(i * 10);
+                }
             }
             for i in 0..count {
-                assert_eq!(tree.search(i).unwrap().clone(), i * 10);
+                assert_eq!(tree.get(i).unwrap().clone(), i * 10);
             }
-            assert!(tree.search(count).is_none());
+            assert!(tree.get(count).is_none());
 
             t.join().unwrap();
         });

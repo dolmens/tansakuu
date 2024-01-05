@@ -15,17 +15,21 @@ impl<T> ChunkedVector<T> {
         }
     }
 
-    pub fn push(&self, value: T) {
+    pub unsafe fn push(&self, value: T) {
         let len = self.len();
         if len % (1 << self.chunk_exponent) == 0 {
-            self.chunk_tree
-                .insert(FixedCapacityVec::with_capacity(1 << self.chunk_exponent));
+            unsafe {
+                self.chunk_tree
+                    .insert(FixedCapacityVec::with_capacity(1 << self.chunk_exponent));
+            }
         }
         let chunk = self
             .chunk_tree
-            .search(len / (1 << self.chunk_exponent))
+            .get(len / (1 << self.chunk_exponent))
             .unwrap();
-        chunk.push(value);
+        unsafe {
+            chunk.push(value);
+        }
         self.len.store(len + 1);
     }
 
@@ -34,7 +38,7 @@ impl<T> ChunkedVector<T> {
         if index < len {
             let chunk = self
                 .chunk_tree
-                .search(index / (1 << self.chunk_exponent))
+                .get(index / (1 << self.chunk_exponent))
                 .unwrap();
             chunk.get(index % (1 << self.chunk_exponent))
         } else {
@@ -59,7 +63,9 @@ mod tests {
         assert_eq!(vec.len(), 0);
         let count = 1024;
         for i in 0..count {
-            vec.push((i + 1) * 10);
+            unsafe {
+                vec.push((i + 1) * 10);
+            }
             assert_eq!(vec.len(), i + 1);
         }
 
@@ -87,7 +93,9 @@ mod tests {
             });
 
             for i in 0..count {
-                vec.push((i + 1) * 10);
+                unsafe {
+                    vec.push((i + 1) * 10);
+                }
                 assert_eq!(vec.len(), i + 1);
             }
 

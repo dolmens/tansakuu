@@ -16,7 +16,7 @@ impl Bitset {
         Self { data }
     }
 
-    pub fn insert(&self, index: usize) {
+    pub unsafe fn insert(&self, index: usize) {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
             let mut slot = self.data[quot].load(Ordering::Acquire);
@@ -58,7 +58,9 @@ mod tests {
         // Overflow
         assert!(!bitset.contains(capacity));
 
-        bitset.insert(2);
+        unsafe {
+            bitset.insert(2);
+        }
         for i in 0..capacity {
             if i == 2 {
                 assert!(bitset.contains(i));
@@ -67,7 +69,9 @@ mod tests {
             }
         }
 
-        bitset.insert(0);
+        unsafe {
+            bitset.insert(0);
+        }
         for i in 0..capacity {
             if i == 0 || i == 2 {
                 assert!(bitset.contains(i));
@@ -76,8 +80,10 @@ mod tests {
             }
         }
 
-        bitset.insert(64);
-        bitset.insert(capacity - 1);
+        unsafe {
+            bitset.insert(64);
+            bitset.insert(capacity - 1);
+        }
         for i in 0..capacity {
             if i == 0 || i == 2 || i == 64 || i == capacity - 1 {
                 assert!(bitset.contains(i));
@@ -113,7 +119,9 @@ mod tests {
         // Overflow
         assert!(!bitset.contains(capacity));
 
-        bitset.insert(2);
+        unsafe {
+            bitset.insert(2);
+        }
         for i in 0..capacity {
             if i == 2 {
                 assert!(bitset.contains(i));
@@ -122,7 +130,9 @@ mod tests {
             }
         }
 
-        bitset.insert(0);
+        unsafe {
+            bitset.insert(0);
+        }
         for i in 0..capacity {
             if i == 0 || i == 2 {
                 assert!(bitset.contains(i));
@@ -131,8 +141,10 @@ mod tests {
             }
         }
 
-        bitset.insert(64);
-        bitset.insert(capacity - 1);
+        unsafe {
+            bitset.insert(64);
+            bitset.insert(capacity - 1);
+        }
         for i in 0..capacity {
             if i == 0 || i == 2 || i == 64 || i == capacity - 1 {
                 assert!(bitset.contains(i));

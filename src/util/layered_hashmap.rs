@@ -60,7 +60,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
         }
     }
 
-    pub fn insert(&self, key: K, value: V) -> Option<V>
+    pub unsafe fn insert(&self, key: K, value: V) -> Option<V>
     where
         K: Eq + Hash,
     {
@@ -155,7 +155,9 @@ impl<K, V> HashBucket<K, V> {
         }
         self.write_entry(index, key, value);
         self.inc_item_count();
-        self.bitset.insert(index);
+        unsafe {
+            self.bitset.insert(index);
+        }
         None
     }
 
@@ -232,23 +234,31 @@ mod tests {
         let capacity_policy = FixedCapacityPolicy;
         let map = LayeredHashMap::with_initial_capacity(4, hasher_builder, capacity_policy);
         assert!(map.get(&1).is_none());
-        assert!(map.insert(1, 10).is_none());
+        unsafe {
+            assert!(map.insert(1, 10).is_none());
+        }
         assert_eq!(map.get(&1).unwrap().clone(), 10);
 
         assert!(map.get(&2).is_none());
-        assert!(map.insert(2, 20).is_none());
+        unsafe {
+            assert!(map.insert(2, 20).is_none());
+        }
         assert_eq!(map.get(&2).unwrap().clone(), 20);
         assert_eq!(map.get(&1).unwrap().clone(), 10);
 
         assert!(map.get(&3).is_none());
-        assert!(map.insert(3, 30).is_none());
+        unsafe {
+            assert!(map.insert(3, 30).is_none());
+        }
         assert_eq!(map.get(&3).unwrap().clone(), 30);
         assert_eq!(map.get(&2).unwrap().clone(), 20);
         assert_eq!(map.get(&1).unwrap().clone(), 10);
         assert!(map.get(&0).is_none());
 
         assert!(map.get(&4).is_none());
-        assert!(map.insert(4, 40).is_none());
+        unsafe {
+            assert!(map.insert(4, 40).is_none());
+        }
         assert_eq!(map.get(&4).unwrap().clone(), 40);
         assert_eq!(map.get(&3).unwrap().clone(), 30);
         assert_eq!(map.get(&2).unwrap().clone(), 20);
@@ -256,7 +266,9 @@ mod tests {
         assert!(map.get(&0).is_none());
 
         assert!(map.get(&5).is_none());
-        assert!(map.insert(5, 50).is_none());
+        unsafe {
+            assert!(map.insert(5, 50).is_none());
+        }
         assert_eq!(map.get(&5).unwrap().clone(), 50);
         assert_eq!(map.get(&4).unwrap().clone(), 40);
         assert_eq!(map.get(&3).unwrap().clone(), 30);
@@ -299,7 +311,9 @@ mod tests {
 
             for i in (0..count).rev() {
                 if i % 2 == 0 {
-                    map.insert(i, i * 10);
+                    unsafe {
+                        map.insert(i, i * 10);
+                    }
                 }
             }
 
