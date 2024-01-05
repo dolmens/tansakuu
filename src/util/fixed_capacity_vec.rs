@@ -66,10 +66,6 @@ impl<T> FixedCapacityVec<T> {
         self.len.load()
     }
 
-    fn set_len(&self, len: usize) {
-        self.len.store(len);
-    }
-
     pub fn push(&self, elem: T) {
         let len = self.len();
         if len == self.capacity() {
@@ -79,7 +75,7 @@ impl<T> FixedCapacityVec<T> {
         unsafe {
             ptr::write(self.ptr().as_ptr().add(len), elem);
         }
-        self.set_len(len + 1);
+        self.len.store(len + 1);
     }
 
     fn ptr(&self) -> NonNull<T> {

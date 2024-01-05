@@ -87,10 +87,6 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
         None
     }
 
-    fn set_head(&self, head: NonNull<HashBucket<K, V>>) {
-        self.head.store(head.as_ptr(), Ordering::Release);
-    }
-
     fn head(&self) -> NonNull<HashBucket<K, V>> {
         unsafe { NonNull::new_unchecked(self.head.load(Ordering::Acquire)) }
     }
@@ -103,7 +99,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
             let mut bucket = Self::allocate_bucket(capacity);
             bucket.next = Some(head_ptr);
             let bucket_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(bucket)) };
-            self.set_head(bucket_ptr);
+            self.head.store(bucket_ptr.as_ptr(), Ordering::Release);
             unsafe { bucket_ptr.as_ref() }
         } else {
             head

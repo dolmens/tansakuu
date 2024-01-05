@@ -35,7 +35,7 @@ impl<T> ExponentialTree<T> {
         let index = self.size();
         let root = self.root_growup_if_needed(index);
         root.insert(index, value);
-        self.set_size(index + 1);
+        self.size.store(index + 1);
     }
 
     pub fn search(&self, index: usize) -> Option<&T> {
@@ -49,14 +49,6 @@ impl<T> ExponentialTree<T> {
 
     pub fn size(&self) -> usize {
         self.size.load()
-    }
-
-    fn set_size(&self, size: usize) {
-        self.size.store(size);
-    }
-
-    fn set_root(&self, root: NonNull<ExponentialTreeNode<T>>) {
-        self.root.store(root.as_ptr(), Ordering::Release);
     }
 
     fn root(&self) -> NonNull<ExponentialTreeNode<T>> {
@@ -75,7 +67,7 @@ impl<T> ExponentialTree<T> {
             ));
             next_root.add_child(0, root);
             let next_root_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(next_root)) };
-            self.set_root(next_root_ptr);
+            self.root.store(next_root_ptr.as_ptr(), Ordering::Release);
             unsafe { next_root_ptr.as_ref() }
         }
     }

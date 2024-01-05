@@ -26,7 +26,7 @@ impl<T> ChunkedVector<T> {
             .search(len / (1 << self.chunk_exponent))
             .unwrap();
         chunk.push(value);
-        self.set_len(len + 1);
+        self.len.store(len + 1);
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
@@ -44,10 +44,6 @@ impl<T> ChunkedVector<T> {
 
     pub fn len(&self) -> usize {
         self.len.load()
-    }
-
-    pub fn set_len(&self, len: usize) {
-        self.len.store(len);
     }
 }
 
