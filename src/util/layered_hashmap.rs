@@ -2,6 +2,7 @@ use std::{
     borrow::Borrow,
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hash, Hasher},
+    marker::PhantomData,
     ptr::NonNull,
     sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
@@ -17,10 +18,8 @@ pub struct LayeredHashMap<
     head: AtomicPtr<HashBucket<K, V>>,
     hasher_builder: H,
     capacity_policy: C,
+    _marker: PhantomData<HashBucket<K, V>>,
 }
-
-// unsafe impl<K, V, H: BuildHasher, C: CapacityPolicy> Send for LayeredHashMap<K, V, H, C> {}
-// unsafe impl<K, V, H: BuildHasher, C: CapacityPolicy> Sync for LayeredHashMap<K, V, H, C> {}
 
 struct Entry<K, V> {
     key: K,
@@ -40,6 +39,9 @@ struct HashBucket<K, V> {
     elems: Box<[Raw<Entry<K, V>>]>,
 }
 
+unsafe impl<K: Send + Sync, V: Send + Sync> Send for HashBucket<K, V> {}
+unsafe impl<K: Send + Sync, V: Send + Sync> Sync for HashBucket<K, V> {}
+
 fn hash<Q: Hash, H: BuildHasher>(key: &Q, hasher_builder: &H) -> u64 {
     let mut hasher = hasher_builder.build_hasher();
     key.hash(&mut hasher);
@@ -57,6 +59,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
             head: AtomicPtr::new(Box::into_raw(bucket)),
             hasher_builder,
             capacity_policy,
+            _marker: PhantomData,
         }
     }
 
