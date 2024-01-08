@@ -9,7 +9,8 @@ mod layered_hashmap;
 mod raw;
 
 pub use atomic::{
-    AcqRelAtomicPtr, AcqRelU64, AcqRelUsize, RelaxedAtomicPtr, RelaxedU64, RelaxedUsize,
+    AcqRelAtomicPtr, AcqRelU64, AcqRelUsize, RelaxedAtomicPtr, RelaxedU32, RelaxedU64, RelaxedU8,
+    RelaxedUsize, SeqCstU64,
 };
 pub use bitset::Bitset;
 pub use capacity_policy::{CapacityPolicy, FixedCapacityPolicy};

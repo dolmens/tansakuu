@@ -25,6 +25,7 @@ impl<T: FromStr + Send + Sync + 'static> ColumnSegmentDataBuilder
         field: &crate::schema::Field,
         path: &std::path::Path,
     ) -> Box<dyn super::ColumnSegmentData> {
+        let _ = field;
         let mut values = vec![];
         let file = File::open(path).unwrap();
         let file_reader = BufReader::new(file);

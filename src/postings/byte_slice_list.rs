@@ -1,69 +1,56 @@
 use std::{
     alloc::Layout,
-    cell::Cell,
     marker::PhantomData,
     mem,
     ptr::{self, NonNull},
     slice,
+    sync::Arc,
 };
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::util::{AcqRelUsize, RelaxedAtomicPtr, RelaxedUsize};
+use crate::util::{AcqRelUsize, RelaxedAtomicPtr};
 
 pub struct ByteSlice {
+    // should acquire total_size first
     next: RelaxedAtomicPtr<ByteSlice>,
     capacity: usize,
-    size: RelaxedUsize,
     data: NonNull<u8>,
 }
 
-pub struct ByteSliceList {
+pub struct ByteSliceList<A: Allocator = Global> {
     total_size: AcqRelUsize,
     head: NonNull<ByteSlice>,
+    allocator: A,
 }
 
 unsafe impl Send for ByteSliceList {}
 unsafe impl Sync for ByteSliceList {}
 
-pub struct ByteSliceWriter {
-    byte_slice_list: ByteSliceList,
-    tail: Cell<NonNull<ByteSlice>>,
-    allocator: Global,
+pub struct ByteSliceWriter<A: Allocator = Global> {
+    total_size: usize,
+    current_slice_offset: usize,
+    current_slice: NonNull<ByteSlice>,
+    slice_list: Arc<ByteSliceList<A>>,
 }
+
+unsafe impl<A: Allocator> Send for ByteSliceWriter<A> {}
 
 pub struct ByteSliceReader<'a> {
     total_size: usize,
     global_offset: usize,
     current_slice_offset: usize,
     current_slice: NonNull<ByteSlice>,
-    _lifetime: PhantomData<&'a ()>,
+    _marker: PhantomData<&'a ()>,
 }
 
 impl ByteSlice {
-    pub fn new(capacity: usize, data: NonNull<u8>) -> Self {
+    fn new(capacity: usize, data: NonNull<u8>) -> Self {
         Self {
             next: RelaxedAtomicPtr::new(ptr::null_mut()),
             capacity,
-            size: RelaxedUsize::default(),
             data,
         }
-    }
-
-    pub fn is_full(&self) -> bool {
-        self.capacity() == self.size()
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-
-    pub fn size(&self) -> usize {
-        self.size.load()
-    }
-
-    pub fn inc_size(&self, inc_size: usize) {
-        self.size.store(self.size() + inc_size);
     }
 
     pub fn next_ptr(&self) -> NonNull<ByteSlice> {
@@ -74,100 +61,28 @@ impl ByteSlice {
         unsafe { self.next.load().as_ref().unwrap() }
     }
 
-    pub fn set_next(&self, next: NonNull<ByteSlice>) {
-        self.next.store(next.as_ptr());
-    }
-
-    pub fn data(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.data.as_ptr(), self.size()) }
-    }
-
     pub fn data_slice(&self, offset: usize, len: usize) -> &[u8] {
         unsafe { slice::from_raw_parts(self.data.as_ptr().add(offset), len) }
     }
 
-    pub fn data_mut(&self) -> &mut [u8] {
-        let capacity = self.capacity();
-        let size = self.size();
-        unsafe { slice::from_raw_parts_mut(self.data.as_ptr().add(size), capacity - size) }
+    pub fn data_slice_mut(&self, offset: usize, len: usize) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.data.as_ptr().add(offset), len) }
     }
 }
 
-impl ByteSliceList {
-    pub fn new(head: NonNull<ByteSlice>) -> Self {
+impl<A: Allocator> ByteSliceList<A> {
+    fn with_initial_capacity_in(initial_capacity: usize, allocator: A) -> Self {
+        let head = Self::create_slice_in(initial_capacity, &allocator);
+
         Self {
             total_size: AcqRelUsize::new(0),
             head,
-        }
-    }
-
-    pub fn total_size(&self) -> usize {
-        self.total_size.load()
-    }
-
-    fn inc_total_size(&self, inc_size: usize) {
-        self.total_size.store(self.total_size() + inc_size);
-    }
-
-    pub fn head(&self) -> &ByteSlice {
-        unsafe { self.head.as_ref() }
-    }
-}
-
-impl ByteSliceWriter {
-    pub fn with_initial_capacity(initial_capacity: usize) -> Self {
-        let allocator = Global;
-        let head = Self::create_slice(initial_capacity, &allocator);
-
-        Self {
-            byte_slice_list: ByteSliceList::new(head),
-            tail: Cell::new(head),
             allocator,
         }
     }
 
-    pub fn byte_slice_list(&self) -> &ByteSliceList {
-        &self.byte_slice_list
-    }
-
-    pub fn write<T>(&self, value: T) {
-        let data = unsafe {
-            &*ptr::slice_from_raw_parts(&value as *const T as *const u8, mem::size_of::<T>())
-        };
-        self.write_data(data);
-    }
-
-    pub fn write_data(&self, data: &[u8]) {
-        let data_len = data.len();
-        let mut data = data;
-        while !data.is_empty() {
-            let tail = self.tail();
-            if tail.is_full() {
-                self.add_slice();
-            } else {
-                let data_dst = tail.data_mut();
-                let len = std::cmp::min(data_dst.len(), data.len());
-                data_dst[..len].copy_from_slice(&data[..len]);
-                tail.inc_size(len);
-                data = &data[len..];
-            }
-        }
-
-        self.inc_total_size(data_len);
-    }
-
-    fn add_slice(&self) {
-        let tail = self.tail();
-        let byte_slice = Self::create_slice(tail.capacity(), &self.allocator);
-        tail.set_next(byte_slice);
-        self.set_tail(byte_slice);
-    }
-
-    fn create_slice(capacity: usize, allocator: &Global) -> NonNull<ByteSlice> {
-        let layout = Layout::new::<ByteSlice>()
-            .extend(Layout::from_size_align(capacity, 1).unwrap())
-            .unwrap()
-            .0;
+    fn create_slice_in(capacity: usize, allocator: &A) -> NonNull<ByteSlice> {
+        let layout = Self::layout_with_capacity(capacity);
         let byte_slice_ptr = allocator.allocate(layout).unwrap().cast::<ByteSlice>();
         unsafe {
             let byte_slice_data_ptr =
@@ -177,60 +92,140 @@ impl ByteSliceWriter {
                 ByteSlice::new(capacity, byte_slice_data_ptr),
             );
         }
+
         byte_slice_ptr
     }
 
-    pub fn head(&self) -> &ByteSlice {
-        self.byte_slice_list.head()
+    fn layout_with_capacity(capacity: usize) -> Layout {
+        Layout::new::<ByteSlice>()
+            .extend(Layout::from_size_align(capacity, 1).unwrap())
+            .unwrap()
+            .0
     }
 
-    fn tail(&self) -> &ByteSlice {
-        unsafe { self.tail.get().as_ref() }
-    }
-
-    fn set_tail(&self, tail: NonNull<ByteSlice>) {
-        self.tail.set(tail);
+    fn create_slice(&self, capacity: usize) -> NonNull<ByteSlice> {
+        Self::create_slice_in(capacity, &self.allocator)
     }
 
     pub fn total_size(&self) -> usize {
-        self.byte_slice_list.total_size()
+        self.total_size.load()
     }
 
-    fn inc_total_size(&self, inc_size: usize) {
-        self.byte_slice_list.inc_total_size(inc_size);
+    pub fn head(&self) -> &ByteSlice {
+        unsafe { self.head.as_ref() }
     }
 }
 
-impl Drop for ByteSliceWriter {
+impl<A: Allocator> Drop for ByteSliceList<A> {
     fn drop(&mut self) {
-        let mut current_slice = self.byte_slice_list.head;
+        let total_size = self.total_size();
+        let mut offset = 0;
+        let mut slice = self.head;
         loop {
-            let current_slice_ref = unsafe { current_slice.as_ref() };
-            let next_silce = current_slice_ref.next.load();
-            let capacity = current_slice_ref.capacity;
-            let layout = Layout::new::<ByteSlice>()
-                .extend(Layout::from_size_align(capacity, 1).unwrap())
-                .unwrap()
-                .0;
+            let slice_ref = unsafe { slice.as_ref() };
+            let capacity = slice_ref.capacity;
+            offset += capacity;
+            let next_silce = if offset < total_size {
+                slice_ref.next.load()
+            } else {
+                ptr::null_mut()
+            };
+            let layout = Self::layout_with_capacity(capacity);
             unsafe {
-                self.allocator.deallocate(current_slice.cast(), layout);
+                self.allocator.deallocate(slice.cast(), layout);
                 if next_silce.is_null() {
                     break;
                 }
-                current_slice = NonNull::new_unchecked(next_silce);
+                slice = NonNull::new_unchecked(next_silce);
             }
         }
     }
 }
 
-impl<'a> ByteSliceReader<'a> {
-    pub fn open(byte_slice_list: &'a ByteSliceList) -> Self {
+impl<A: Allocator + Default> ByteSliceWriter<A> {
+    pub fn with_initial_capacity(initial_capacity: usize) -> Self {
+        Self::with_initial_capacity_in(initial_capacity, A::default())
+    }
+}
+
+impl<A: Allocator> ByteSliceWriter<A> {
+    pub fn with_initial_capacity_in(initial_capacity: usize, allocator: A) -> Self {
+        let slice_list = Arc::new(ByteSliceList::with_initial_capacity_in(
+            initial_capacity,
+            allocator,
+        ));
+
         Self {
-            total_size: byte_slice_list.total_size(),
+            total_size: 0,
+            current_slice_offset: 0,
+            current_slice: slice_list.head,
+            slice_list,
+        }
+    }
+
+    pub fn slice_list(&self) -> Arc<ByteSliceList<A>> {
+        self.slice_list.clone()
+    }
+
+    pub fn write<T>(&mut self, value: T) {
+        let data = unsafe {
+            &*ptr::slice_from_raw_parts(&value as *const T as *const u8, mem::size_of::<T>())
+        };
+        self.write_data(data);
+    }
+
+    pub fn write_data(&mut self, data: &[u8]) {
+        let data_len = data.len();
+        let mut data = data;
+        while !data.is_empty() {
+            if self.current_slice_is_full() {
+                self.add_slice();
+            }
+            let current_slice = self.current_slice();
+            let current_slice_remain_space = current_slice.capacity - self.current_slice_offset;
+            let len = std::cmp::min(current_slice_remain_space, data.len());
+            let data_dst = current_slice.data_slice_mut(self.current_slice_offset, len);
+            data_dst.copy_from_slice(&data[..len]);
+
+            self.current_slice_offset += len;
+
+            data = &data[len..];
+        }
+
+        self.total_size += data_len;
+        self.slice_list.total_size.store(self.total_size);
+    }
+
+    fn add_slice(&mut self) {
+        let current_slice = self.current_slice();
+        let next_slice_capacity = self.get_next_slice_capcacity(current_slice.capacity);
+        let next_byte_slice = self.slice_list.create_slice(next_slice_capacity);
+        current_slice.next.store(next_byte_slice.as_ptr());
+        self.current_slice = next_byte_slice;
+        self.current_slice_offset = 0;
+    }
+
+    fn current_slice(&self) -> &ByteSlice {
+        unsafe { self.current_slice.as_ref() }
+    }
+
+    fn current_slice_is_full(&self) -> bool {
+        self.current_slice_offset == self.current_slice().capacity
+    }
+
+    fn get_next_slice_capcacity(&self, current_slice_capacity: usize) -> usize {
+        current_slice_capacity
+    }
+}
+
+impl<'a> ByteSliceReader<'a> {
+    pub fn open<A: Allocator>(slice_list: &'a ByteSliceList<A>) -> Self {
+        Self {
+            total_size: slice_list.total_size(),
             global_offset: 0,
             current_slice_offset: 0,
-            current_slice: byte_slice_list.head,
-            _lifetime: PhantomData,
+            current_slice: slice_list.head,
+            _marker: PhantomData,
         }
     }
 
@@ -246,6 +241,10 @@ impl<'a> ByteSliceReader<'a> {
         self.total_size
     }
 
+    pub fn remain_size(&self) -> usize {
+        self.total_size - self.global_offset
+    }
+
     pub fn read<T>(&mut self) -> T {
         assert!(self.global_offset + mem::size_of::<T>() <= self.total_size);
         let mut buf = vec![0; mem::size_of::<T>()];
@@ -257,20 +256,20 @@ impl<'a> ByteSliceReader<'a> {
         assert!(self.global_offset + buf.len() <= self.total_size);
         let mut buf = buf;
         while buf.len() > 0 {
-            let current_slice_ref = unsafe { self.current_slice.as_ref() };
-            if self.current_slice_offset == current_slice_ref.capacity() {
-                self.current_slice = current_slice_ref.next_ptr();
+            let current_slice = self.current_slice();
+            if self.current_slice_offset == current_slice.capacity {
+                self.current_slice = current_slice.next_ptr();
                 self.current_slice_offset = 0;
                 continue;
             }
-            let len = std::cmp::min(
-                buf.len(),
-                current_slice_ref.capacity() - self.current_slice_offset,
-            );
-            let data_slice = current_slice_ref.data_slice(self.current_slice_offset, len);
+            let max_remain_size = current_slice.capacity - self.current_slice_offset;
+            let total_remain_size = self.remain_size();
+            let remain_size = std::cmp::min(max_remain_size, total_remain_size);
+            let len = std::cmp::min(buf.len(), remain_size);
+            let data_slice = current_slice.data_slice(self.current_slice_offset, len);
             buf[..len].copy_from_slice(data_slice);
-            self.global_offset += len;
             self.current_slice_offset += len;
+            self.global_offset += len;
             buf = &mut buf[len..];
         }
     }
@@ -282,20 +281,21 @@ impl<'a> ByteSliceReader<'a> {
         }
         let mut len = offset - self.global_offset;
         while len > 0 {
-            let current_slice_ref = unsafe { self.current_slice.as_ref() };
-            if self.current_slice_offset == current_slice_ref.capacity() {
+            let current_slice_ref = self.current_slice();
+            if self.current_slice_offset == current_slice_ref.capacity {
                 self.current_slice = current_slice_ref.next_ptr();
                 self.current_slice_offset = 0;
                 continue;
             }
-            let len0 = std::cmp::min(
-                len,
-                current_slice_ref.capacity() - self.current_slice_offset,
-            );
+            let len0 = std::cmp::min(len, current_slice_ref.capacity - self.current_slice_offset);
             self.current_slice_offset += len0;
             self.global_offset += len0;
             len -= len0;
         }
+    }
+
+    fn current_slice(&self) -> &ByteSlice {
+        unsafe { self.current_slice.as_ref() }
     }
 }
 
@@ -303,115 +303,125 @@ impl<'a> ByteSliceReader<'a> {
 mod tests {
     use std::{thread, time::Duration};
 
-    use byte_slice_list::ByteSliceReader;
-
-    use crate::postings::byte_slice_list::{self, ByteSlice};
+    use crate::postings::{byte_slice_list::ByteSlice, ByteSliceReader};
 
     use super::ByteSliceWriter;
 
     #[test]
-    fn test_simple() {
-        let writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
-        let head_ptr = writer.byte_slice_list.head;
-        let head = writer.head();
+    fn test_simple_writer() {
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        assert_eq!(writer.total_size, 0);
+        let slice_list = writer.slice_list();
+
+        let head_ptr = slice_list.head;
+        let head = slice_list.head();
+
         let data = vec![1, 2];
 
         writer.write_data(&data);
-        assert_eq!(writer.total_size(), 2);
-        assert_eq!(head.data(), data);
+        assert_eq!(writer.total_size, 2);
+        assert_eq!(head.data_slice(0, 2), data);
 
         let data = vec![3, 4];
         writer.write_data(&data);
-        assert_eq!(writer.total_size(), 4);
+        assert_eq!(writer.total_size, 4);
         let data = vec![1, 2, 3, 4];
-        assert_eq!(head.data(), data);
-        assert!(head.next.load().is_null());
+        assert_eq!(head.data_slice(0, 4), data);
 
-        let tail_ptr = writer.tail.get();
+        let tail_ptr = writer.current_slice;
         assert_eq!(head_ptr, tail_ptr);
 
         let data = vec![5, 6, 7, 8, 9];
         writer.write_data(&data);
-        assert_eq!(writer.total_size(), 9);
+        assert_eq!(writer.total_size, 9);
 
         let data = vec![1, 2, 3, 4];
-        assert_eq!(head.data(), data);
+        assert_eq!(head.data_slice(0, 4), data);
 
         let next = head.next();
         let data = vec![5, 6, 7, 8];
-        assert_eq!(next.data(), data);
+        assert_eq!(next.data_slice(0, 4), data);
 
         let next = next.next();
         let data = vec![9];
-        assert_eq!(next.data(), data);
+        assert_eq!(next.data_slice(0, 1), data);
 
-        let tail_ptr = writer.tail.get();
+        let tail_ptr = writer.current_slice;
         let last_ptr = next as *const ByteSlice;
         assert_eq!(last_ptr, tail_ptr.as_ptr());
     }
 
     #[test]
     fn test_multithreads() {
-        let writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
-        let byte_slice_list = writer.byte_slice_list();
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        let slice_list = writer.slice_list();
         thread::scope(|scope| {
-            let t = scope.spawn(move || loop {
-                let total_size = byte_slice_list.total_size();
-                if total_size == 0 {
-                    continue;
-                }
-
-                let mut offset = 0;
-                let mut next_slice = byte_slice_list.head();
+            let t = scope.spawn(move || {
+                let mut total_size = 0;
                 loop {
-                    offset += next_slice.size();
-                    // offset may greater than total_size,
-                    // when new data was written after read total_size
-                    if offset >= total_size {
+                    let current_total_size = slice_list.total_size();
+                    if current_total_size == total_size {
+                        thread::sleep(Duration::from_millis(1));
+                        continue;
+                    }
+
+                    total_size = current_total_size;
+                    let mut buf = vec![];
+
+                    let mut offset = 0;
+                    let mut slice = slice_list.head();
+                    loop {
+                        let len = std::cmp::min(slice.capacity, total_size - offset);
+                        buf.extend_from_slice(slice.data_slice(0, len));
+                        offset += len;
+                        if offset == total_size {
+                            break;
+                        }
+                        slice = slice.next();
+                    }
+                    let data: &[u8] = &(1..=total_size as u8).collect::<Vec<u8>>();
+                    assert_eq!(&buf, data);
+
+                    if total_size == 9 {
                         break;
                     }
-                    next_slice = next_slice.next();
-                }
-
-                if total_size == 9 {
-                    break;
                 }
             });
 
-            let head_ptr = writer.byte_slice_list.head;
-            let head = writer.head();
+            let slice_list = writer.slice_list();
+            let head_ptr = slice_list.head;
+            let head = slice_list.head();
             let data = vec![1, 2];
 
             writer.write_data(&data);
-            assert_eq!(writer.total_size(), 2);
-            assert_eq!(head.data(), data);
+            assert_eq!(writer.total_size, 2);
+            assert_eq!(head.data_slice(0, 2), data);
 
             let data = vec![3, 4];
             writer.write_data(&data);
-            assert_eq!(writer.total_size(), 4);
+            assert_eq!(writer.total_size, 4);
             let data = vec![1, 2, 3, 4];
-            assert_eq!(head.data(), data);
-            assert!(head.next.load().is_null());
+            assert_eq!(head.data_slice(0, 4), data);
 
-            let tail_ptr = writer.tail.get();
+            let tail_ptr = writer.current_slice;
             assert_eq!(head_ptr, tail_ptr);
 
             let data = vec![5, 6, 7, 8, 9];
             writer.write_data(&data);
-            assert_eq!(writer.total_size(), 9);
+            assert_eq!(writer.total_size, 9);
 
             let data = vec![1, 2, 3, 4];
-            assert_eq!(head.data(), data);
+            assert_eq!(head.data_slice(0, 4), data);
 
             let next = head.next();
             let data = vec![5, 6, 7, 8];
-            assert_eq!(next.data(), data);
+            assert_eq!(next.data_slice(0, 4), data);
 
             let next = next.next();
             let data = vec![9];
-            assert_eq!(next.data(), data);
+            assert_eq!(next.data_slice(0, 1), data);
 
-            let tail_ptr = writer.tail.get();
+            let tail_ptr = writer.current_slice;
             let last_ptr = next as *const ByteSlice;
             assert_eq!(last_ptr, tail_ptr.as_ptr());
 
@@ -420,63 +430,135 @@ mod tests {
     }
 
     #[test]
-    fn test_write_read() {
-        let writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
-        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    fn test_simple_writer_and_reader() {
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        assert_eq!(writer.total_size, 0);
+        let slice_list = writer.slice_list();
+        let reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 0);
+
+        let data = vec![1, 2];
 
         writer.write_data(&data);
-        assert_eq!(writer.total_size(), 10);
+        assert_eq!(writer.total_size, 2);
 
-        let byte_slice_list = writer.byte_slice_list();
-        let mut reader = ByteSliceReader::open(byte_slice_list);
-        assert_eq!(reader.total_size, 10);
-        assert_eq!(reader.global_offset, 0);
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 2);
+        let mut buf = vec![0; 1];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data[0..1]);
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data[1..2]);
 
-        let mut buf: Vec<u8> = vec![0; 2];
-        reader.read_data(&mut buf[..]);
-        assert_eq!(&buf[..], &[1, 2]);
-        assert_eq!(reader.global_offset, 2);
-        assert_eq!(reader.current_slice_offset, 2);
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 2);
+        let mut buf = vec![0; 2];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data);
 
-        let mut buf: Vec<u8> = vec![0; 7];
-        reader.read_data(&mut buf[..]);
-        assert_eq!(&buf[..], &[3, 4, 5, 6, 7, 8, 9]);
-        assert_eq!(reader.global_offset, 9);
-        assert_eq!(reader.current_slice_offset, 1);
+        let data = vec![3, 4];
+        writer.write_data(&data);
+        assert_eq!(writer.total_size, 4);
+        let data = vec![1, 2, 3, 4];
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 4);
+        let mut buf = vec![0; 4];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data);
+
+        let data = vec![5, 6, 7, 8, 9];
+        writer.write_data(&data);
+        assert_eq!(writer.total_size, 9);
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 9);
+
+        let mut buf = vec![0; 6];
+        reader.read_data(&mut buf);
+        assert_eq!(&buf, &[1, 2, 3, 4, 5, 6]);
+
+        let mut buf = vec![0; 3];
+        reader.read_data(&mut buf);
+        assert_eq!(&buf, &[7, 8, 9]);
     }
 
     #[test]
-    fn test_write_read_multithreads() {
-        let writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
-        let byte_slice_list = writer.byte_slice_list();
+    fn test_multithreads_writer_and_reader() {
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        assert_eq!(writer.total_size, 0);
+        let slice_list = writer.slice_list();
 
-        thread::scope(|scope| {
-            let t = scope.spawn(move || loop {
-                let mut reader = ByteSliceReader::open(byte_slice_list);
-                if reader.total_size != 10 {
+        let th = thread::spawn(move || {
+            let mut total_size = 0;
+            loop {
+                let mut reader = ByteSliceReader::open(&slice_list);
+                if reader.total_size() == total_size {
                     thread::sleep(Duration::from_millis(1));
                     continue;
                 }
-                let mut buf: Vec<u8> = vec![0; 2];
-                reader.read_data(&mut buf[..]);
-                assert_eq!(&buf[..], &[1, 2]);
-                assert_eq!(reader.global_offset, 2);
-                assert_eq!(reader.current_slice_offset, 2);
 
-                let mut buf: Vec<u8> = vec![0; 7];
-                reader.read_data(&mut buf[..]);
-                assert_eq!(&buf[..], &[3, 4, 5, 6, 7, 8, 9]);
-                assert_eq!(reader.global_offset, 9);
-                assert_eq!(reader.current_slice_offset, 1);
+                total_size = reader.total_size();
+                let mut buf = vec![0; total_size];
+                reader.read_data(&mut buf);
+                let data: &[u8] = &(1..=total_size as u8).collect::<Vec<u8>>();
+                assert_eq!(&buf, data);
 
-                break;
-            });
-
-            let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-            writer.write_data(&data);
-            assert_eq!(writer.total_size(), 10);
-
-            t.join().unwrap();
+                if total_size == 9 {
+                    break;
+                }
+            }
         });
+
+        let slice_list = writer.slice_list();
+        let reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 0);
+
+        let data = vec![1, 2];
+
+        writer.write_data(&data);
+        assert_eq!(writer.total_size, 2);
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 2);
+        let mut buf = vec![0; 1];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data[0..1]);
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data[1..2]);
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 2);
+        let mut buf = vec![0; 2];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data);
+
+        let data = vec![3, 4];
+        writer.write_data(&data);
+        assert_eq!(writer.total_size, 4);
+        let data = vec![1, 2, 3, 4];
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 4);
+        let mut buf = vec![0; 4];
+        reader.read_data(&mut buf);
+        assert_eq!(buf, data);
+
+        let data = vec![5, 6, 7, 8, 9];
+        writer.write_data(&data);
+        assert_eq!(writer.total_size, 9);
+
+        let mut reader = ByteSliceReader::open(&slice_list);
+        assert_eq!(reader.total_size(), 9);
+
+        let mut buf = vec![0; 6];
+        reader.read_data(&mut buf);
+        assert_eq!(&buf, &[1, 2, 3, 4, 5, 6]);
+
+        let mut buf = vec![0; 3];
+        reader.read_data(&mut buf);
+        assert_eq!(&buf, &[7, 8, 9]);
+
+        th.join().unwrap();
     }
 }
