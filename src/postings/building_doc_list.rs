@@ -417,6 +417,14 @@ impl<'a> BuildingDocListReader<'a> {
         return false;
     }
 
+    pub fn total_count(&self) -> usize {
+        self.flushed_count + self.block_snapshot.len
+    }
+
+    pub fn read_count(&self) -> usize {
+        self.read_count
+    }
+
     pub fn eof(&self) -> bool {
         self.read_count == self.flushed_count + self.block_snapshot.len
     }
@@ -424,7 +432,7 @@ impl<'a> BuildingDocListReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::mpsc, thread};
+    use std::{sync::mpsc, thread, time::Duration};
 
     use allocator_api2::alloc::Global;
 
@@ -586,7 +594,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multithreads() {
+    fn test_multithreads_sync() {
         let (w_sender, r_receiver) = mpsc::channel();
         let (r_sender, w_receiver) = mpsc::channel();
 
@@ -768,6 +776,51 @@ mod tests {
                 doc_list_block.last_docid(),
                 ((DOCLIST_BLOCK_LEN * 2 + 1) * 3 + (DOCLIST_BLOCK_LEN * 2 + 1) % 2) as DocId
             );
+        });
+
+        w.join().unwrap();
+        r.join().unwrap();
+    }
+
+    #[test]
+    fn test_multithreads_random() {
+        let doc_list_format = DocListFormat::new(true, false, false);
+        let mut doc_list_writer = BuildingDocListWriter::new(doc_list_format.clone(), 1024, Global);
+        let building_doc_list = doc_list_writer.building_doc_list();
+
+        let w = thread::spawn(move || {
+            for i in 0..DOCLIST_BLOCK_LEN * 2 + 2 {
+                doc_list_writer.add_pos(1);
+                let docid = (i * 3 + i % 2) as DocId;
+                thread::yield_now();
+                doc_list_writer.end_doc(docid);
+            }
+        });
+
+        let r = thread::spawn(move || loop {
+            let mut doc_list_block = DocListBlock::new(&doc_list_format);
+            let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
+            let mut total_count = doc_list_reader.total_count();
+            let mut last_docid = 0;
+            while total_count > 0 {
+                let read_count = doc_list_reader.read_count();
+                assert!(doc_list_reader.decode_one_block(last_docid, &mut doc_list_block));
+                let expect_block_len = std::cmp::min(DOCLIST_BLOCK_LEN, total_count);
+                assert_eq!(doc_list_block.len, expect_block_len);
+                for i in 0..expect_block_len {
+                    let docid = ((i + read_count) * 3 + (i + read_count) % 2) as DocId;
+                    assert_eq!(doc_list_block.docids[i], docid);
+                }
+                last_docid = doc_list_block.last_docid() + 1;
+                total_count -= expect_block_len;
+            }
+
+            let total_count = doc_list_reader.total_count();
+            if total_count == DOCLIST_BLOCK_LEN * 2 + 2 {
+                break;
+            }
+
+            thread::sleep(Duration::from_micros(10));
         });
 
         w.join().unwrap();
