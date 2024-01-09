@@ -516,13 +516,17 @@ mod tests {
         }
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+
         let (docid, offset, _) = skip_list_reader.lookup(2001);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
+
         let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000) as DocId);
         assert_eq!(docid, ((BLOCK_LEN - 1) * 1000) as DocId);
         assert_eq!(offset, 100 * (BLOCK_LEN - 1));
+
         let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000 + 1) as DocId);
+        assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
         assert_eq!(offset, 100 * BLOCK_LEN);
 
         skip_list_writer.add_skip_item(((BLOCK_LEN + 1) * 1000) as DocId, 100, None);
