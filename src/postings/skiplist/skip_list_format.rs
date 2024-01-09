@@ -9,10 +9,6 @@ pub struct SkipListFormatBuilder {
 }
 
 impl SkipListFormat {
-    pub fn new(has_tflist: bool) -> Self {
-        Self { has_tflist }
-    }
-
     pub fn has_tflist(&self) -> bool {
         self.has_tflist
     }

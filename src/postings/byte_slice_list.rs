@@ -275,8 +275,7 @@ impl<'a> ByteSliceReader<'a> {
     }
 
     pub fn seek(&mut self, offset: usize) {
-        assert!(offset >= self.global_offset);
-        if offset == self.global_offset {
+        if offset <= self.global_offset {
             return;
         }
         let mut len = offset - self.global_offset;

@@ -1,19 +1,15 @@
-use super::skiplist::SkipListFormat;
+use super::skiplist::{SkipListFormat, SkipListFormatBuilder};
 
 #[derive(Clone)]
 pub struct DocListFormat {
     has_tflist: bool,
     has_fieldmask: bool,
-    skiplist_format: Option<SkipListFormat>,
+    skiplist_format: SkipListFormat,
 }
 
 impl DocListFormat {
-    pub fn new(has_tflist: bool, has_fieldmask: bool, has_skiplist: bool) -> Self {
-        let skiplist_format = if has_skiplist {
-            Some(SkipListFormat::new(has_tflist))
-        } else {
-            None
-        };
+    pub fn new(has_tflist: bool, has_fieldmask: bool) -> Self {
+        let skiplist_format = SkipListFormatBuilder::default().with_tflist(false).build();
 
         Self {
             has_tflist,
@@ -30,7 +26,7 @@ impl DocListFormat {
         self.has_fieldmask
     }
 
-    pub fn skip_list_format(&self) -> Option<&SkipListFormat> {
-        self.skiplist_format.as_ref()
+    pub fn skip_list_format(&self) -> &SkipListFormat {
+        &self.skiplist_format
     }
 }

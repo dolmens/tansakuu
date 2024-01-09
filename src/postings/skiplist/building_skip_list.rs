@@ -12,7 +12,7 @@ use super::SkipListFormat;
 
 pub struct BuildingSkipList<A: Allocator = Global> {
     building_block: BuildingSkipListBlock,
-    flushed_count: AcqRelUsize,
+    flushed_size: AcqRelUsize,
     slice_list: Arc<ByteSliceList<A>>,
     skip_list_format: SkipListFormat,
 }
@@ -20,7 +20,6 @@ pub struct BuildingSkipList<A: Allocator = Global> {
 pub struct BuildingSkipListBlock {
     len: AcqRelUsize,
     docids: [RelaxedU32; SKIPLIST_BLOCK_LEN],
-    counts: [RelaxedUsize; SKIPLIST_BLOCK_LEN],
     offsets: [RelaxedUsize; SKIPLIST_BLOCK_LEN],
     termfreqs: Option<Box<[RelaxedU32]>>,
 }
@@ -28,7 +27,6 @@ pub struct BuildingSkipListBlock {
 pub struct SkipListBlockSnapshot {
     len: usize,
     docids: Box<[DocId]>,
-    counts: Box<[usize]>,
     offsets: Box<[usize]>,
     termfreqs: Option<Box<[TermFreq]>>,
 }
@@ -36,7 +34,6 @@ pub struct SkipListBlockSnapshot {
 pub struct SkipListBlock {
     pub len: usize,
     pub docids: [DocId; SKIPLIST_BLOCK_LEN],
-    pub counts: [usize; SKIPLIST_BLOCK_LEN],
     pub offsets: [usize; SKIPLIST_BLOCK_LEN],
     pub termfreqs: Option<Box<[TermFreq]>>,
 }
@@ -45,20 +42,21 @@ pub struct BuildingSkipListWriter<A: Allocator = Global> {
     last_docid: DocId,
     last_offset: usize,
     block_len: usize,
-    flushed_count: usize,
+    flushed_size: usize,
     slice_writer: ByteSliceWriter<A>,
     building_skip_list: Arc<BuildingSkipList<A>>,
     skip_list_format: SkipListFormat,
 }
 
 pub struct BuildingSkipListReader<'a> {
+    empty: bool,
+    decoded: bool,
     current_docid: DocId,
     current_offset: usize,
     current_cursor: usize,
-    read_count: usize,
-    flushed_count: usize,
     skip_list_block: SkipListBlock,
     block_snapshot: SkipListBlockSnapshot,
+    flushed_size: usize,
     slice_reader: ByteSliceReader<'a>,
     skip_list_format: SkipListFormat,
 }
@@ -66,12 +64,6 @@ pub struct BuildingSkipListReader<'a> {
 impl BuildingSkipListBlock {
     pub fn new(skip_list_format: &SkipListFormat) -> Self {
         let docids = std::iter::repeat_with(|| RelaxedU32::new(0))
-            .take(SKIPLIST_BLOCK_LEN)
-            .collect::<Vec<_>>()
-            .try_into()
-            .ok()
-            .unwrap();
-        let counts = std::iter::repeat_with(|| RelaxedUsize::new(0))
             .take(SKIPLIST_BLOCK_LEN)
             .collect::<Vec<_>>()
             .try_into()
@@ -97,7 +89,6 @@ impl BuildingSkipListBlock {
         Self {
             len: AcqRelUsize::new(0),
             docids,
-            counts,
             offsets,
             termfreqs,
         }
@@ -114,13 +105,11 @@ impl BuildingSkipListBlock {
     pub fn add_skip_item(
         &self,
         last_docid: DocId,
-        doc_count: usize,
         offset: usize,
         index: usize,
         tf: Option<TermFreq>,
     ) {
         self.docids[index].store(last_docid);
-        self.counts[index].store(doc_count);
         self.offsets[index].store(offset);
         if let Some(termfreqs) = self.termfreqs.as_deref() {
             termfreqs[index].store(tf.unwrap_or_default());
@@ -131,7 +120,6 @@ impl BuildingSkipListBlock {
 impl SkipListBlockSnapshot {
     fn with_capacity(capacity: usize, skip_list_format: &SkipListFormat) -> Self {
         let docids = vec![0; capacity].into_boxed_slice();
-        let counts = vec![0; capacity].into_boxed_slice();
         let offsets = vec![0; capacity].into_boxed_slice();
         let termfreqs = if skip_list_format.has_tflist() {
             Some(vec![0; capacity].into_boxed_slice())
@@ -142,7 +130,6 @@ impl SkipListBlockSnapshot {
         Self {
             len: 0,
             docids,
-            counts,
             offsets,
             termfreqs,
         }
@@ -155,10 +142,6 @@ impl SkipListBlockSnapshot {
                 .iter_mut()
                 .zip(building_block.docids[0..block_len].iter())
                 .for_each(|(v, docid)| *v = docid.load());
-            self.counts[0..block_len]
-                .iter_mut()
-                .zip(building_block.counts[0..block_len].iter())
-                .for_each(|(v, count)| *v = count.load());
             self.offsets[0..block_len]
                 .iter_mut()
                 .zip(building_block.offsets[0..block_len].iter())
@@ -177,7 +160,6 @@ impl SkipListBlockSnapshot {
         skip_list_block.len = len;
         if len > 0 {
             skip_list_block.docids[0..len].copy_from_slice(&self.docids[0..len]);
-            skip_list_block.counts[0..len].copy_from_slice(&self.counts[0..len]);
             skip_list_block.offsets[0..len].copy_from_slice(&&self.offsets[0..len]);
             if let Some(termfreqs) = skip_list_block.termfreqs.as_deref_mut() {
                 if let Some(mytermfreqs) = self.termfreqs.as_deref() {
@@ -214,18 +196,13 @@ impl SkipListBlock {
         Self {
             len: 0,
             docids: [0; SKIPLIST_BLOCK_LEN],
-            counts: [0; SKIPLIST_BLOCK_LEN],
             offsets: [0; SKIPLIST_BLOCK_LEN],
             termfreqs,
         }
     }
 
-    pub fn last_docid(&self) -> DocId {
-        self.docids[self.len]
-    }
-
-    pub fn last_offset(&self) -> usize {
-        self.offsets[self.len]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 }
 
@@ -233,17 +210,17 @@ impl<A: Allocator> BuildingSkipList<A> {
     pub fn new(skip_list_format: SkipListFormat, slice_list: Arc<ByteSliceList<A>>) -> Self {
         Self {
             building_block: BuildingSkipListBlock::new(&skip_list_format),
-            flushed_count: AcqRelUsize::new(0),
+            flushed_size: AcqRelUsize::new(0),
             slice_list,
             skip_list_format,
         }
     }
-    pub fn flushed_count(&self) -> usize {
-        self.flushed_count.load()
-    }
-
     pub fn building_block(&self) -> &BuildingSkipListBlock {
         &self.building_block
+    }
+
+    pub fn flushed_size(&self) -> usize {
+        self.flushed_size.load()
     }
 
     pub fn slice_list(&self) -> &ByteSliceList<A> {
@@ -253,8 +230,6 @@ impl<A: Allocator> BuildingSkipList<A> {
     pub fn skip_list_format(&self) -> &SkipListFormat {
         &self.skip_list_format
     }
-
-    pub fn serialize(&self) {}
 }
 
 impl<A: Allocator> BuildingSkipListWriter<A> {
@@ -273,7 +248,7 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
             last_docid: INVALID_DOCID,
             last_offset: 0,
             block_len: 0,
-            flushed_count: 0,
+            flushed_size: 0,
             slice_writer,
             skip_list_format,
             building_skip_list,
@@ -284,20 +259,14 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
         self.building_skip_list.clone()
     }
 
-    pub fn add_skip_item(
-        &mut self,
-        last_docid: DocId,
-        doc_count: usize,
-        offset: usize,
-        tf: Option<TermFreq>,
-    ) {
+    pub fn add_skip_item(&mut self, last_docid: DocId, offset: usize, tf: Option<TermFreq>) {
         if self.last_docid == INVALID_DOCID {
             self.last_docid = 0;
         } else {
             assert!(last_docid > self.last_docid);
         }
         let building_block = &self.building_skip_list.building_block;
-        building_block.add_skip_item(last_docid, doc_count, offset, self.block_len, tf);
+        building_block.add_skip_item(last_docid - self.last_docid, offset, self.block_len, tf);
 
         self.block_len += 1;
         building_block.len.store(self.block_len);
@@ -312,93 +281,102 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
     fn flush_building_block(&mut self) {
         let building_block = &self.building_skip_list.building_block;
         let slice_writer = &mut self.slice_writer;
+        let mut flushed_size = 1;
+        slice_writer.write(self.block_len as u8);
         let docids = building_block.docids[0..self.block_len]
             .iter()
             .map(|a| a.load())
             .collect::<Vec<_>>();
-        compression::copy_write(&docids, slice_writer);
-        let counts = building_block.counts[0..self.block_len]
-            .iter()
-            .map(|a| a.load())
-            .collect::<Vec<_>>();
-        compression::copy_write(&counts, slice_writer);
+        flushed_size += compression::copy_write(&docids, slice_writer);
         let offsets = building_block.offsets[0..self.block_len]
             .iter()
             .map(|a| a.load())
             .collect::<Vec<_>>();
-        compression::copy_write(&offsets, slice_writer);
+        flushed_size += compression::copy_write(&offsets, slice_writer);
         if self.skip_list_format.has_tflist() {
             if let Some(termfreqs_atomics) = &building_block.termfreqs {
                 let termfreqs = termfreqs_atomics[0..self.block_len]
                     .iter()
                     .map(|a| a.load())
                     .collect::<Vec<_>>();
-                compression::copy_write(&termfreqs, slice_writer);
+                flushed_size += compression::copy_write(&termfreqs, slice_writer);
             }
         }
 
-        self.flushed_count += self.block_len;
+        self.flushed_size += flushed_size;
         self.building_skip_list
-            .flushed_count
-            .store(self.flushed_count);
+            .flushed_size
+            .store(self.flushed_size);
 
         building_block.clear();
-
         self.block_len = 0;
     }
 }
 
 impl<'a> BuildingSkipListReader<'a> {
     pub fn open<A: Allocator>(building_skip_list: &'a BuildingSkipList<A>) -> Self {
-        let mut flushed_count = building_skip_list.flushed_count();
         let slice_list = building_skip_list.slice_list();
+        let mut flushed_size = building_skip_list.flushed_size();
         let mut slice_reader = ByteSliceReader::open(slice_list);
         let skip_list_format = building_skip_list.skip_list_format();
         let building_block = building_skip_list.building_block();
         let block_len = building_block.len();
         let mut block_snapshot = SkipListBlockSnapshot::with_capacity(block_len, skip_list_format);
         block_snapshot.snapshot(building_block, block_len);
-        let flushed_count_updated = building_skip_list.flushed_count();
-        if flushed_count_updated > flushed_count {
+        let flushed_size_updated = building_skip_list.flushed_size();
+        if flushed_size < flushed_size_updated {
             block_snapshot.clear();
-            flushed_count = flushed_count_updated;
+            flushed_size = flushed_size_updated;
             slice_reader = ByteSliceReader::open(slice_list);
         }
         let skip_list_format = building_skip_list.skip_list_format().clone();
         let skip_list_block = SkipListBlock::new(&skip_list_format);
 
+        let empty = flushed_size == 0 && block_snapshot.is_empty();
+
         Self {
+            empty,
+            decoded: false,
             current_docid: 0,
             current_offset: 0,
             current_cursor: 0,
-            read_count: 0,
-            flushed_count,
             skip_list_block,
             block_snapshot,
+            flushed_size,
             slice_reader,
             skip_list_format,
         }
     }
 
-    pub fn skip_to(&mut self, query_docid: DocId) -> (usize, usize, Option<TermFreq>) {
-        let mut skipped_count = 0;
-        while !self.eof() {
+    pub fn lookup(&mut self, query_docid: DocId) -> (DocId, usize, Option<TermFreq>) {
+        if self.empty {
+            return (0, 0, None);
+        }
+
+        loop {
             if self.current_cursor >= self.skip_list_block.len {
+                if self.decoded {
+                    break;
+                }
                 self.decode_one_block();
+                if self.skip_list_block.is_empty() {
+                    break;
+                }
             }
-            if self.skip_list_block.docids[self.current_cursor] >= query_docid {
+            if self.current_docid + self.skip_list_block.docids[self.current_cursor] >= query_docid
+            {
                 break;
             }
             self.current_docid += self.skip_list_block.docids[self.current_cursor];
             self.current_offset += self.skip_list_block.offsets[self.current_cursor];
-            skipped_count += self.skip_list_block.counts[self.current_cursor];
+            self.current_cursor += 1;
         }
 
-        (self.current_offset, skipped_count, None)
+        (self.current_docid, self.current_offset, None)
     }
 
     fn decode_one_block(&mut self) {
-        if self.read_count < self.flushed_count {
+        if self.slice_reader.tell() < self.flushed_size {
             self.decode_one_flushed_block();
         } else {
             self.decode_building_block();
@@ -407,11 +385,10 @@ impl<'a> BuildingSkipListReader<'a> {
     }
 
     fn decode_one_flushed_block(&mut self) {
-        let compressed = (self.flushed_count - self.read_count) >= SKIPLIST_BLOCK_LEN;
-        if compressed {
+        let block_len = self.slice_reader.read::<u8>() as usize;
+        if block_len == SKIPLIST_BLOCK_LEN {
             self.skip_list_block.len = SKIPLIST_BLOCK_LEN;
             compression::copy_read(&mut self.slice_reader, &mut self.skip_list_block.docids);
-            compression::copy_read(&mut self.slice_reader, &mut self.skip_list_block.counts);
             compression::copy_read(&mut self.slice_reader, &mut self.skip_list_block.offsets);
             if self.skip_list_format.has_tflist() {
                 if let Some(termfreqs) = self.skip_list_block.termfreqs.as_deref_mut() {
@@ -421,7 +398,6 @@ impl<'a> BuildingSkipListReader<'a> {
                 }
             }
         } else {
-            let block_len = self.flushed_count - self.read_count;
             self.skip_list_block.len = block_len;
             compression::copy_read(
                 &mut self.slice_reader,
@@ -439,16 +415,11 @@ impl<'a> BuildingSkipListReader<'a> {
                 }
             }
         }
-        self.read_count += self.skip_list_block.len;
     }
 
     fn decode_building_block(&mut self) {
         self.block_snapshot.copy_to(&mut self.skip_list_block);
-        self.read_count += self.block_snapshot.len;
-    }
-
-    pub fn eof(&self) -> bool {
-        self.read_count == self.flushed_count + self.block_snapshot.len
+        self.decoded = true;
     }
 }
 
@@ -456,38 +427,126 @@ impl<'a> BuildingSkipListReader<'a> {
 mod tests {
     use allocator_api2::alloc::Global;
 
-    use crate::postings::skiplist::SkipListFormatBuilder;
+    use crate::{
+        postings::skiplist::skip_list_format::SkipListFormatBuilder, DocId, SKIPLIST_BLOCK_LEN,
+    };
 
-    use super::{BuildingSkipListReader, BuildingSkipListWriter, SkipListBlockSnapshot};
+    use super::{BuildingSkipListReader, BuildingSkipListWriter};
 
     #[test]
     fn test_basic() {
+        const BLOCK_LEN: usize = SKIPLIST_BLOCK_LEN;
         let skip_list_format = SkipListFormatBuilder::default().with_tflist(false).build();
-        let sn = SkipListBlockSnapshot::with_capacity(1, &skip_list_format);
-        assert_eq!(sn.len, 0);
-        // let skip_list_format = SkipListFormatBuilder::default().with_tflist(false).build();
-        // let mut skip_list_writer =
-        //     BuildingSkipListWriter::new(skip_list_format.clone(), 512, Global);
-        // let building_skip_list = skip_list_writer.building_skip_list();
-        // // let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        // // let (offset, skipped_count, _) = skip_list_reader.skip_to(0);
-        // // assert_eq!(offset, 0);
-        // // assert_eq!(skipped_count, 0);
+        let mut skip_list_writer =
+            BuildingSkipListWriter::new(skip_list_format.clone(), 512, Global);
+        let building_skip_list = skip_list_writer.building_skip_list();
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+        let (docid, offset, _) = skip_list_reader.lookup(0);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
 
-        // skip_list_writer.add_skip_item(1000, 100, 2000, None);
+        skip_list_writer.add_skip_item(1000, 100, None);
 
-        // let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        // // let (offset, skipped_count, _) = skip_list_reader.skip_to(0);
-        // // assert_eq!(offset, 0);
-        // // assert_eq!(skipped_count, 0);
-        // // let (offset, skipped_count, _) = skip_list_reader.skip_to(1);
-        // // assert_eq!(offset, 0);
-        // // assert_eq!(skipped_count, 0);
-        // // let (offset, skipped_count, _) = skip_list_reader.skip_to(1000);
-        // // assert_eq!(offset, 0);
-        // // assert_eq!(skipped_count, 0);
-        // let (offset, skipped_count, _) = skip_list_reader.skip_to(1001);
-        // assert_eq!(offset, 2000);
-        // assert_eq!(skipped_count, 100);
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+        let (docid, offset, _) = skip_list_reader.lookup(0);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        assert_eq!(docid, 1000);
+        assert_eq!(offset, 100);
+
+        skip_list_writer.add_skip_item(2000, 100, None);
+
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+        let (docid, offset, _) = skip_list_reader.lookup(0);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        assert_eq!(docid, 1000);
+        assert_eq!(offset, 100);
+        let (docid, offset, _) = skip_list_reader.lookup(2000);
+        assert_eq!(docid, 1000);
+        assert_eq!(offset, 100);
+        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        assert_eq!(docid, 2000);
+        assert_eq!(offset, 200);
+
+        skip_list_writer.add_skip_item(3000, 100, None);
+
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+        let (docid, offset, _) = skip_list_reader.lookup(0);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        assert_eq!(docid, 0);
+        assert_eq!(offset, 0);
+        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        assert_eq!(docid, 1000);
+        assert_eq!(offset, 100);
+        let (docid, offset, _) = skip_list_reader.lookup(2000);
+        assert_eq!(docid, 1000);
+        assert_eq!(offset, 100);
+        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        assert_eq!(docid, 2000);
+        assert_eq!(offset, 200);
+        let (docid, offset, _) = skip_list_reader.lookup(3000);
+        assert_eq!(docid, 2000);
+        assert_eq!(offset, 200);
+        let (docid, offset, _) = skip_list_reader.lookup(3001);
+        assert_eq!(docid, 3000);
+        assert_eq!(offset, 300);
+
+        for i in 3..BLOCK_LEN {
+            skip_list_writer.add_skip_item(((i + 1) * 1000) as DocId, 100, None);
+        }
+
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        assert_eq!(docid, 2000);
+        assert_eq!(offset, 200);
+        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000) as DocId);
+        assert_eq!(docid, ((BLOCK_LEN - 1) * 1000) as DocId);
+        assert_eq!(offset, 100 * (BLOCK_LEN - 1));
+        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000 + 1) as DocId);
+        assert_eq!(offset, 100 * BLOCK_LEN);
+
+        skip_list_writer.add_skip_item(((BLOCK_LEN + 1) * 1000) as DocId, 100, None);
+
+        let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
+
+        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        assert_eq!(docid, 2000);
+        assert_eq!(offset, 200);
+
+        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000) as DocId);
+        assert_eq!(docid, ((BLOCK_LEN - 1) * 1000) as DocId);
+        assert_eq!(offset, 100 * (BLOCK_LEN - 1));
+
+        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000 + 1) as DocId);
+        assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
+        assert_eq!(offset, 100 * BLOCK_LEN);
+
+        let (docid, offset, _) = skip_list_reader.lookup(((BLOCK_LEN + 1) * 1000) as DocId);
+        assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
+        assert_eq!(offset, 100 * BLOCK_LEN);
+
+        let (docid, offset, _) = skip_list_reader.lookup(((BLOCK_LEN + 1) * 1000 + 1) as DocId);
+        assert_eq!(docid, ((BLOCK_LEN + 1) * 1000) as DocId);
+        assert_eq!(offset, 100 * (BLOCK_LEN + 1));
     }
 }
