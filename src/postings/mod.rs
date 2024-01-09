@@ -19,6 +19,6 @@ pub use building_doc_list::{
 };
 pub use byte_slice_list::{ByteSliceList, ByteSliceReader, ByteSliceWriter};
 // pub use doc_list_encoder::DocListEncoder;
-pub use doc_list_format::{DocListFormat, SkipListFormat};
+pub use doc_list_format::DocListFormat;
 // pub use encode::{copy_decode, copy_encode, Decode, Encode};
 // pub use multi_value_buffer::{MultiValue, MultiValueBuffer};

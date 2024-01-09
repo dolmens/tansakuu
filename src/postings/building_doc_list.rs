@@ -3,18 +3,21 @@ use std::sync::Arc;
 use allocator_api2::alloc::{Allocator, Global};
 
 use crate::{
-    util::{AcqRelUsize, RelaxedU32, RelaxedU8},
+    util::{AcqRelAtomicPtr, AcqRelUsize, RelaxedU32, RelaxedU8},
     DocId, FieldMask, TermFreq, DOCLIST_BLOCK_LEN, INVALID_DOCID,
 };
 
 use super::{
-    compression, ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListFormat,
+    compression,
+    skiplist::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
+    ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListFormat,
 };
 
 pub struct BuildingDocList<A: Allocator = Global> {
     building_block: BuildingDocListBlock,
     flushed_count: AcqRelUsize,
     slice_list: Arc<ByteSliceList<A>>,
+    building_skip_list: AcqRelAtomicPtr<BuildingSkipList>,
     doc_list_format: DocListFormat,
 }
 
@@ -40,6 +43,7 @@ pub struct BuildingDocListWriter<A: Allocator = Global> {
     block_len: usize,
     flushed_count: usize,
     slice_writer: ByteSliceWriter<A>,
+    skip_list_writer: Option<BuildingSkipListWriter<A>>,
     building_doc_list: Arc<BuildingDocList<A>>,
     doc_list_format: DocListFormat,
 }
@@ -50,6 +54,7 @@ pub struct BuildingDocListReader<'a> {
     flushed_count: usize,
     block_snapshot: DocListBlockSnapshot,
     slice_reader: ByteSliceReader<'a>,
+    skip_list_reader: Option<BuildingSkipListReader<'a>>,
     doc_list_format: DocListFormat,
 }
 
@@ -59,6 +64,7 @@ impl<A: Allocator> BuildingDocList<A> {
             building_block: BuildingDocListBlock::new(&doc_list_format),
             flushed_count: AcqRelUsize::new(0),
             slice_list,
+            building_skip_list: AcqRelAtomicPtr::default(),
             doc_list_format,
         }
     }
@@ -194,18 +200,18 @@ impl DocListBlockSnapshot {
         self.len == 0
     }
 
-    fn copy_to(&self, doclist_block: &mut DocListBlock) {
+    fn copy_to(&self, doc_list_block: &mut DocListBlock) {
         let len = self.len;
-        doclist_block.len = len;
+        doc_list_block.len = len;
         if len > 0 {
-            doclist_block.docids[0..len].copy_from_slice(&self.docids[0..len]);
+            doc_list_block.docids[0..len].copy_from_slice(&self.docids[0..len]);
             if let (Some(dst_termfres), Some(src_termfreqs)) =
-                (&mut doclist_block.termfreqs, &self.termfreqs)
+                (&mut doc_list_block.termfreqs, &self.termfreqs)
             {
                 dst_termfres[0..len].copy_from_slice(&src_termfreqs[0..len]);
             }
             if let (Some(dst_fieldmasks), Some(src_fieldmasks)) =
-                (&mut doclist_block.fieldmasks, &self.fieldmasks)
+                (&mut doc_list_block.fieldmasks, &self.fieldmasks)
             {
                 dst_fieldmasks[0..len].copy_from_slice(&src_fieldmasks[0..len]);
             }
@@ -232,6 +238,7 @@ impl<A: Allocator> BuildingDocListWriter<A> {
             block_len: 0,
             flushed_count: 0,
             slice_writer,
+            skip_list_writer: None,
             building_doc_list,
             doc_list_format,
         }
@@ -316,11 +323,11 @@ impl<'a> BuildingDocListReader<'a> {
         let doc_list_format = building_doc_list.doc_list_format();
         let building_block = building_doc_list.building_block();
         let block_len = building_block.len();
-        let mut block = DocListBlockSnapshot::with_capacity(block_len, doc_list_format);
-        block.snapshot(building_block, block_len);
+        let mut block_snapshot = DocListBlockSnapshot::with_capacity(block_len, doc_list_format);
+        block_snapshot.snapshot(building_block, block_len);
         let flushed_count_updated = building_doc_list.flushed_count();
         if flushed_count_updated > flushed_count {
-            block.clear();
+            block_snapshot.clear();
             flushed_count = flushed_count_updated;
             slice_reader = ByteSliceReader::open(slice_list);
         }
@@ -330,8 +337,9 @@ impl<'a> BuildingDocListReader<'a> {
             last_docid: 0,
             read_count: 0,
             flushed_count,
-            block_snapshot: block,
+            block_snapshot,
             slice_reader,
+            skip_list_reader: None,
             doc_list_format,
         }
     }
@@ -353,7 +361,7 @@ impl<'a> BuildingDocListReader<'a> {
 
         if !self.block_snapshot.is_empty() {
             self.block_snapshot.copy_to(doc_list_block);
-            doc_list_block.restore_docid_from_delta(self.last_docid);
+            doc_list_block.decode(self.last_docid);
             self.last_docid = doc_list_block.last_docid();
             self.read_count += self.block_snapshot.len;
             return doc_list_block.last_docid() >= start_docid;
@@ -380,6 +388,8 @@ impl<'a> BuildingDocListReader<'a> {
                 if self.doc_list_format.has_fieldmask() {
                     if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
                         compression::copy_read(&mut self.slice_reader, fieldmasks);
+                    } else {
+                        assert!(false);
                     }
                 }
             } else {
@@ -403,10 +413,12 @@ impl<'a> BuildingDocListReader<'a> {
                             &mut self.slice_reader,
                             &mut fieldmasks[0..block_len],
                         );
+                    } else {
+                        assert!(false);
                     }
                 }
             }
-            doc_list_block.restore_docid_from_delta(self.last_docid);
+            doc_list_block.decode(self.last_docid);
             self.last_docid = doc_list_block.last_docid();
             self.read_count += doc_list_block.len;
             if doc_list_block.last_docid() >= start_docid {

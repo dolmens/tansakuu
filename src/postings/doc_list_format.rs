@@ -1,13 +1,10 @@
+use super::skiplist::SkipListFormat;
+
 #[derive(Clone)]
 pub struct DocListFormat {
     has_tflist: bool,
     has_fieldmask: bool,
     skiplist_format: Option<SkipListFormat>,
-}
-
-#[derive(Clone)]
-pub struct SkipListFormat {
-    has_tflist: bool,
 }
 
 impl DocListFormat {
@@ -35,15 +32,5 @@ impl DocListFormat {
 
     pub fn skip_list_format(&self) -> Option<&SkipListFormat> {
         self.skiplist_format.as_ref()
-    }
-}
-
-impl SkipListFormat {
-    pub fn new(has_tflist: bool) -> Self {
-        Self { has_tflist }
-    }
-
-    pub fn has_tflist(&self) -> bool {
-        self.has_tflist
     }
 }

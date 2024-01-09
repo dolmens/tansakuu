@@ -50,7 +50,7 @@ impl DocListBlock {
         self.docids[self.len - 1]
     }
 
-    pub fn restore_docid_from_delta(&mut self, last_docid: DocId) {
+    pub fn decode(&mut self, last_docid: DocId) {
         self.docids[0..self.len]
             .iter_mut()
             .fold(last_docid, |acc, elem| {
