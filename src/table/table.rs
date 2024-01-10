@@ -8,7 +8,8 @@ use arc_swap::ArcSwap;
 use crate::schema::{Schema, SchemaRef};
 
 use super::{
-    segment::BuildingSegmentData, TableData, TableReader, TableSettings, TableSettingsRef, TableWriter,
+    segment::BuildingSegmentData, TableData, TableReader, TableSettings, TableSettingsRef,
+    TableWriter,
 };
 
 pub struct Table {
@@ -21,6 +22,11 @@ pub struct Table {
 pub type TableRef = Arc<Table>;
 
 impl Table {
+    pub fn create(schema: Schema, settings: TableSettings) -> Self {
+        let tempdir = tempfile::Builder::new().tempdir().unwrap();
+        Self::open(schema, settings, tempdir)
+    }
+
     pub fn open<P: AsRef<Path>>(schema: Schema, settings: TableSettings, directory: P) -> Self {
         let schema = Arc::new(schema);
         let settings = Arc::new(settings);
@@ -102,7 +108,7 @@ mod tests {
         schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
         let schema = schema_builder.build();
         let settings = TableSettings::new();
-        let table = Table::open(schema, settings, "./testdata");
+        let table = Table::create(schema, settings);
 
         let mut writer = table.writer();
 
@@ -145,7 +151,7 @@ mod tests {
         schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
         let schema = schema_builder.build();
         let settings = TableSettings::new();
-        let table = Table::open(schema, settings, "./testdata");
+        let table = Table::create(schema, settings);
 
         let mut writer = table.writer();
 
@@ -205,7 +211,7 @@ mod tests {
         schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
         let schema = schema_builder.build();
         let settings = TableSettings::new();
-        let table = Table::open(schema, settings, "./testdata");
+        let table = Table::create(schema, settings);
 
         let mut writer = table.writer();
 
@@ -273,7 +279,7 @@ mod tests {
         schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
         let schema = schema_builder.build();
         let settings = TableSettings::new();
-        let table = Table::open(schema, settings, "./testdata");
+        let table = Table::create(schema, settings);
 
         let mut writer = table.writer();
 

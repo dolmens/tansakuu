@@ -1,7 +1,7 @@
 mod atomic;
 mod bitset;
 mod capacity_policy;
-mod chunked_vector;
+mod chunked_vec;
 mod exponential_tree;
 mod fixed_capacity_vec;
 mod layered_hashmap;
@@ -14,7 +14,7 @@ pub use atomic::{
 };
 pub use bitset::Bitset;
 pub use capacity_policy::{CapacityPolicy, FixedCapacityPolicy};
-pub use chunked_vector::ChunkedVector;
+pub use chunked_vec::ChunkedVec;
 pub use exponential_tree::ExponentialTree;
 pub use fixed_capacity_vec::FixedCapacityVec;
 pub use layered_hashmap::LayeredHashMap;

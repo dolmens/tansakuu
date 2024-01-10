@@ -9,7 +9,9 @@ mod doc_list_format;
 mod compression;
 mod doc_list_block;
 mod skiplist;
+mod match_data;
 
+pub use match_data::MatchData;
 pub use doc_list_block::DocListBlock;
 // pub use buffered_byte_slice::{transmute_mut_slice, BufferedByteSlice};
 // pub use building_doc_list_decoder::BuildingDocListDecoder;

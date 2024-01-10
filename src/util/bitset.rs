@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use super::AcqRelU64;
 
 pub struct Bitset {
-    data: Box<[AtomicU64]>,
+    data: Box<[AcqRelU64]>,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
@@ -11,7 +11,7 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
 impl Bitset {
     pub fn with_capacity(capacity: usize) -> Self {
         let len = (capacity + 63) / 64;
-        let vec: Vec<_> = (0..len).map(|_| AtomicU64::new(0)).collect();
+        let vec: Vec<_> = (0..len).map(|_| AcqRelU64::new(0)).collect();
         let data = vec.into_boxed_slice();
         Self { data }
     }
@@ -19,16 +19,20 @@ impl Bitset {
     pub unsafe fn insert(&self, index: usize) {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
-            let mut slot = self.data[quot].load(Ordering::Acquire);
+            let mut slot = self.data[quot].load();
             slot |= 1 << rem;
-            self.data[quot].store(slot, Ordering::Release);
+            self.data[quot].store(slot);
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.iter().all(|a| a.load() == 0)
     }
 
     pub fn contains(&self, index: usize) -> bool {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
-            let slot = self.data[quot].load(Ordering::Acquire);
+            let slot = self.data[quot].load();
             slot & (1 << rem) != 0
         } else {
             false

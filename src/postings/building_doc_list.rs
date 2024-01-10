@@ -10,7 +10,7 @@ use crate::{
 use super::{
     compression,
     skiplist::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
-    ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListFormat,
+    ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListFormat, MatchData,
 };
 
 pub struct BuildingDocList<A: Allocator = Global> {
@@ -56,6 +56,14 @@ pub struct BuildingDocListReader<'a> {
     slice_reader: ByteSliceReader<'a>,
     skip_list_reader: BuildingSkipListReader<'a>,
     doc_list_format: DocListFormat,
+}
+
+pub struct BuildingDocListIterator<'a> {
+    cursor: usize,
+    docid: DocId,
+    match_data: MatchData,
+    block: DocListBlock,
+    reader: BuildingDocListReader<'a>,
 }
 
 impl<A: Allocator> BuildingDocList<A> {
@@ -223,8 +231,14 @@ impl DocListBlockSnapshot {
     }
 }
 
+impl<A: Allocator + Default + Clone> BuildingDocListWriter<A> {
+    pub fn new(doc_list_format: DocListFormat, initial_slice_capacity: usize) -> Self {
+        Self::new_in(doc_list_format, initial_slice_capacity, A::default())
+    }
+}
+
 impl<A: Allocator + Clone> BuildingDocListWriter<A> {
-    pub fn new(
+    pub fn new_in(
         doc_list_format: DocListFormat,
         initial_slice_capacity: usize,
         allocator: A,
@@ -364,6 +378,10 @@ impl<'a> BuildingDocListReader<'a> {
         self.decoded
     }
 
+    pub fn into_iter(self) -> BuildingDocListIterator<'a> {
+        BuildingDocListIterator::new(self)
+    }
+
     pub fn decode_one_block(
         &mut self,
         start_docid: DocId,
@@ -454,6 +472,38 @@ impl<'a> BuildingDocListReader<'a> {
     }
 }
 
+impl<'a> BuildingDocListIterator<'a> {
+    pub fn new(reader: BuildingDocListReader<'a>) -> Self {
+        Self {
+            cursor: 0,
+            docid: INVALID_DOCID,
+            match_data: MatchData::default(),
+            block: DocListBlock::new(&reader.doc_list_format),
+            reader,
+        }
+    }
+}
+
+impl<'a> Iterator for BuildingDocListIterator<'a> {
+    type Item = (DocId, MatchData);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cursor == self.block.len {
+            if self.reader.eof() {
+                return None;
+            }
+            self.reader
+                .decode_one_block(self.docid.wrapping_add(1), &mut self.block);
+        }
+
+        self.docid = self.block.docids[self.cursor];
+        self.match_data.tf = 1;
+        self.match_data.fm = 1;
+        self.cursor += 1;
+        Some((self.docid, self.match_data))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{sync::mpsc, thread, time::Duration};
@@ -471,7 +521,8 @@ mod tests {
     fn test_basic() {
         const BLOCK_LEN: usize = DOCLIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::new(true, false);
-        let mut doc_list_writer = BuildingDocListWriter::new(doc_list_format.clone(), 1024, Global);
+        let mut doc_list_writer =
+            BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
         let building_doc_list = doc_list_writer.building_doc_list();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
@@ -625,7 +676,8 @@ mod tests {
         let (r_sender, w_receiver) = mpsc::channel();
 
         let doc_list_format = DocListFormat::new(true, false);
-        let mut doc_list_writer = BuildingDocListWriter::new(doc_list_format.clone(), 1024, Global);
+        let mut doc_list_writer =
+            BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
         let building_doc_list = doc_list_writer.building_doc_list();
 
         let w = thread::spawn(move || {
@@ -812,7 +864,8 @@ mod tests {
     fn test_multithreads_random() {
         const BLOCK_LEN: usize = DOCLIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::new(true, false);
-        let mut doc_list_writer = BuildingDocListWriter::new(doc_list_format.clone(), 1024, Global);
+        let mut doc_list_writer =
+            BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
         let building_doc_list = doc_list_writer.building_doc_list();
 
         let w = thread::spawn(move || {

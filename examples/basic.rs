@@ -28,7 +28,7 @@ pub fn main() {
     schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
-    let table = Table::open(schema, settings, "./testdata");
+    let table = Table::create(schema, settings);
 
     let mut writer = table.writer();
 

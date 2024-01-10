@@ -1,40 +1,40 @@
-use std::sync::Mutex;
-
-use crate::DocId;
+use crate::{util::ChunkedVec, DocId};
 
 use super::ColumnSegmentData;
 
 pub struct GenericColumnBuildingSegmentData<T> {
-    pub values: Mutex<Vec<T>>,
+    pub values: ChunkedVec<T>,
 }
 
 impl<T> GenericColumnBuildingSegmentData<T> {
     pub fn new() -> Self {
         Self {
-            values: Mutex::new(Vec::new()),
+            values: ChunkedVec::new(4, 2),
         }
     }
 
     pub fn push(&self, value: T) {
-        self.values.lock().unwrap().push(value);
+        unsafe {
+            self.values.push(value);
+        }
     }
 
     pub fn get(&self, docid: DocId) -> Option<T>
     where
         T: Clone,
     {
-        self.values.lock().unwrap().get(docid as usize).cloned()
+        self.values.get(docid as usize).cloned()
     }
 
     pub fn values(&self) -> Vec<T>
     where
         T: Clone,
     {
-        self.values.lock().unwrap().clone()
+        self.values.iter().cloned().collect()
     }
 
     pub fn doc_count(&self) -> usize {
-        self.values.lock().unwrap().len()
+        self.values.len()
     }
 }
 

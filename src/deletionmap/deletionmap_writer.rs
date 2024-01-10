@@ -11,7 +11,7 @@ pub struct DeletionMapWriter {
 impl DeletionMapWriter {
     pub fn new() -> Self {
         Self {
-            deletionmap: Arc::new(BuildingDeletionMap::default()),
+            deletionmap: Arc::new(BuildingDeletionMap::new()),
         }
     }
 
@@ -24,7 +24,9 @@ impl DeletionMapWriter {
     }
 
     pub fn delete_doc(&self, segment_id: SegmentId, docid: DocId) {
-        self.deletionmap.delete_doc(segment_id, docid);
+        unsafe {
+            self.deletionmap.delete_doc(segment_id, docid);
+        }
     }
 
     pub fn is_empty(&self) -> bool {

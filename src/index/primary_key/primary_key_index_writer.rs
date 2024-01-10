@@ -26,7 +26,9 @@ impl IndexWriter for PrimaryKeyIndexWriter {
 
     fn end_document(&mut self, docid: DocId) {
         assert!(self.key.is_some());
-        self.index_data.insert(self.key.take().unwrap(), docid);
+        unsafe {
+            self.index_data.insert(self.key.take().unwrap(), docid);
+        }
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {

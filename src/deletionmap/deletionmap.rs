@@ -1,14 +1,12 @@
 use crate::{table::SegmentId, DocId};
 
-use serde::{Deserialize, Serialize};
-
 use std::{
     collections::{HashMap, HashSet},
     fs,
     path::Path,
 };
 
-#[derive(Default, Debug, Deserialize, Serialize)]
+#[derive(Default, Debug)]
 pub struct DeletionMap {
     deleted: HashMap<SegmentId, HashSet<DocId>>,
 }
@@ -16,11 +14,12 @@ pub struct DeletionMap {
 impl DeletionMap {
     pub fn load(path: impl AsRef<Path>) -> Self {
         let json = fs::read_to_string(path.as_ref()).unwrap();
-        serde_json::from_str(&json).unwrap()
+        let deleted = serde_json::from_str(&json).unwrap();
+        Self { deleted }
     }
 
     pub fn save(&self, path: impl AsRef<Path>) {
-        let json = serde_json::to_string_pretty(self).unwrap();
+        let json = serde_json::to_string_pretty(&self.deleted).unwrap();
         fs::write(path, json).unwrap();
     }
 

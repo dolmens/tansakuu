@@ -1,31 +1,38 @@
-use std::{collections::HashMap, sync::Mutex};
+use std::collections::{hash_map::RandomState, HashMap};
 
-use crate::{index::IndexSegmentData, DocId};
+use crate::{
+    index::IndexSegmentData,
+    util::{FixedCapacityPolicy, LayeredHashMap},
+    DocId,
+};
 
 pub struct PrimaryKeyIndexBuildingSegmentData {
-    keys: Mutex<HashMap<String, DocId>>,
+    keys: LayeredHashMap<String, DocId>,
 }
 
 impl PrimaryKeyIndexBuildingSegmentData {
     pub fn new() -> Self {
-        Self {
-            keys: Mutex::new(HashMap::new()),
-        }
+        let hasher_builder = RandomState::new();
+        let capacity_policy = FixedCapacityPolicy;
+        let keys2 = LayeredHashMap::with_initial_capacity(1024, hasher_builder, capacity_policy);
+
+        Self { keys: keys2 }
     }
 
-    pub fn insert(&self, key: String, docid: DocId) {
-        let mut keys = self.keys.lock().unwrap();
-        keys.insert(key, docid);
+    pub unsafe fn insert(&self, key: String, docid: DocId) {
+        self.keys.insert(key, docid);
     }
 
     pub fn lookup(&self, key: &str) -> Option<DocId> {
-        let keys = self.keys.lock().unwrap();
-        keys.get(key).cloned()
+        self.keys.get(key).cloned()
     }
 
     pub fn keys(&self) -> HashMap<String, DocId> {
-        let keys = self.keys.lock().unwrap();
-        keys.clone()
+        let mut keys = HashMap::new();
+        for (k, v) in self.keys.iter() {
+            keys.insert(k.clone(), *v);
+        }
+        keys
     }
 }
 

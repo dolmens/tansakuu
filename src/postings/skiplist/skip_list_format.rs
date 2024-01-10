@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct SkipListFormat {
     has_tflist: bool,
 }

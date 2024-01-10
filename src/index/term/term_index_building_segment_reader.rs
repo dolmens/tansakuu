@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{index::SegmentPosting, DocId};
+use crate::{index::SegmentPosting, postings::BuildingDocListReader, DocId};
 
 use super::TermIndexBuildingSegmentData;
 
@@ -18,8 +18,15 @@ impl TermIndexBuildingSegmentReader {
     }
 
     pub fn segment_posting(&self, tok: &str) -> crate::index::SegmentPosting {
-        let postings = self.index_data.postings.lock().unwrap();
-        let docids = postings.get(tok).cloned().unwrap_or_default();
+        let docids = if let Some(building_doc_list) = self.index_data.postings.get(tok) {
+            let doc_list_reader = BuildingDocListReader::open(building_doc_list);
+            doc_list_reader
+                .into_iter()
+                .map(|(docid, _)| docid)
+                .collect()
+        } else {
+            vec![]
+        };
         SegmentPosting::new(self.base_docid, docids)
     }
 }
