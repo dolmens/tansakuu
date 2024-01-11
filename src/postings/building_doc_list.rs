@@ -413,7 +413,7 @@ impl<'a> BuildingDocListReader<'a> {
         start_docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> bool {
-        let (last_docid, offset, _) = self.skip_list_reader.lookup(start_docid);
+        let (last_docid, offset, _) = self.skip_list_reader.seek(start_docid);
         if self.last_docid < last_docid {
             self.last_docid = last_docid;
             assert!(self.slice_reader.tell() < offset);

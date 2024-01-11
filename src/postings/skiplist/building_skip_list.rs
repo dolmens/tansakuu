@@ -348,7 +348,7 @@ impl<'a> BuildingSkipListReader<'a> {
         }
     }
 
-    pub fn lookup(&mut self, query_docid: DocId) -> (DocId, usize, Option<TermFreq>) {
+    pub fn seek(&mut self, query_docid: DocId) -> (DocId, usize, Option<TermFreq>) {
         if self.empty {
             return (0, 0, None);
         }
@@ -441,73 +441,73 @@ mod tests {
             BuildingSkipListWriter::new(skip_list_format.clone(), 512, Global);
         let building_skip_list = skip_list_writer.building_skip_list();
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        let (docid, offset, _) = skip_list_reader.lookup(0);
+        let (docid, offset, _) = skip_list_reader.seek(0);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
 
         skip_list_writer.add_skip_item(1000, 100, None);
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        let (docid, offset, _) = skip_list_reader.lookup(0);
+        let (docid, offset, _) = skip_list_reader.seek(0);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1);
+        let (docid, offset, _) = skip_list_reader.seek(1);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        let (docid, offset, _) = skip_list_reader.seek(1000);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        let (docid, offset, _) = skip_list_reader.seek(1001);
         assert_eq!(docid, 1000);
         assert_eq!(offset, 100);
 
         skip_list_writer.add_skip_item(2000, 100, None);
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        let (docid, offset, _) = skip_list_reader.lookup(0);
+        let (docid, offset, _) = skip_list_reader.seek(0);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1);
+        let (docid, offset, _) = skip_list_reader.seek(1);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        let (docid, offset, _) = skip_list_reader.seek(1000);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        let (docid, offset, _) = skip_list_reader.seek(1001);
         assert_eq!(docid, 1000);
         assert_eq!(offset, 100);
-        let (docid, offset, _) = skip_list_reader.lookup(2000);
+        let (docid, offset, _) = skip_list_reader.seek(2000);
         assert_eq!(docid, 1000);
         assert_eq!(offset, 100);
-        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        let (docid, offset, _) = skip_list_reader.seek(2001);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
 
         skip_list_writer.add_skip_item(3000, 100, None);
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-        let (docid, offset, _) = skip_list_reader.lookup(0);
+        let (docid, offset, _) = skip_list_reader.seek(0);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1);
+        let (docid, offset, _) = skip_list_reader.seek(1);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1000);
+        let (docid, offset, _) = skip_list_reader.seek(1000);
         assert_eq!(docid, 0);
         assert_eq!(offset, 0);
-        let (docid, offset, _) = skip_list_reader.lookup(1001);
+        let (docid, offset, _) = skip_list_reader.seek(1001);
         assert_eq!(docid, 1000);
         assert_eq!(offset, 100);
-        let (docid, offset, _) = skip_list_reader.lookup(2000);
+        let (docid, offset, _) = skip_list_reader.seek(2000);
         assert_eq!(docid, 1000);
         assert_eq!(offset, 100);
-        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        let (docid, offset, _) = skip_list_reader.seek(2001);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
-        let (docid, offset, _) = skip_list_reader.lookup(3000);
+        let (docid, offset, _) = skip_list_reader.seek(3000);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
-        let (docid, offset, _) = skip_list_reader.lookup(3001);
+        let (docid, offset, _) = skip_list_reader.seek(3001);
         assert_eq!(docid, 3000);
         assert_eq!(offset, 300);
 
@@ -517,15 +517,15 @@ mod tests {
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
 
-        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        let (docid, offset, _) = skip_list_reader.seek(2001);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
 
-        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek((BLOCK_LEN * 1000) as DocId);
         assert_eq!(docid, ((BLOCK_LEN - 1) * 1000) as DocId);
         assert_eq!(offset, 100 * (BLOCK_LEN - 1));
 
-        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000 + 1) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek((BLOCK_LEN * 1000 + 1) as DocId);
         assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
         assert_eq!(offset, 100 * BLOCK_LEN);
 
@@ -533,23 +533,23 @@ mod tests {
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
 
-        let (docid, offset, _) = skip_list_reader.lookup(2001);
+        let (docid, offset, _) = skip_list_reader.seek(2001);
         assert_eq!(docid, 2000);
         assert_eq!(offset, 200);
 
-        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek((BLOCK_LEN * 1000) as DocId);
         assert_eq!(docid, ((BLOCK_LEN - 1) * 1000) as DocId);
         assert_eq!(offset, 100 * (BLOCK_LEN - 1));
 
-        let (docid, offset, _) = skip_list_reader.lookup((BLOCK_LEN * 1000 + 1) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek((BLOCK_LEN * 1000 + 1) as DocId);
         assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
         assert_eq!(offset, 100 * BLOCK_LEN);
 
-        let (docid, offset, _) = skip_list_reader.lookup(((BLOCK_LEN + 1) * 1000) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek(((BLOCK_LEN + 1) * 1000) as DocId);
         assert_eq!(docid, (BLOCK_LEN * 1000) as DocId);
         assert_eq!(offset, 100 * BLOCK_LEN);
 
-        let (docid, offset, _) = skip_list_reader.lookup(((BLOCK_LEN + 1) * 1000 + 1) as DocId);
+        let (docid, offset, _) = skip_list_reader.seek(((BLOCK_LEN + 1) * 1000 + 1) as DocId);
         assert_eq!(docid, ((BLOCK_LEN + 1) * 1000) as DocId);
         assert_eq!(offset, 100 * (BLOCK_LEN + 1));
     }
