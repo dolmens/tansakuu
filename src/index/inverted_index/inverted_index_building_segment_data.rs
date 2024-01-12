@@ -10,11 +10,11 @@ use crate::{
     DocId,
 };
 
-pub struct TermIndexBuildingSegmentData {
+pub struct InvertedIndexBuildingSegmentData {
     pub postings: LayeredHashMap<String, Arc<BuildingDocList>>,
 }
 
-impl TermIndexBuildingSegmentData {
+impl InvertedIndexBuildingSegmentData {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
@@ -37,4 +37,4 @@ impl TermIndexBuildingSegmentData {
     }
 }
 
-impl IndexSegmentData for TermIndexBuildingSegmentData {}
+impl IndexSegmentData for InvertedIndexBuildingSegmentData {}

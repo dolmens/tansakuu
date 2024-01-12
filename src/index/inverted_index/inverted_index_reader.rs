@@ -1,8 +1,8 @@
 use crate::{
     index::{
-        term::{
-            BufferedPostingIterator, TermIndexBuildingSegmentReader,
-            TermIndexPersistentSegmentReader,
+        inverted_index::{
+            BufferedPostingIterator, InvertedIndexBuildingSegmentReader,
+            InvertedIndexPersistentSegmentReader,
         },
         IndexReader,
     },
@@ -10,21 +10,21 @@ use crate::{
     table::TableData,
 };
 
-pub struct TermIndexReader {
-    persistent_segments: Vec<TermIndexPersistentSegmentReader>,
-    building_segments: Vec<TermIndexBuildingSegmentReader>,
+pub struct InvertedIndexReader {
+    persistent_segments: Vec<InvertedIndexPersistentSegmentReader>,
+    building_segments: Vec<InvertedIndexBuildingSegmentReader>,
 }
 
-impl TermIndexReader {
+impl InvertedIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
             let data = segment.data();
             let index_data = data.index_data(index.name());
-            let term_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let inverted_index_data = index_data.clone().downcast_arc().ok().unwrap();
             let index_segment_reader =
-                TermIndexPersistentSegmentReader::new(meta.base_docid(), term_index_data);
+                InvertedIndexPersistentSegmentReader::new(meta.base_docid(), inverted_index_data);
             persistent_segments.push(index_segment_reader);
         }
 
@@ -33,9 +33,9 @@ impl TermIndexReader {
             let meta = segment.meta();
             let data = segment.data();
             let index_data = data.index_data().index_data(index.name()).unwrap();
-            let term_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let inverted_index_data = index_data.clone().downcast_arc().ok().unwrap();
             let index_segment_reader =
-                TermIndexBuildingSegmentReader::new(meta.base_docid(), term_index_data);
+                InvertedIndexBuildingSegmentReader::new(meta.base_docid(), inverted_index_data);
             building_segments.push(index_segment_reader);
         }
 
@@ -46,7 +46,7 @@ impl TermIndexReader {
     }
 }
 
-impl IndexReader for TermIndexReader {
+impl IndexReader for InvertedIndexReader {
     fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
         let mut segment_postings = vec![];
         for segment_reader in &self.persistent_segments {

@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{index::SegmentPosting, DocId};
 
-use super::TermIndexPersistentSegmentData;
+use super::InvertedIndexPersistentSegmentData;
 
-pub struct TermIndexPersistentSegmentReader {
+pub struct InvertedIndexPersistentSegmentReader {
     base_docid: DocId,
-    index_data: Arc<TermIndexPersistentSegmentData>,
+    index_data: Arc<InvertedIndexPersistentSegmentData>,
 }
 
-impl TermIndexPersistentSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<TermIndexPersistentSegmentData>) -> Self {
+impl InvertedIndexPersistentSegmentReader {
+    pub fn new(base_docid: DocId, index_data: Arc<InvertedIndexPersistentSegmentData>) -> Self {
         Self {
             base_docid,
             index_data,

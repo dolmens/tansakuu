@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{index::IndexSerializer, schema::Index};
 
-use super::{TermIndexBuildingSegmentData, TermIndexSerializerWriter};
+use super::{InvertedIndexBuildingSegmentData, InvertedIndexSerializerWriter};
 
-pub struct TermIndexSerializer {
+pub struct InvertedIndexSerializer {
     index_name: String,
-    index_data: Arc<TermIndexBuildingSegmentData>,
+    index_data: Arc<InvertedIndexBuildingSegmentData>,
 }
 
-impl TermIndexSerializer {
-    pub fn new(index: &Index, index_data: Arc<TermIndexBuildingSegmentData>) -> Self {
+impl InvertedIndexSerializer {
+    pub fn new(index: &Index, index_data: Arc<InvertedIndexBuildingSegmentData>) -> Self {
         Self {
             index_name: index.name().to_string(),
             index_data,
@@ -18,10 +18,10 @@ impl TermIndexSerializer {
     }
 }
 
-impl IndexSerializer for TermIndexSerializer {
+impl IndexSerializer for InvertedIndexSerializer {
     fn serialize(&self, directory: &std::path::Path) {
         let path = directory.join(&self.index_name);
-        let mut writer = TermIndexSerializerWriter::new(path);
+        let mut writer = InvertedIndexSerializerWriter::new(path);
         let postings = self.index_data.postings();
         for (term, posting) in &postings {
             writer.start_term(term.to_string());

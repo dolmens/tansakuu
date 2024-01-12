@@ -1,6 +1,6 @@
 use crate::schema::{Index, IndexType};
 
-use super::{primary_key::PrimaryKeyIndexMerger, term::TermIndexMerger, IndexMerger};
+use super::{inverted_index::InvertedIndexMerger, primary_key::PrimaryKeyIndexMerger, IndexMerger};
 
 #[derive(Default)]
 pub struct IndexMergerFactory {}
@@ -8,7 +8,7 @@ pub struct IndexMergerFactory {}
 impl IndexMergerFactory {
     pub fn create(&self, index: &Index) -> Box<dyn IndexMerger> {
         match index.index_type() {
-            IndexType::Term => Box::new(TermIndexMerger::default()),
+            IndexType::InvertedIndex => Box::new(InvertedIndexMerger::default()),
             IndexType::PrimaryKey => Box::new(PrimaryKeyIndexMerger::default()),
         }
     }

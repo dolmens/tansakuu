@@ -4,15 +4,15 @@ use tantivy_common::OwnedBytes;
 
 use crate::{index::IndexSegmentData, DocId};
 
-pub struct TermIndexPersistentSegmentData {
+pub struct InvertedIndexPersistentSegmentData {
     pub postings: HashMap<String, Vec<DocId>>,
     pub bytes: OwnedBytes,
 }
 
-impl TermIndexPersistentSegmentData {
+impl InvertedIndexPersistentSegmentData {
     pub fn new(postings: HashMap<String, Vec<DocId>>, bytes: OwnedBytes) -> Self {
         Self { postings, bytes }
     }
 }
 
-impl IndexSegmentData for TermIndexPersistentSegmentData {}
+impl IndexSegmentData for InvertedIndexPersistentSegmentData {}

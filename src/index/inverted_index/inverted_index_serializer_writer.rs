@@ -2,12 +2,12 @@ use std::{fs::File, io::Write, path::Path};
 
 use crate::DocId;
 
-pub struct TermIndexSerializerWriter {
+pub struct InvertedIndexSerializerWriter {
     current_term: Option<String>,
     file: File,
 }
 
-impl TermIndexSerializerWriter {
+impl InvertedIndexSerializerWriter {
     pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
             current_term: None,

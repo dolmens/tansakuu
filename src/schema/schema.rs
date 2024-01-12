@@ -38,7 +38,7 @@ pub struct Field {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexType {
-    Term,
+    InvertedIndex,
     PrimaryKey,
 }
 
@@ -122,7 +122,7 @@ impl SchemaBuilder {
             let index_type = if options.primary_key {
                 IndexType::PrimaryKey
             } else {
-                IndexType::Term
+                IndexType::InvertedIndex
             };
             self.add_index(field_name, index_type, &fields);
         }
@@ -262,7 +262,7 @@ mod tests {
             builder.schema.indexes[0],
             Index {
                 name: "f1".to_string(),
-                index_type: IndexType::Term,
+                index_type: IndexType::InvertedIndex,
                 fields: vec![FieldEntry(0)],
             }
         );
@@ -284,7 +284,11 @@ mod tests {
         assert_eq!(builder.schema.indexes_map.get("f2"), None);
 
         // add index
-        builder.add_index("f2".to_string(), IndexType::Term, &vec!["f2".to_string()]);
+        builder.add_index(
+            "f2".to_string(),
+            IndexType::InvertedIndex,
+            &vec!["f2".to_string()],
+        );
         assert_eq!(
             builder.schema.fields[1],
             Field {
@@ -298,7 +302,7 @@ mod tests {
             builder.schema.indexes[1],
             Index {
                 name: "f2".to_string(),
-                index_type: IndexType::Term,
+                index_type: IndexType::InvertedIndex,
                 fields: vec![FieldEntry(1)],
             }
         );
@@ -307,7 +311,7 @@ mod tests {
         // add union index
         builder.add_index(
             "f3".to_string(),
-            IndexType::Term,
+            IndexType::InvertedIndex,
             &vec!["f1".to_string(), "f2".to_string()],
         );
         assert_eq!(
@@ -332,7 +336,7 @@ mod tests {
             builder.schema.indexes[2],
             Index {
                 name: "f3".to_string(),
-                index_type: IndexType::Term,
+                index_type: IndexType::InvertedIndex,
                 fields: vec![FieldEntry(0), FieldEntry(1)],
             }
         );

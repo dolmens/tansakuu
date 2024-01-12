@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::{TermIndexPersistentSegmentData, TermIndexSerializerWriter};
+use super::{InvertedIndexPersistentSegmentData, InvertedIndexSerializerWriter};
 
 #[derive(Default)]
-pub struct TermIndexMerger {}
+pub struct InvertedIndexMerger {}
 
-impl IndexMerger for TermIndexMerger {
+impl IndexMerger for InvertedIndexMerger {
     fn merge(
         &self,
         directory: &std::path::Path,
@@ -16,11 +16,13 @@ impl IndexMerger for TermIndexMerger {
         docid_mappings: &[Vec<Option<DocId>>],
     ) {
         let path = directory.join(index.name());
-        let mut writer = TermIndexSerializerWriter::new(path);
+        let mut writer = InvertedIndexSerializerWriter::new(path);
         let mut postings = HashMap::<String, Vec<DocId>>::new();
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
-            let term_index_segment_data = segment.downcast_ref::<TermIndexPersistentSegmentData>().unwrap();
-            for (term, segment_posting) in &term_index_segment_data.postings {
+            let index_segment_data = segment
+                .downcast_ref::<InvertedIndexPersistentSegmentData>()
+                .unwrap();
+            for (term, segment_posting) in &index_segment_data.postings {
                 let segment_posting = segment_posting
                     .iter()
                     .filter_map(|&docid| segment_docid_mappings[docid as usize])

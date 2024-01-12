@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{index::SegmentPosting, postings::BuildingDocListReader, DocId};
 
-use super::TermIndexBuildingSegmentData;
+use super::InvertedIndexBuildingSegmentData;
 
-pub struct TermIndexBuildingSegmentReader {
+pub struct InvertedIndexBuildingSegmentReader {
     base_docid: DocId,
-    index_data: Arc<TermIndexBuildingSegmentData>,
+    index_data: Arc<InvertedIndexBuildingSegmentData>,
 }
 
-impl TermIndexBuildingSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<TermIndexBuildingSegmentData>) -> Self {
+impl InvertedIndexBuildingSegmentReader {
+    pub fn new(base_docid: DocId, index_data: Arc<InvertedIndexBuildingSegmentData>) -> Self {
         Self {
             base_docid,
             index_data,

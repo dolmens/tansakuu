@@ -8,17 +8,17 @@ use tantivy_common::OwnedBytes;
 
 use crate::{index::IndexSegmentDataBuilder, schema::Index};
 
-use super::TermIndexPersistentSegmentData;
+use super::InvertedIndexPersistentSegmentData;
 
-pub struct TermIndexSegmentDataBuilder {}
+pub struct InvertedIndexSegmentDataBuilder {}
 
-impl TermIndexSegmentDataBuilder {
+impl InvertedIndexSegmentDataBuilder {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
+impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
     fn build(
         &self,
         index: &Index,
@@ -37,6 +37,6 @@ impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
         }
 
         let bytes = OwnedBytes::empty();
-        Box::new(TermIndexPersistentSegmentData::new(postings, bytes))
+        Box::new(InvertedIndexPersistentSegmentData::new(postings, bytes))
     }
 }

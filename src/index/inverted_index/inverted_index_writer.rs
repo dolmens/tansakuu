@@ -7,25 +7,25 @@ use crate::{
     DocId,
 };
 
-use super::TermIndexBuildingSegmentData;
+use super::InvertedIndexBuildingSegmentData;
 
-pub struct TermIndexWriter {
+pub struct InvertedIndexWriter {
     fields: HashMap<String, String>,
     doc_list_writers: HashMap<String, BuildingDocListWriter>,
-    index_data: Arc<TermIndexBuildingSegmentData>,
+    index_data: Arc<InvertedIndexBuildingSegmentData>,
 }
 
-impl TermIndexWriter {
+impl InvertedIndexWriter {
     pub fn new() -> Self {
         Self {
             fields: HashMap::new(),
             doc_list_writers: HashMap::new(),
-            index_data: Arc::new(TermIndexBuildingSegmentData::new()),
+            index_data: Arc::new(InvertedIndexBuildingSegmentData::new()),
         }
     }
 }
 
-impl IndexWriter for TermIndexWriter {
+impl IndexWriter for InvertedIndexWriter {
     fn add_field(&mut self, field: &str, value: &Value) {
         self.fields.insert(field.to_string(), value.to_string());
     }
