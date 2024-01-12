@@ -10,5 +10,7 @@ bumpalo = { version = "3.14.0", features = ["allocator-api2"] }
 downcast-rs = "1.2.0"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
+tantivy-common = "0.6.0"
+tantivy-sstable = "0.2.0"
 tempfile = "3.9.0"
 uuid = { version = "1.6.1", features = ["v4"] }

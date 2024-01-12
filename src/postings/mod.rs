@@ -4,15 +4,17 @@ mod building_doc_list;
 mod byte_slice_list;
 // mod doc_list_encoder;
 mod doc_list_format;
+mod doc_list_reader;
 // mod encode;
 // mod multi_value_buffer;
 mod compression;
 mod doc_list_block;
-mod skiplist;
 mod match_data;
+mod skiplist;
 
-pub use match_data::MatchData;
 pub use doc_list_block::DocListBlock;
+pub use doc_list_reader::DocListReader;
+pub use match_data::MatchData;
 // pub use buffered_byte_slice::{transmute_mut_slice, BufferedByteSlice};
 // pub use building_doc_list_decoder::BuildingDocListDecoder;
 pub use building_doc_list::{

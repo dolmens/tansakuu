@@ -4,6 +4,8 @@ use std::{
     io::{BufRead, BufReader},
 };
 
+use tantivy_common::OwnedBytes;
+
 use crate::{index::IndexSegmentDataBuilder, schema::Index};
 
 use super::TermIndexPersistentSegmentData;
@@ -34,6 +36,7 @@ impl IndexSegmentDataBuilder for TermIndexSegmentDataBuilder {
             postings.insert(tok.to_string(), docids);
         }
 
-        Box::new(TermIndexPersistentSegmentData::new(postings))
+        let bytes = OwnedBytes::empty();
+        Box::new(TermIndexPersistentSegmentData::new(postings, bytes))
     }
 }
