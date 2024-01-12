@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{index::IndexSerializer, schema::Index};
 
-use super::{PrimaryKeyIndexBuildingSegmentData, PrimaryKeyIndexSerializerWriter};
+use super::{PrimaryKeyBuildingSegmentData, PrimaryKeySerializerWriter};
 
-pub struct PrimaryKeyIndexSerializer {
+pub struct PrimaryKeySerializer {
     index_name: String,
-    index_data: Arc<PrimaryKeyIndexBuildingSegmentData>,
+    index_data: Arc<PrimaryKeyBuildingSegmentData>,
 }
 
-impl PrimaryKeyIndexSerializer {
-    pub fn new(index: &Index, index_data: Arc<PrimaryKeyIndexBuildingSegmentData>) -> Self {
+impl PrimaryKeySerializer {
+    pub fn new(index: &Index, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
         Self {
             index_name: index.name().to_string(),
             index_data,
@@ -18,10 +18,10 @@ impl PrimaryKeyIndexSerializer {
     }
 }
 
-impl IndexSerializer for PrimaryKeyIndexSerializer {
+impl IndexSerializer for PrimaryKeySerializer {
     fn serialize(&self, directory: &std::path::Path) {
         let path = directory.join(&self.index_name);
-        let mut writer = PrimaryKeyIndexSerializerWriter::new(path);
+        let mut writer = PrimaryKeySerializerWriter::new(path);
         let keys = self.index_data.keys();
         for (key, &docid) in &keys {
             writer.write(key, docid);

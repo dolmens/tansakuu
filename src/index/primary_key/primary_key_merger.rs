@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use crate::{index::IndexMerger, DocId};
 
-use super::{PrimaryKeyIndexPersistentSegmentData, PrimaryKeyIndexSerializerWriter};
+use super::{PrimaryKeyPersistentSegmentData, PrimaryKeySerializerWriter};
 
 #[derive(Default)]
-pub struct PrimaryKeyIndexMerger {}
+pub struct PrimaryKeyMerger {}
 
-impl IndexMerger for PrimaryKeyIndexMerger {
+impl IndexMerger for PrimaryKeyMerger {
     fn merge(
         &self,
         directory: &std::path::Path,
@@ -16,11 +16,11 @@ impl IndexMerger for PrimaryKeyIndexMerger {
         docid_mappings: &[Vec<Option<DocId>>],
     ) {
         let path = directory.join(index.name());
-        let mut writer = PrimaryKeyIndexSerializerWriter::new(path);
+        let mut writer = PrimaryKeySerializerWriter::new(path);
         let mut keys = HashMap::<String, DocId>::new();
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
-                .downcast_ref::<PrimaryKeyIndexPersistentSegmentData>()
+                .downcast_ref::<PrimaryKeyPersistentSegmentData>()
                 .unwrap();
             for (key, &docid) in segment_data.keys.iter() {
                 if let Some(docid) = segment_docid_mappings[docid as usize] {

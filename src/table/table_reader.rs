@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{deletionmap::DeletionMapReader, index::PrimaryKeyIndexReader, DocId};
+use crate::{deletionmap::DeletionMapReader, index, DocId};
 
 use super::{segment::SegmentId, PrimaryKeyReader, TableColumnReader, TableData, TableIndexReader};
 
@@ -8,7 +8,7 @@ pub struct TableReader {
     index_reader: TableIndexReader,
     column_reader: TableColumnReader,
     primary_key_reader: Option<PrimaryKeyReader>,
-    primary_key_index_reader: Option<Arc<PrimaryKeyIndexReader>>,
+    primary_key_index_reader: Option<Arc<index::PrimaryKeyReader>>,
     deletionmap_reader: Option<DeletionMapReader>,
     table_data: TableData,
 }
@@ -57,7 +57,7 @@ impl TableReader {
         self.primary_key_reader.as_ref()
     }
 
-    pub fn primary_key_index_reader(&self) -> Option<&PrimaryKeyIndexReader> {
+    pub fn primary_key_index_reader(&self) -> Option<&index::PrimaryKeyReader> {
         self.primary_key_index_reader.as_deref()
     }
 

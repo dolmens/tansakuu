@@ -1,25 +1,24 @@
 use crate::{index::IndexReader, schema::Index, table::TableData, DocId};
 
 use super::{
-    PrimaryKeyIndexBuildingSegmentReader, PrimaryKeyIndexPersistentSegmentReader,
-    PrimaryKeyPostingIterator,
+    PrimaryKeyBuildingSegmentReader, PrimaryKeyPersistentSegmentReader, PrimaryKeyPostingIterator,
 };
 
-pub struct PrimaryKeyIndexReader {
-    persistent_segments: Vec<PrimaryKeyIndexPersistentSegmentReader>,
-    building_segments: Vec<PrimaryKeyIndexBuildingSegmentReader>,
+pub struct PrimaryKeyReader {
+    persistent_segments: Vec<PrimaryKeyPersistentSegmentReader>,
+    building_segments: Vec<PrimaryKeyBuildingSegmentReader>,
 }
 
-impl PrimaryKeyIndexReader {
+impl PrimaryKeyReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
             let data = segment.data();
             let index_data = data.index_data(index.name());
-            let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let primary_key_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
-                PrimaryKeyIndexPersistentSegmentReader::new(meta.clone(), primary_key_index_data);
+                PrimaryKeyPersistentSegmentReader::new(meta.clone(), primary_key_data);
             persistent_segments.push(primary_key_segment_reader);
         }
 
@@ -28,9 +27,9 @@ impl PrimaryKeyIndexReader {
             let meta = segment.meta();
             let data = segment.data();
             let index_data = data.index_data().index_data(index.name()).unwrap();
-            let primary_key_index_data = index_data.clone().downcast_arc().ok().unwrap();
+            let primary_key_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
-                PrimaryKeyIndexBuildingSegmentReader::new(meta.clone(), primary_key_index_data);
+                PrimaryKeyBuildingSegmentReader::new(meta.clone(), primary_key_data);
             building_segments.push(primary_key_segment_reader);
         }
 
@@ -57,7 +56,7 @@ impl PrimaryKeyIndexReader {
     }
 }
 
-impl IndexReader for PrimaryKeyIndexReader {
+impl IndexReader for PrimaryKeyReader {
     fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
         self.get(key).map(|docid| {
             Box::new(PrimaryKeyPostingIterator::new(docid))

@@ -6,11 +6,11 @@ use crate::{
     DocId,
 };
 
-pub struct PrimaryKeyIndexBuildingSegmentData {
+pub struct PrimaryKeyBuildingSegmentData {
     keys: LayeredHashMap<String, DocId>,
 }
 
-impl PrimaryKeyIndexBuildingSegmentData {
+impl PrimaryKeyBuildingSegmentData {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
@@ -36,4 +36,4 @@ impl PrimaryKeyIndexBuildingSegmentData {
     }
 }
 
-impl IndexSegmentData for PrimaryKeyIndexBuildingSegmentData {}
+impl IndexSegmentData for PrimaryKeyBuildingSegmentData {}
