@@ -4,13 +4,13 @@ use allocator_api2::alloc::{Allocator, Global};
 
 use crate::{
     util::{AcqRelUsize, RelaxedU32, RelaxedU8},
-    DocId, FieldMask, TermFreq, DOCLIST_BLOCK_LEN, INVALID_DOCID,
+    DocId, FieldMask, TermFreq, INVALID_DOCID, POSTING_BLOCK_LEN,
 };
 
 use super::{
     compression,
     skiplist::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
-    ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListFormat, MatchData,
+    ByteSliceList, ByteSliceReader, ByteSliceWriter, MatchData, PostingBlock, PostingFormat,
 };
 
 pub struct BuildingDocList<A: Allocator = Global> {
@@ -18,12 +18,12 @@ pub struct BuildingDocList<A: Allocator = Global> {
     flushed_size: AcqRelUsize,
     slice_list: Arc<ByteSliceList<A>>,
     building_skip_list: Arc<BuildingSkipList<A>>,
-    doc_list_format: DocListFormat,
+    doc_list_format: PostingFormat,
 }
 
 pub struct BuildingDocListBlock {
     len: AcqRelUsize,
-    docids: [RelaxedU32; DOCLIST_BLOCK_LEN],
+    docids: [RelaxedU32; POSTING_BLOCK_LEN],
     termfreqs: Option<Box<[RelaxedU32]>>,
     fieldmasks: Option<Box<[RelaxedU8]>>,
 }
@@ -45,7 +45,7 @@ pub struct BuildingDocListWriter<A: Allocator = Global> {
     slice_writer: ByteSliceWriter<A>,
     skip_list_writer: BuildingSkipListWriter<A>,
     building_doc_list: Arc<BuildingDocList<A>>,
-    doc_list_format: DocListFormat,
+    doc_list_format: PostingFormat,
 }
 
 pub struct BuildingDocListReader<'a> {
@@ -55,20 +55,20 @@ pub struct BuildingDocListReader<'a> {
     flushed_size: usize,
     slice_reader: ByteSliceReader<'a>,
     skip_list_reader: BuildingSkipListReader<'a>,
-    doc_list_format: DocListFormat,
+    doc_list_format: PostingFormat,
 }
 
 pub struct BuildingDocListIterator<'a> {
     cursor: usize,
     docid: DocId,
     match_data: MatchData,
-    block: DocListBlock,
+    block: PostingBlock,
     reader: BuildingDocListReader<'a>,
 }
 
 impl<A: Allocator> BuildingDocList<A> {
     fn new(
-        doc_list_format: DocListFormat,
+        doc_list_format: PostingFormat,
         slice_list: Arc<ByteSliceList<A>>,
         building_skip_list: Arc<BuildingSkipList<A>>,
     ) -> Self {
@@ -93,7 +93,7 @@ impl<A: Allocator> BuildingDocList<A> {
         &self.slice_list
     }
 
-    pub fn doc_list_format(&self) -> &DocListFormat {
+    pub fn doc_list_format(&self) -> &PostingFormat {
         &self.doc_list_format
     }
 
@@ -101,9 +101,9 @@ impl<A: Allocator> BuildingDocList<A> {
 }
 
 impl BuildingDocListBlock {
-    pub fn new(doc_list_format: &DocListFormat) -> Self {
+    pub fn new(doc_list_format: &PostingFormat) -> Self {
         let docids = std::iter::repeat_with(|| RelaxedU32::new(0))
-            .take(DOCLIST_BLOCK_LEN)
+            .take(POSTING_BLOCK_LEN)
             .collect::<Vec<_>>()
             .try_into()
             .ok()
@@ -111,7 +111,7 @@ impl BuildingDocListBlock {
         let termfreqs = if doc_list_format.has_tflist() {
             Some(
                 std::iter::repeat_with(|| RelaxedU32::new(0))
-                    .take(DOCLIST_BLOCK_LEN)
+                    .take(POSTING_BLOCK_LEN)
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )
@@ -121,7 +121,7 @@ impl BuildingDocListBlock {
         let fieldmasks = if doc_list_format.has_fieldmask() {
             Some(
                 std::iter::repeat_with(|| RelaxedU8::new(0))
-                    .take(DOCLIST_BLOCK_LEN)
+                    .take(POSTING_BLOCK_LEN)
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )
@@ -163,7 +163,7 @@ impl BuildingDocListBlock {
 }
 
 impl DocListBlockSnapshot {
-    fn with_capacity(capacity: usize, doc_list_format: &DocListFormat) -> Self {
+    fn with_capacity(capacity: usize, doc_list_format: &PostingFormat) -> Self {
         let docids = vec![0; capacity].into_boxed_slice();
         let termfreqs = if doc_list_format.has_tflist() {
             Some(vec![0; capacity].into_boxed_slice())
@@ -212,7 +212,7 @@ impl DocListBlockSnapshot {
         self.len == 0
     }
 
-    fn copy_to(&self, doc_list_block: &mut DocListBlock) {
+    fn copy_to(&self, doc_list_block: &mut PostingBlock) {
         let len = self.len;
         doc_list_block.len = len;
         if len > 0 {
@@ -232,26 +232,26 @@ impl DocListBlockSnapshot {
 }
 
 impl<A: Allocator + Default + Clone> BuildingDocListWriter<A> {
-    pub fn new(doc_list_format: DocListFormat, initial_slice_capacity: usize) -> Self {
+    pub fn new(doc_list_format: PostingFormat, initial_slice_capacity: usize) -> Self {
         Self::new_in(doc_list_format, initial_slice_capacity, A::default())
     }
 }
 
 impl<A: Allocator + Clone> BuildingDocListWriter<A> {
     pub fn new_in(
-        doc_list_format: DocListFormat,
+        posting_format: PostingFormat,
         initial_slice_capacity: usize,
         allocator: A,
     ) -> Self {
         let slice_writer =
             ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
-        let slice_list = slice_writer.slice_list();
-        let skip_list_format = doc_list_format.skip_list_format().clone();
+        let slice_list = slice_writer.byte_slice_list();
+        let skip_list_format = posting_format.skip_list_format().clone();
         let skip_list_writer =
             BuildingSkipListWriter::new(skip_list_format, 512, allocator.clone());
-        let building_skip_list = skip_list_writer.building_skip_list();
+        let building_skip_list = skip_list_writer.building_skip_list().clone();
         let building_doc_list = Arc::new(BuildingDocList::new(
-            doc_list_format.clone(),
+            posting_format.clone(),
             slice_list,
             building_skip_list,
         ));
@@ -266,7 +266,7 @@ impl<A: Allocator + Clone> BuildingDocListWriter<A> {
             slice_writer,
             skip_list_writer,
             building_doc_list,
-            doc_list_format,
+            doc_list_format: posting_format,
         }
     }
 
@@ -299,7 +299,7 @@ impl<A: Allocator + Clone> BuildingDocListWriter<A> {
             .len
             .store(self.block_len);
 
-        if self.block_len == DOCLIST_BLOCK_LEN {
+        if self.block_len == POSTING_BLOCK_LEN {
             self.flush_building_block();
         }
     }
@@ -385,7 +385,7 @@ impl<'a> BuildingDocListReader<'a> {
     pub fn decode_one_block(
         &mut self,
         start_docid: DocId,
-        doc_list_block: &mut DocListBlock,
+        doc_list_block: &mut PostingBlock,
     ) -> bool {
         if self.decoded {
             return false;
@@ -411,7 +411,7 @@ impl<'a> BuildingDocListReader<'a> {
     fn decode_one_flushed_block(
         &mut self,
         start_docid: DocId,
-        doc_list_block: &mut DocListBlock,
+        doc_list_block: &mut PostingBlock,
     ) -> bool {
         let (last_docid, offset, _) = self.skip_list_reader.seek(start_docid);
         if self.last_docid < last_docid {
@@ -421,8 +421,8 @@ impl<'a> BuildingDocListReader<'a> {
         }
         while self.slice_reader.tell() < self.flushed_size {
             let block_len = self.slice_reader.read::<u8>() as usize;
-            if block_len < DOCLIST_BLOCK_LEN {
-                doc_list_block.len = DOCLIST_BLOCK_LEN;
+            doc_list_block.len = block_len;
+            if block_len == POSTING_BLOCK_LEN {
                 compression::copy_read(&mut self.slice_reader, &mut doc_list_block.docids);
                 if self.doc_list_format.has_tflist() {
                     if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
@@ -437,7 +437,6 @@ impl<'a> BuildingDocListReader<'a> {
                     }
                 }
             } else {
-                doc_list_block.len = block_len;
                 compression::copy_read(
                     &mut self.slice_reader,
                     &mut doc_list_block.docids[0..block_len],
@@ -478,7 +477,7 @@ impl<'a> BuildingDocListIterator<'a> {
             cursor: 0,
             docid: INVALID_DOCID,
             match_data: MatchData::default(),
-            block: DocListBlock::new(&reader.doc_list_format),
+            block: PostingBlock::new(&reader.doc_list_format),
             reader,
         }
     }
@@ -511,27 +510,27 @@ mod tests {
     use allocator_api2::alloc::Global;
 
     use crate::{
-        postings::{DocListBlock, DocListFormat},
-        DocId, DOCLIST_BLOCK_LEN,
+        postings::{PostingBlock, PostingFormat},
+        DocId, POSTING_BLOCK_LEN,
     };
 
     use super::{BuildingDocListReader, BuildingDocListWriter};
 
     #[test]
     fn test_basic() {
-        const BLOCK_LEN: usize = DOCLIST_BLOCK_LEN;
-        let doc_list_format = DocListFormat::new(true, false);
-        let mut doc_list_writer =
-            BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
-        let building_doc_list = doc_list_writer.building_doc_list();
-        let mut doc_list_block = DocListBlock::new(&doc_list_format);
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut posting_writer =
+            BuildingDocListWriter::new_in(posting_format.clone(), 1024, Global);
+        let building_doc_list = posting_writer.building_doc_list();
+        let mut doc_list_block = PostingBlock::new(&posting_format);
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
         assert!(!doc_list_reader.decode_one_block(0, &mut doc_list_block));
         assert!(!doc_list_reader.decode_one_block(0, &mut doc_list_block));
 
-        doc_list_writer.add_pos(1);
-        doc_list_writer.add_pos(2);
-        doc_list_writer.end_doc(0 * 3 + 0 % 2);
+        posting_writer.add_pos(1);
+        posting_writer.add_pos(2);
+        posting_writer.end_doc(0 * 3 + 0 % 2);
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
         assert!(doc_list_reader.decode_one_block(0, &mut doc_list_block));
@@ -540,8 +539,8 @@ mod tests {
         assert_eq!(doc_list_block.last_docid(), 0 * 3 + 0 % 2);
         assert!(!doc_list_reader.decode_one_block(1, &mut doc_list_block));
 
-        doc_list_writer.add_pos(1);
-        doc_list_writer.end_doc(1 * 3 + 1 % 2);
+        posting_writer.add_pos(1);
+        posting_writer.end_doc(1 * 3 + 1 % 2);
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
         assert!(doc_list_reader.decode_one_block(0, &mut doc_list_block));
@@ -550,10 +549,10 @@ mod tests {
         assert_eq!(doc_list_block.last_docid(), 1 * 3 + 1 % 2);
         assert!(!doc_list_reader.decode_one_block(3, &mut doc_list_block));
 
-        doc_list_writer.add_pos(1);
-        doc_list_writer.add_pos(2);
-        doc_list_writer.add_pos(3);
-        doc_list_writer.end_doc(2 * 3 + 2 % 2);
+        posting_writer.add_pos(1);
+        posting_writer.add_pos(2);
+        posting_writer.add_pos(3);
+        posting_writer.end_doc(2 * 3 + 2 % 2);
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
         assert!(doc_list_reader.decode_one_block(0, &mut doc_list_block));
@@ -576,8 +575,8 @@ mod tests {
         assert!(!doc_list_reader.decode_one_block(last_docid + 1, &mut doc_list_block));
 
         for i in 3..BLOCK_LEN {
-            doc_list_writer.add_pos(1);
-            doc_list_writer.end_doc((i * 3 + i % 2) as u32);
+            posting_writer.add_pos(1);
+            posting_writer.end_doc((i * 3 + i % 2) as u32);
         }
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
@@ -589,9 +588,9 @@ mod tests {
         let last_docid = doc_list_block.last_docid();
         assert!(!doc_list_reader.decode_one_block(last_docid + 1, &mut doc_list_block));
 
-        doc_list_writer.add_pos(1);
-        doc_list_writer.add_pos(2);
-        doc_list_writer.end_doc((BLOCK_LEN * 3 + BLOCK_LEN % 2) as DocId);
+        posting_writer.add_pos(1);
+        posting_writer.add_pos(2);
+        posting_writer.end_doc((BLOCK_LEN * 3 + BLOCK_LEN % 2) as DocId);
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
         assert!(doc_list_reader.decode_one_block(100, &mut doc_list_block));
@@ -611,9 +610,9 @@ mod tests {
         assert!(!doc_list_reader.decode_one_block(last_docid + 1, &mut doc_list_block));
 
         for i in 1..BLOCK_LEN + 2 {
-            doc_list_writer.add_pos(1);
+            posting_writer.add_pos(1);
             let docid = (i + BLOCK_LEN) * 3 + (i + BLOCK_LEN) % 2;
-            doc_list_writer.end_doc(docid as DocId);
+            posting_writer.end_doc(docid as DocId);
         }
 
         let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
@@ -671,11 +670,11 @@ mod tests {
 
     #[test]
     fn test_multithreads_sync() {
-        const BLOCK_LEN: usize = DOCLIST_BLOCK_LEN;
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
         let (w_sender, r_receiver) = mpsc::channel();
         let (r_sender, w_receiver) = mpsc::channel();
 
-        let doc_list_format = DocListFormat::new(true, false);
+        let doc_list_format = PostingFormat::builder().with_tflist().build();
         let mut doc_list_writer =
             BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
         let building_doc_list = doc_list_writer.building_doc_list();
@@ -723,7 +722,7 @@ mod tests {
         });
 
         let r = thread::spawn(move || {
-            let mut doc_list_block = DocListBlock::new(&doc_list_format);
+            let mut doc_list_block = PostingBlock::new(&doc_list_format);
 
             let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
             assert!(!doc_list_reader.decode_one_block(0, &mut doc_list_block));
@@ -862,8 +861,8 @@ mod tests {
 
     #[test]
     fn test_multithreads_random() {
-        const BLOCK_LEN: usize = DOCLIST_BLOCK_LEN;
-        let doc_list_format = DocListFormat::new(true, false);
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let doc_list_format = PostingFormat::builder().with_tflist().build();
         let mut doc_list_writer =
             BuildingDocListWriter::new_in(doc_list_format.clone(), 1024, Global);
         let building_doc_list = doc_list_writer.building_doc_list();
@@ -878,7 +877,7 @@ mod tests {
         });
 
         let r = thread::spawn(move || loop {
-            let mut doc_list_block = DocListBlock::new(&doc_list_format);
+            let mut doc_list_block = PostingBlock::new(&doc_list_format);
             let mut doc_list_reader = BuildingDocListReader::open(&building_doc_list);
             let last_docid = BLOCK_LEN * 2 + 1;
             let last_docid = (last_docid * 3 + last_docid % 2) as DocId;

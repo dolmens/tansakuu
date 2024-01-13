@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     document::Value,
     index::IndexWriter,
-    postings::{BuildingDocListWriter, DocListFormat},
+    postings::{BuildingDocListWriter, PostingFormat},
     DocId,
 };
 
@@ -42,7 +42,7 @@ impl IndexWriter for InvertedIndexWriter {
                 self.doc_list_writers
                     .entry(tok.to_string())
                     .or_insert_with(|| {
-                        let doc_list_format = DocListFormat::default();
+                        let doc_list_format = PostingFormat::default();
                         let doc_list_writer = BuildingDocListWriter::new(doc_list_format, 1024);
                         let building_doc_list = doc_list_writer.building_doc_list();
                         unsafe {

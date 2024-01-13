@@ -2,11 +2,12 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
+    sync::Arc,
 };
 
-use tantivy_common::OwnedBytes;
+use tantivy_common::file_slice::{FileSlice, WrapFile};
 
-use crate::{index::IndexSegmentDataBuilder, schema::Index};
+use crate::{index::IndexSegmentDataBuilder, postings::TermDict, schema::Index};
 
 use super::InvertedIndexPersistentSegmentData;
 
@@ -36,7 +37,20 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
             postings.insert(tok.to_string(), docids);
         }
 
-        let bytes = OwnedBytes::empty();
-        Box::new(InvertedIndexPersistentSegmentData::new(postings, bytes))
+        let dict_path = path.join(".dict");
+        let dict_file = File::open(dict_path).unwrap();
+        let dict_data = FileSlice::new(Arc::new(WrapFile::new(dict_file).unwrap()));
+        let term_dict = TermDict::open(dict_data).unwrap();
+
+        let posting_path = path.join(".posting");
+        let posting_file = File::open(posting_path).unwrap();
+        let posting_data = FileSlice::new(Arc::new(WrapFile::new(posting_file).unwrap()));
+        let posting_data = posting_data.read_bytes().unwrap();
+
+        Box::new(InvertedIndexPersistentSegmentData::new(
+            postings,
+            term_dict,
+            posting_data,
+        ))
     }
 }

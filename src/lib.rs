@@ -19,7 +19,7 @@ pub type VersionId = u64;
 pub const END_DOCID: DocId = DocId::MAX - 1000;
 pub const INVALID_DOCID: DocId = DocId::MAX;
 
-pub const DOCLIST_BLOCK_LEN: usize = 128;
+pub const POSTING_BLOCK_LEN: usize = 128;
 pub const SKIPLIST_BLOCK_LEN: usize = 32;
 
 pub const INVALID_VERSION_ID: VersionId = 0;

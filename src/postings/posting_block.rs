@@ -1,20 +1,20 @@
-use crate::{DocId, FieldMask, TermFreq, DOCLIST_BLOCK_LEN};
+use crate::{DocId, FieldMask, TermFreq, POSTING_BLOCK_LEN};
 
-use super::DocListFormat;
+use super::PostingFormat;
 
-pub struct DocListBlock {
+pub struct PostingBlock {
     pub len: usize,
-    pub docids: [DocId; DOCLIST_BLOCK_LEN],
+    pub docids: [DocId; POSTING_BLOCK_LEN],
     pub termfreqs: Option<Box<[TermFreq]>>,
     pub fieldmasks: Option<Box<[FieldMask]>>,
 }
 
-impl DocListBlock {
-    pub fn new(doc_list_format: &DocListFormat) -> Self {
+impl PostingBlock {
+    pub fn new(doc_list_format: &PostingFormat) -> Self {
         let termfreqs = if doc_list_format.has_tflist() {
             Some(
                 std::iter::repeat(0)
-                    .take(DOCLIST_BLOCK_LEN)
+                    .take(POSTING_BLOCK_LEN)
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )
@@ -24,7 +24,7 @@ impl DocListBlock {
         let fieldmasks = if doc_list_format.has_fieldmask() {
             Some(
                 std::iter::repeat(0)
-                    .take(DOCLIST_BLOCK_LEN)
+                    .take(POSTING_BLOCK_LEN)
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )
@@ -34,7 +34,7 @@ impl DocListBlock {
 
         Self {
             len: 0,
-            docids: [0; DOCLIST_BLOCK_LEN],
+            docids: [0; POSTING_BLOCK_LEN],
             termfreqs,
             fieldmasks,
         }
