@@ -1,7 +1,7 @@
-mod building_doc_list;
+// mod building_doc_list;
 mod building_posting_list;
 mod byte_slice_list;
-mod compression;
+// mod compression;
 mod encoder;
 mod match_data;
 mod posting_block;
@@ -12,10 +12,10 @@ mod skiplist;
 mod term_dict;
 mod term_info;
 
-pub use building_doc_list::{
-    BuildingDocList, BuildingDocListBlock, BuildingDocListReader, BuildingDocListWriter,
-    DocListBlockSnapshot,
-};
+// pub use building_doc_list::{
+//     BuildingDocList, BuildingDocListBlock, BuildingDocListReader, BuildingDocListWriter,
+//     DocListBlockSnapshot,
+// };
 pub use building_posting_list::{
     BuildingPostingList, BuildingPostingReader, BuildingPostingWriter,
 };

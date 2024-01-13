@@ -243,31 +243,32 @@ impl<A: Allocator + Clone> BuildingDocListWriter<A> {
         initial_slice_capacity: usize,
         allocator: A,
     ) -> Self {
-        let slice_writer =
-            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
-        let slice_list = slice_writer.byte_slice_list();
-        let skip_list_format = posting_format.skip_list_format().clone();
-        let skip_list_writer =
-            BuildingSkipListWriter::new(skip_list_format, 512, allocator.clone());
-        let building_skip_list = skip_list_writer.building_skip_list().clone();
-        let building_doc_list = Arc::new(BuildingDocList::new(
-            posting_format.clone(),
-            slice_list,
-            building_skip_list,
-        ));
+        unimplemented!()
+        // let slice_writer =
+        //     ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
+        // let slice_list = slice_writer.byte_slice_list();
+        // let skip_list_format = posting_format.skip_list_format().clone();
+        // let skip_list_writer =
+        //     BuildingSkipListWriter::new(skip_list_format, 512, allocator.clone());
+        // let building_skip_list = skip_list_writer.building_skip_list().clone();
+        // let building_doc_list = Arc::new(BuildingDocList::new(
+        //     posting_format.clone(),
+        //     slice_list,
+        //     building_skip_list,
+        // ));
 
-        Self {
-            last_docid: INVALID_DOCID,
-            current_tf: 0,
-            total_tf: 0,
-            fieldmask: 0,
-            block_len: 0,
-            flushed_size: 0,
-            slice_writer,
-            skip_list_writer,
-            building_doc_list,
-            doc_list_format: posting_format,
-        }
+        // Self {
+        //     last_docid: INVALID_DOCID,
+        //     current_tf: 0,
+        //     total_tf: 0,
+        //     fieldmask: 0,
+        //     block_len: 0,
+        //     flushed_size: 0,
+        //     slice_writer,
+        //     skip_list_writer,
+        //     building_doc_list,
+        //     doc_list_format: posting_format,
+        // }
     }
 
     pub fn building_doc_list(&self) -> Arc<BuildingDocList<A>> {
@@ -305,42 +306,43 @@ impl<A: Allocator + Clone> BuildingDocListWriter<A> {
     }
 
     fn flush_building_block(&mut self) {
-        let building_block = &self.building_doc_list.building_block;
-        let slice_writer = &mut self.slice_writer;
-        let mut flushed_size = 1;
-        slice_writer.write(self.block_len as u8);
-        let docids = building_block.docids[0..self.block_len]
-            .iter()
-            .map(|a| a.load())
-            .collect::<Vec<_>>();
-        flushed_size += compression::copy_write(&docids, slice_writer);
-        if self.doc_list_format.has_tflist() {
-            if let Some(termfreqs_atomics) = &building_block.termfreqs {
-                let termfreqs = termfreqs_atomics[0..self.block_len]
-                    .iter()
-                    .map(|a| a.load())
-                    .collect::<Vec<_>>();
-                flushed_size += compression::copy_write(&termfreqs, slice_writer);
-            }
-        }
-        if self.doc_list_format.has_fieldmask() {
-            if let Some(fieldmaps_atomics) = &building_block.fieldmasks {
-                let fieldmaps = fieldmaps_atomics[0..self.block_len]
-                    .iter()
-                    .map(|a| a.load())
-                    .collect::<Vec<_>>();
-                flushed_size += compression::copy_write(&fieldmaps, slice_writer);
-            }
-        }
+        unimplemented!()
+        // let building_block = &self.building_doc_list.building_block;
+        // let slice_writer = &mut self.slice_writer;
+        // let mut flushed_size = 1;
+        // slice_writer.write(self.block_len as u8);
+        // let docids = building_block.docids[0..self.block_len]
+        //     .iter()
+        //     .map(|a| a.load())
+        //     .collect::<Vec<_>>();
+        // flushed_size += compression::copy_write(&docids, slice_writer);
+        // if self.doc_list_format.has_tflist() {
+        //     if let Some(termfreqs_atomics) = &building_block.termfreqs {
+        //         let termfreqs = termfreqs_atomics[0..self.block_len]
+        //             .iter()
+        //             .map(|a| a.load())
+        //             .collect::<Vec<_>>();
+        //         flushed_size += compression::copy_write(&termfreqs, slice_writer);
+        //     }
+        // }
+        // if self.doc_list_format.has_fieldmask() {
+        //     if let Some(fieldmaps_atomics) = &building_block.fieldmasks {
+        //         let fieldmaps = fieldmaps_atomics[0..self.block_len]
+        //             .iter()
+        //             .map(|a| a.load())
+        //             .collect::<Vec<_>>();
+        //         flushed_size += compression::copy_write(&fieldmaps, slice_writer);
+        //     }
+        // }
 
-        self.flushed_size += flushed_size;
-        self.building_doc_list.flushed_size.store(self.flushed_size);
+        // self.flushed_size += flushed_size;
+        // self.building_doc_list.flushed_size.store(self.flushed_size);
 
-        self.skip_list_writer
-            .add_skip_item(self.last_docid, flushed_size, None);
+        // self.skip_list_writer
+        //     .add_skip_item(self.last_docid, flushed_size, None);
 
-        building_block.clear();
-        self.block_len = 0;
+        // building_block.clear();
+        // self.block_len = 0;
     }
 }
 
@@ -413,61 +415,62 @@ impl<'a> BuildingDocListReader<'a> {
         start_docid: DocId,
         doc_list_block: &mut PostingBlock,
     ) -> bool {
-        let (last_docid, offset, _) = self.skip_list_reader.seek(start_docid);
-        if self.last_docid < last_docid {
-            self.last_docid = last_docid;
-            assert!(self.slice_reader.tell() < offset);
-            self.slice_reader.seek(offset);
-        }
-        while self.slice_reader.tell() < self.flushed_size {
-            let block_len = self.slice_reader.read::<u8>() as usize;
-            doc_list_block.len = block_len;
-            if block_len == POSTING_BLOCK_LEN {
-                compression::copy_read(&mut self.slice_reader, &mut doc_list_block.docids);
-                if self.doc_list_format.has_tflist() {
-                    if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
-                        compression::copy_read(&mut self.slice_reader, termfreqs);
-                    }
-                }
-                if self.doc_list_format.has_fieldmask() {
-                    if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
-                        compression::copy_read(&mut self.slice_reader, fieldmasks);
-                    } else {
-                        assert!(false);
-                    }
-                }
-            } else {
-                compression::copy_read(
-                    &mut self.slice_reader,
-                    &mut doc_list_block.docids[0..block_len],
-                );
-                if self.doc_list_format.has_tflist() {
-                    if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
-                        compression::copy_read(
-                            &mut self.slice_reader,
-                            &mut termfreqs[0..block_len],
-                        );
-                    }
-                }
-                if self.doc_list_format.has_fieldmask() {
-                    if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
-                        compression::copy_read(
-                            &mut self.slice_reader,
-                            &mut fieldmasks[0..block_len],
-                        );
-                    } else {
-                        assert!(false);
-                    }
-                }
-            }
-            doc_list_block.decode(self.last_docid);
-            self.last_docid = doc_list_block.last_docid();
-            if doc_list_block.last_docid() >= start_docid {
-                return true;
-            }
-        }
+        unimplemented!()
+        // let (last_docid, offset, _) = self.skip_list_reader.seek(start_docid);
+        // if self.last_docid < last_docid {
+        //     self.last_docid = last_docid;
+        //     assert!(self.slice_reader.tell() < offset);
+        //     self.slice_reader.seek(offset);
+        // }
+        // while self.slice_reader.tell() < self.flushed_size {
+        //     let block_len = self.slice_reader.read::<u8>() as usize;
+        //     doc_list_block.len = block_len;
+        //     if block_len == POSTING_BLOCK_LEN {
+        //         compression::copy_read(&mut self.slice_reader, &mut doc_list_block.docids);
+        //         if self.doc_list_format.has_tflist() {
+        //             if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
+        //                 compression::copy_read(&mut self.slice_reader, termfreqs);
+        //             }
+        //         }
+        //         if self.doc_list_format.has_fieldmask() {
+        //             if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
+        //                 compression::copy_read(&mut self.slice_reader, fieldmasks);
+        //             } else {
+        //                 assert!(false);
+        //             }
+        //         }
+        //     } else {
+        //         compression::copy_read(
+        //             &mut self.slice_reader,
+        //             &mut doc_list_block.docids[0..block_len],
+        //         );
+        //         if self.doc_list_format.has_tflist() {
+        //             if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
+        //                 compression::copy_read(
+        //                     &mut self.slice_reader,
+        //                     &mut termfreqs[0..block_len],
+        //                 );
+        //             }
+        //         }
+        //         if self.doc_list_format.has_fieldmask() {
+        //             if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
+        //                 compression::copy_read(
+        //                     &mut self.slice_reader,
+        //                     &mut fieldmasks[0..block_len],
+        //                 );
+        //             } else {
+        //                 assert!(false);
+        //             }
+        //         }
+        //     }
+        //     doc_list_block.decode(self.last_docid);
+        //     self.last_docid = doc_list_block.last_docid();
+        //     if doc_list_block.last_docid() >= start_docid {
+        //         return true;
+        //     }
+        // }
 
-        return false;
+        // return false;
     }
 }
 

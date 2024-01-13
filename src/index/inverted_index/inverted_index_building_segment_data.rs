@@ -5,13 +5,13 @@ use std::{
 
 use crate::{
     index::IndexSegmentData,
-    postings::{BuildingDocList, BuildingDocListReader},
+    postings::BuildingPostingList,
     util::{FixedCapacityPolicy, LayeredHashMap},
     DocId,
 };
 
 pub struct InvertedIndexBuildingSegmentData {
-    pub postings: LayeredHashMap<String, Arc<BuildingDocList>>,
+    pub postings: LayeredHashMap<String, Arc<BuildingPostingList>>,
 }
 
 impl InvertedIndexBuildingSegmentData {
@@ -24,16 +24,17 @@ impl InvertedIndexBuildingSegmentData {
     }
 
     pub fn postings(&self) -> HashMap<String, Vec<DocId>> {
-        let mut ps = HashMap::new();
-        for (key, building_doc_list) in self.postings.iter() {
-            let doc_list_reader = BuildingDocListReader::open(building_doc_list);
-            let docids: Vec<_> = doc_list_reader
-                .into_iter()
-                .map(|(docid, _)| docid)
-                .collect();
-            ps.insert(key.to_string(), docids);
-        }
-        ps
+        unimplemented!()
+        // let mut ps = HashMap::new();
+        // for (key, building_doc_list) in self.postings.iter() {
+        //     let doc_list_reader = BuildingPostingReader::open(building_doc_list);
+        //     let docids: Vec<_> = doc_list_reader
+        //         .into_iter()
+        //         .map(|(docid, _)| docid)
+        //         .collect();
+        //     ps.insert(key.to_string(), docids);
+        // }
+        // ps
     }
 }
 

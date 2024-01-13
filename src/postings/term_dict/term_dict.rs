@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, Write};
 
 use tantivy_common::{file_slice::FileSlice, VInt};
 use tantivy_sstable::{
@@ -12,7 +12,7 @@ pub struct TermDict(Dictionary<TermSSTable>);
 
 pub struct TermSSTable;
 
-pub struct TermDictBuilder<W: io::Write>(Writer<W, TermInfoValueWriter>);
+pub struct TermDictBuilder<W: Write>(Writer<W, TermInfoValueWriter>);
 
 impl TermDict {
     pub fn open(file: FileSlice) -> io::Result<Self> {
@@ -24,7 +24,7 @@ impl TermDict {
     }
 }
 
-impl<W: io::Write> TermDictBuilder<W> {
+impl<W: Write> TermDictBuilder<W> {
     pub fn new(w: W) -> Self {
         Self(Writer::<W, TermInfoValueWriter>::new(w))
     }

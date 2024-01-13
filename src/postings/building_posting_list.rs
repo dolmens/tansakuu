@@ -6,6 +6,7 @@ use crate::DocId;
 
 use super::{
     posting_writer::{BuildingPostingBlock, FlushInfo, PostingWriter},
+    skiplist::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
     ByteSliceList, ByteSliceReader, ByteSliceWriter, PostingBlock, PostingBlockSnapshot,
     PostingFormat, PostingReader,
 };
@@ -15,41 +16,49 @@ pub struct BuildingPostingList<A: Allocator = Global> {
     flush_info: Arc<FlushInfo>,
     byte_slice_list: Arc<ByteSliceList<A>>,
     posting_format: PostingFormat,
+    building_skip_list: BuildingSkipList<A>,
 }
 
 pub struct BuildingPostingWriter<A: Allocator = Global> {
-    posting_writer: PostingWriter<ByteSliceWriter<A>>,
+    posting_writer: PostingWriter<ByteSliceWriter<A>, BuildingSkipListWriter<A>>,
     byte_slice_list: Arc<ByteSliceList<A>>,
+    building_skip_list: BuildingSkipList<A>,
 }
 
 pub struct BuildingPostingReader<'a> {
     last_docid: DocId,
     read_count: usize,
     doc_count: usize,
-    block: PostingBlockSnapshot,
-    posting_reader: PostingReader<ByteSliceReader<'a>>,
+    building_block_snapshot: PostingBlockSnapshot,
+    posting_reader: PostingReader<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
 }
 
-impl<A: Allocator + Default> BuildingPostingWriter<A> {
+impl<A: Allocator + Clone + Default> BuildingPostingWriter<A> {
     pub fn new(posting_format: PostingFormat, initial_slice_capacity: usize) -> Self {
         Self::new_in(posting_format, initial_slice_capacity, A::default())
     }
 }
 
-impl<A: Allocator> BuildingPostingWriter<A> {
+impl<A: Allocator + Clone> BuildingPostingWriter<A> {
     pub fn new_in(
         posting_format: PostingFormat,
         initial_slice_capacity: usize,
         allocator: A,
     ) -> Self {
         let byte_slice_writer =
-            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator);
+            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
-        let posting_writer = PostingWriter::new(posting_format, byte_slice_writer);
+        let skip_list_format = posting_format.skip_list_format().clone();
+        let skip_list_writer =
+            BuildingSkipListWriter::new_in(skip_list_format, initial_slice_capacity, allocator);
+        let building_skip_list = skip_list_writer.building_skip_list();
+        let posting_writer =
+            PostingWriter::new_with_skip_list(posting_format, byte_slice_writer, skip_list_writer);
 
         Self {
             posting_writer,
             byte_slice_list,
+            building_skip_list,
         }
     }
 
@@ -59,6 +68,7 @@ impl<A: Allocator> BuildingPostingWriter<A> {
             flush_info: self.posting_writer.flush_info().clone(),
             byte_slice_list: self.byte_slice_list.clone(),
             posting_format: self.posting_writer.posting_format().clone(),
+            building_skip_list: self.building_skip_list.clone(),
         }
     }
 
@@ -70,35 +80,43 @@ impl<A: Allocator> BuildingPostingWriter<A> {
         self.posting_writer.end_doc(docid);
     }
 
-    pub fn flush(&mut self) -> io::Result<usize> {
+    pub fn flush(&mut self) -> io::Result<()> {
         self.posting_writer.flush()
     }
 }
 
 impl<'a> BuildingPostingReader<'a> {
-    pub fn open<A: Allocator>(building_posting_data: &'a BuildingPostingList<A>) -> Self {
-        let flush_info = building_posting_data.flush_info.as_ref();
-        let byte_slice_list = building_posting_data.byte_slice_list.as_ref();
-        let building_block = building_posting_data.building_block.as_ref();
-        let posting_format = building_posting_data.posting_format.clone();
+    pub fn open<A: Allocator>(building_posting_list: &'a BuildingPostingList<A>) -> Self {
+        let flush_info = building_posting_list.flush_info.as_ref();
+        let byte_slice_list = building_posting_list.byte_slice_list.as_ref();
+        let building_block = building_posting_list.building_block.as_ref();
+        let posting_format = building_posting_list.posting_format.clone();
         let mut doc_count = flush_info.doc_count();
         let mut byte_slice_reader = ByteSliceReader::open(byte_slice_list);
-        let mut block = building_block.snapshot();
+        let mut building_block_snapshot = building_block.snapshot();
         let doc_count_updated = flush_info.doc_count();
         if doc_count < doc_count_updated {
-            block.clear();
+            building_block_snapshot.clear();
             doc_count = doc_count_updated;
             byte_slice_reader = ByteSliceReader::open(byte_slice_list);
         }
-        let posting_reader = PostingReader::open(doc_count, posting_format, byte_slice_reader);
 
-        doc_count += block.len();
+        let skip_list_reader =
+            BuildingSkipListReader::open(&building_posting_list.building_skip_list);
+        let posting_reader = PostingReader::open_with_skip_list(
+            posting_format,
+            doc_count,
+            byte_slice_reader,
+            skip_list_reader,
+        );
+
+        doc_count += building_block_snapshot.len();
 
         Self {
             last_docid: 0,
             read_count: 0,
             doc_count,
-            block,
+            building_block_snapshot,
             posting_reader,
         }
     }
@@ -121,7 +139,7 @@ impl<'a> BuildingPostingReader<'a> {
             return Ok(());
         }
 
-        self.block.copy_to(posting_block);
+        self.building_block_snapshot.copy_to(posting_block);
         posting_block.decode(self.last_docid);
         self.last_docid = posting_block.last_docid();
         self.read_count += posting_block.len;

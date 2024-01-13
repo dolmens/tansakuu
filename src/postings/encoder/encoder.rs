@@ -1,9 +1,9 @@
-use std::io;
+use std::io::{self, Read, Write};
 
 pub struct PostingEncoder;
 
 impl PostingEncoder {
-    pub fn encode_u32<W: io::Write>(&self, input: &[u32], writer: &mut W) -> io::Result<usize> {
+    pub fn encode_u32<W: Write>(&self, input: &[u32], writer: &mut W) -> io::Result<usize> {
         let mut bytes_written = 0;
         for &v in input {
             let mut to_encode: u32 = v;
@@ -24,16 +24,12 @@ impl PostingEncoder {
         Ok(bytes_written)
     }
 
-    pub fn encode_u8<W: io::Write>(&self, input: &[u8], writer: &mut W) -> io::Result<usize> {
+    pub fn encode_u8<W: Write>(&self, input: &[u8], writer: &mut W) -> io::Result<usize> {
         writer.write_all(input)?;
         Ok(input.len())
     }
 
-    pub fn decode_u32<R: io::Read>(
-        &self,
-        reader: &mut R,
-        output_arr: &mut [u32],
-    ) -> io::Result<usize> {
+    pub fn decode_u32<R: Read>(&self, reader: &mut R, output_arr: &mut [u32]) -> io::Result<usize> {
         let mut num_read_bytes = 0;
         for output_mut in output_arr.iter_mut() {
             let mut result = 0u32;
@@ -56,11 +52,7 @@ impl PostingEncoder {
         Ok(num_read_bytes)
     }
 
-    pub fn decode_u8<R: io::Read>(
-        &self,
-        reader: &mut R,
-        output_arr: &mut [u8],
-    ) -> io::Result<usize> {
+    pub fn decode_u8<R: Read>(&self, reader: &mut R, output_arr: &mut [u8]) -> io::Result<usize> {
         reader.read_exact(output_arr)?;
         Ok(output_arr.len())
     }

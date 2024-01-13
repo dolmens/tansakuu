@@ -1,30 +1,64 @@
-use std::io;
+use std::io::{self, Read};
 
 use crate::{DocId, POSTING_BLOCK_LEN};
 
-use super::{PostingBlock, PostingEncoder, PostingFormat};
+use super::{
+    skiplist::{NoSkipList, SkipListSeek},
+    PostingBlock, PostingEncoder, PostingFormat,
+};
 
-pub struct PostingReader<R: io::Read> {
+pub struct PostingReader<R: Read, S: SkipListSeek = NoSkipList> {
     last_docid: DocId,
     read_count: usize,
     doc_count: usize,
     reader: R,
+    skip_list_reader: S,
     posting_format: PostingFormat,
 }
 
-impl<R: io::Read> PostingReader<R> {
-    pub fn open(doc_count: usize, posting_format: PostingFormat, reader: R) -> Self {
+impl<R: Read> PostingReader<R, NoSkipList> {
+    pub fn open(posting_format: PostingFormat, doc_count: usize, reader: R) -> Self {
         Self {
             last_docid: 0,
             read_count: 0,
             doc_count,
             reader,
+            skip_list_reader: NoSkipList,
+            posting_format,
+        }
+    }
+}
+
+impl<R: Read, S: SkipListSeek> PostingReader<R, S> {
+    pub fn open_with_skip_list(
+        posting_format: PostingFormat,
+        doc_count: usize,
+        reader: R,
+        skip_list_reader: S,
+    ) -> Self {
+        Self {
+            last_docid: 0,
+            read_count: 0,
+            doc_count,
+            reader,
+            skip_list_reader,
             posting_format,
         }
     }
 
     pub fn eof(&self) -> bool {
         self.read_count == self.doc_count
+    }
+
+    pub fn seek_block(
+        &mut self,
+        docid: DocId,
+        posting_block: &mut PostingBlock,
+    ) -> io::Result<bool> {
+        let (offset, skipped_item_count) = self.skip_list_reader.seek(docid)?;
+        if offset > 0 {}
+
+        Ok(false)
     }
 
     pub fn decode_one_block(&mut self, posting_block: &mut PostingBlock) -> io::Result<()> {
@@ -109,7 +143,7 @@ mod tests {
         let buf_reader = BufReader::new(buf.as_slice());
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut block = PostingBlock::new(&posting_format);
-        let mut reader = PostingReader::open(BLOCK_LEN * 2 + 3, posting_format, buf_reader);
+        let mut reader = PostingReader::open(posting_format, BLOCK_LEN * 2 + 3, buf_reader);
         assert!(!reader.eof());
         assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
         assert_eq!(reader.read_count, 0);

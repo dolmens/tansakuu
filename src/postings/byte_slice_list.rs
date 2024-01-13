@@ -197,7 +197,7 @@ impl<A: Allocator> ByteSliceWriter<A> {
     }
 }
 
-impl<A: Allocator> io::Write for ByteSliceWriter<A> {
+impl<A: Allocator> Write for ByteSliceWriter<A> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_slice_is_full() {
             self.add_slice();
@@ -259,31 +259,12 @@ impl<'a> ByteSliceReader<'a> {
         unsafe { ptr::read_unaligned(buf.as_ptr().cast()) }
     }
 
-    pub fn seek(&mut self, offset: usize) {
-        if offset <= self.global_offset {
-            return;
-        }
-        let mut len = offset - self.global_offset;
-        while len > 0 {
-            let current_slice_ref = self.current_slice();
-            if self.current_slice_offset == current_slice_ref.capacity {
-                self.current_slice = current_slice_ref.next_ptr();
-                self.current_slice_offset = 0;
-                continue;
-            }
-            let len0 = std::cmp::min(len, current_slice_ref.capacity - self.current_slice_offset);
-            self.current_slice_offset += len0;
-            self.global_offset += len0;
-            len -= len0;
-        }
-    }
-
     fn current_slice(&self) -> &ByteSlice {
         unsafe { self.current_slice.as_ref() }
     }
 }
 
-impl<'a> io::Read for ByteSliceReader<'a> {
+impl<'a> Read for ByteSliceReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.eof() {
             return Ok(0);
@@ -304,6 +285,36 @@ impl<'a> io::Read for ByteSliceReader<'a> {
         self.global_offset += size;
 
         return Ok(size);
+    }
+}
+
+impl<'a> io::Seek for ByteSliceReader<'a> {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        match pos {
+            io::SeekFrom::Start(offset) => {
+                let offset = offset as usize;
+                if offset > self.global_offset {
+                    let mut len = offset - self.global_offset;
+                    while len > 0 {
+                        let current_slice_ref = self.current_slice();
+                        if self.current_slice_offset == current_slice_ref.capacity {
+                            self.current_slice = current_slice_ref.next_ptr();
+                            self.current_slice_offset = 0;
+                            continue;
+                        }
+                        let len0 = std::cmp::min(
+                            len,
+                            current_slice_ref.capacity - self.current_slice_offset,
+                        );
+                        self.current_slice_offset += len0;
+                        self.global_offset += len0;
+                        len -= len0;
+                    }
+                }
+                Ok(self.global_offset as u64)
+            }
+            _ => unimplemented!(),
+        }
     }
 }
 

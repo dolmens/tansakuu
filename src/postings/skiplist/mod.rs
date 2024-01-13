@@ -7,6 +7,8 @@ mod skip_list_writer;
 pub use building_skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter};
 pub use skip_list_block::SkipListBlock;
 pub use skip_list_format::SkipListFormat;
+pub use skip_list_reader::{NoSkipList, SkipListReader, SkipListSeek};
 pub use skip_list_writer::{
-    BuildingSkipListBlock, SkipListBlockSnapshot, SkipListFlushInfo, SkipListWriter,
+    BuildingSkipListBlock, NoSkipListWriter, SkipListBlockSnapshot, SkipListFlushInfo,
+    SkipListWrite, SkipListWriter,
 };

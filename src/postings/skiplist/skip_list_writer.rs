@@ -1,15 +1,23 @@
-use std::{io, sync::Arc};
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 
 use crate::{
     postings::PostingEncoder,
     util::{AcqRelUsize, RelaxedU32},
-    DocId, TermFreq, INVALID_DOCID, SKIPLIST_BLOCK_LEN,
+    SKIPLIST_BLOCK_LEN,
 };
 
-use super::{SkipListBlock, SkipListFormat};
+use super::SkipListFormat;
 
-pub struct SkipListWriter<W: io::Write> {
-    last_docid: DocId,
+pub trait SkipListWrite {
+    fn add_skip_item(&mut self, key: u32, offset: u32, value: Option<u32>) -> io::Result<()>;
+    fn flush(&mut self) -> io::Result<()>;
+}
+
+pub struct SkipListWriter<W: Write> {
+    last_key: u32,
     block_len: usize,
     building_block: Arc<BuildingSkipListBlock>,
     item_count_flushed: usize,
@@ -20,29 +28,29 @@ pub struct SkipListWriter<W: io::Write> {
 
 pub struct BuildingSkipListBlock {
     len: AcqRelUsize,
-    docids: [RelaxedU32; SKIPLIST_BLOCK_LEN],
+    keys: [RelaxedU32; SKIPLIST_BLOCK_LEN],
     offsets: [RelaxedU32; SKIPLIST_BLOCK_LEN],
-    termfreqs: Option<Box<[RelaxedU32]>>,
+    values: Option<Box<[RelaxedU32]>>,
 }
 
 pub struct SkipListBlockSnapshot {
     len: usize,
-    docids: Box<[DocId]>,
-    offsets: Box<[u32]>,
-    termfreqs: Option<Box<[TermFreq]>>,
+    pub keys: Box<[u32]>,
+    pub offsets: Box<[u32]>,
+    pub values: Option<Box<[u32]>>,
 }
 
 pub struct SkipListFlushInfo {
     item_count: AcqRelUsize,
 }
 
-impl<W: io::Write> SkipListWriter<W> {
+impl<W: Write> SkipListWriter<W> {
     pub fn new(skip_list_format: SkipListFormat, writer: W) -> Self {
         let building_block = Arc::new(BuildingSkipListBlock::new(&skip_list_format));
         let flush_info = Arc::new(SkipListFlushInfo::new());
 
         Self {
-            last_docid: INVALID_DOCID,
+            last_key: u32::MAX,
             block_len: 0,
             building_block,
             item_count_flushed: 0,
@@ -60,18 +68,19 @@ impl<W: io::Write> SkipListWriter<W> {
         &self.flush_info
     }
 
-    pub fn add_skip_item(
-        &mut self,
-        last_docid: DocId,
-        offset: u32,
-        tf: Option<TermFreq>,
-    ) -> io::Result<()> {
-        if self.last_docid == INVALID_DOCID {
-            self.last_docid = 0;
+    pub fn skip_list_format(&self) -> &SkipListFormat {
+        &self.skip_list_format
+    }
+}
+
+impl<W: Write> SkipListWrite for SkipListWriter<W> {
+    fn add_skip_item(&mut self, key: u32, offset: u32, value: Option<u32>) -> io::Result<()> {
+        if self.last_key == u32::MAX {
+            self.last_key = 0;
         }
-        assert!(last_docid > self.last_docid);
+        assert!(key > self.last_key);
         let building_block = self.building_block.as_ref();
-        building_block.add_skip_item(last_docid - self.last_docid, offset, self.block_len, tf);
+        building_block.add_skip_item(key - self.last_key, offset, self.block_len, value);
 
         self.block_len += 1;
         building_block.len.store(self.block_len);
@@ -79,33 +88,32 @@ impl<W: io::Write> SkipListWriter<W> {
             self.flush()?;
         }
 
-        self.last_docid = last_docid;
+        self.last_key = key;
 
         Ok(())
     }
 
-    fn flush(&mut self) -> io::Result<usize> {
+    fn flush(&mut self) -> io::Result<()> {
         if self.block_len > 0 {
             let building_block = &self.building_block.as_ref();
             let posting_encoder = PostingEncoder;
-            let mut flushed_size = 0;
-            let docids = building_block.docids[0..self.block_len]
+            let keys = building_block.keys[0..self.block_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            flushed_size += posting_encoder.encode_u32(&docids, &mut self.writer)?;
+            posting_encoder.encode_u32(&keys, &mut self.writer)?;
             let offsets = building_block.offsets[0..self.block_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            flushed_size += posting_encoder.encode_u32(&offsets, &mut self.writer)?;
-            if self.skip_list_format.has_tflist() {
-                if let Some(termfreqs_atomics) = &building_block.termfreqs {
-                    let termfreqs = termfreqs_atomics[0..self.block_len]
+            posting_encoder.encode_u32(&offsets, &mut self.writer)?;
+            if self.skip_list_format.has_value() {
+                if let Some(value_atomics) = &building_block.values {
+                    let values = value_atomics[0..self.block_len]
                         .iter()
                         .map(|a| a.load())
                         .collect::<Vec<_>>();
-                    flushed_size += posting_encoder.encode_u32(&termfreqs, &mut self.writer)?;
+                    posting_encoder.encode_u32(&values, &mut self.writer)?;
                 }
             }
 
@@ -114,17 +122,27 @@ impl<W: io::Write> SkipListWriter<W> {
 
             building_block.clear();
             self.block_len = 0;
-
-            Ok(flushed_size)
-        } else {
-            Ok(0)
         }
+
+        Ok(())
+    }
+}
+
+pub struct NoSkipListWriter;
+
+impl SkipListWrite for NoSkipListWriter {
+    fn add_skip_item(&mut self, _key: u32, _offset: u32, _value: Option<u32>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
 impl BuildingSkipListBlock {
     pub fn new(skip_list_format: &SkipListFormat) -> Self {
-        let docids = std::iter::repeat_with(|| RelaxedU32::new(0))
+        let keys = std::iter::repeat_with(|| RelaxedU32::new(0))
             .take(SKIPLIST_BLOCK_LEN)
             .collect::<Vec<_>>()
             .try_into()
@@ -136,7 +154,7 @@ impl BuildingSkipListBlock {
             .try_into()
             .ok()
             .unwrap();
-        let termfreqs = if skip_list_format.has_tflist() {
+        let values = if skip_list_format.has_value() {
             Some(
                 std::iter::repeat_with(|| RelaxedU32::new(0))
                     .take(SKIPLIST_BLOCK_LEN)
@@ -149,32 +167,29 @@ impl BuildingSkipListBlock {
 
         Self {
             len: AcqRelUsize::new(0),
-            docids,
+            keys,
             offsets,
-            termfreqs,
+            values,
         }
     }
 
     pub fn snapshot(&self) -> SkipListBlockSnapshot {
         let len = self.len();
-        let docids = self.docids[0..len]
-            .iter()
-            .map(|docid| docid.load())
-            .collect();
+        let keys = self.keys[0..len].iter().map(|k| k.load()).collect();
         let offsets = self.offsets[0..len]
             .iter()
             .map(|offset| offset.load())
             .collect();
-        let termfreqs = self
-            .termfreqs
+        let values = self
+            .values
             .as_ref()
-            .map(|termfreqs| termfreqs[0..len].iter().map(|tf| tf.load()).collect());
+            .map(|values| values[0..len].iter().map(|v| v.load()).collect());
 
         SkipListBlockSnapshot {
             len,
-            docids,
+            keys,
             offsets,
-            termfreqs,
+            values,
         }
     }
 
@@ -186,11 +201,11 @@ impl BuildingSkipListBlock {
         self.len.store(0);
     }
 
-    fn add_skip_item(&self, last_docid: DocId, offset: u32, index: usize, tf: Option<TermFreq>) {
-        self.docids[index].store(last_docid);
+    fn add_skip_item(&self, key: u32, offset: u32, index: usize, value: Option<u32>) {
+        self.keys[index].store(key);
         self.offsets[index].store(offset);
-        if let Some(termfreqs) = self.termfreqs.as_deref() {
-            termfreqs[index].store(tf.unwrap_or_default());
+        if let Some(values) = self.values.as_deref() {
+            values[index].store(value.unwrap_or_default());
         }
     }
 }
@@ -202,26 +217,6 @@ impl SkipListBlockSnapshot {
 
     pub fn clear(&mut self) {
         self.len = 0;
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    pub fn copy_to(&self, skip_list_block: &mut SkipListBlock) {
-        let len = self.len;
-        skip_list_block.len = len;
-        if len > 0 {
-            skip_list_block.docids[0..len].copy_from_slice(&self.docids[0..len]);
-            skip_list_block.offsets[0..len].copy_from_slice(&self.offsets[0..len]);
-            if let Some(termfreqs) = skip_list_block.termfreqs.as_deref_mut() {
-                if let Some(mytermfreqs) = self.termfreqs.as_deref() {
-                    termfreqs[0..len].copy_from_slice(&mytermfreqs[0..len]);
-                } else {
-                    termfreqs[0..len].iter_mut().for_each(|tf| *tf = 0);
-                }
-            }
-        }
     }
 }
 
@@ -243,10 +238,10 @@ mod tests {
 
     use crate::{
         postings::{
-            skiplist::{SkipListFormat, SkipListWriter},
+            skiplist::{SkipListFormat, SkipListWrite, SkipListWriter},
             PostingEncoder,
         },
-        DocId, SKIPLIST_BLOCK_LEN,
+        SKIPLIST_BLOCK_LEN,
     };
 
     #[test]
@@ -258,13 +253,13 @@ mod tests {
         let building_block = skip_list_writer.building_block().clone();
         let flush_info = skip_list_writer.flush_info().clone();
 
-        let docids: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+        let keys: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| ((i + 1) * 1000 + i % 8) as DocId)
+            .map(|(i, _)| ((i + 1) * 1000 + i % 8) as u32)
             .collect();
-        let docids = &docids[..];
-        let docids_encoded: Vec<_> = std::iter::once(docids[0])
-            .chain(docids.windows(2).map(|pair| pair[1] - pair[0]))
+        let keys = &keys[..];
+        let keys_encoded: Vec<_> = std::iter::once(keys[0])
+            .chain(keys.windows(2).map(|pair| pair[1] - pair[0]))
             .collect();
         let offsets: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
@@ -273,7 +268,7 @@ mod tests {
         let offsets = &offsets[..];
 
         for i in 0..BLOCK_LEN * 2 + 3 {
-            skip_list_writer.add_skip_item(docids[i], offsets[i], None)?;
+            skip_list_writer.add_skip_item(keys[i], offsets[i], None)?;
         }
 
         assert_eq!(building_block.len(), 3);
@@ -285,25 +280,25 @@ mod tests {
         assert_eq!(flush_info.item_count(), BLOCK_LEN * 2 + 3);
 
         let posting_encoder = PostingEncoder;
-        let mut decoded_docids = [0; BLOCK_LEN];
+        let mut decoded_keys = [0; BLOCK_LEN];
         let mut decoded_offsets = [0; BLOCK_LEN];
 
         let mut reader = BufReader::new(buf.as_slice());
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
-        assert_eq!(&docids_encoded[0..BLOCK_LEN], decoded_docids);
+        posting_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
+        assert_eq!(&keys_encoded[0..BLOCK_LEN], decoded_keys);
         posting_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
         assert_eq!(&offsets[0..BLOCK_LEN], decoded_offsets);
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
-        assert_eq!(&docids_encoded[BLOCK_LEN..BLOCK_LEN * 2], decoded_docids);
+        posting_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
+        assert_eq!(&keys_encoded[BLOCK_LEN..BLOCK_LEN * 2], decoded_keys);
         posting_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
         assert_eq!(&offsets[BLOCK_LEN..BLOCK_LEN * 2], decoded_offsets);
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_docids[0..3])?;
+        posting_encoder.decode_u32(&mut reader, &mut decoded_keys[0..3])?;
         assert_eq!(
-            &docids_encoded[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
-            &decoded_docids[0..3]
+            &keys_encoded[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
+            &decoded_keys[0..3]
         );
         posting_encoder.decode_u32(&mut reader, &mut decoded_offsets[0..3])?;
         assert_eq!(

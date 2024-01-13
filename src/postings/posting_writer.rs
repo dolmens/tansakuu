@@ -1,13 +1,19 @@
-use std::{io, sync::Arc};
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 
 use crate::{
     util::{AcqRelUsize, RelaxedU32, RelaxedU8},
     DocId, FieldMask, TermFreq, INVALID_DOCID, POSTING_BLOCK_LEN,
 };
 
-use super::{PostingBlock, PostingEncoder, PostingFormat};
+use super::{
+    skiplist::{NoSkipListWriter, SkipListWrite},
+    PostingBlock, PostingEncoder, PostingFormat,
+};
 
-pub struct PostingWriter<W: io::Write> {
+pub struct PostingWriter<W: Write, S: SkipListWrite = NoSkipListWriter> {
     last_docid: DocId,
     current_tf: TermFreq,
     total_tf: TermFreq,
@@ -17,6 +23,7 @@ pub struct PostingWriter<W: io::Write> {
     doc_count_flushed: usize,
     flush_info: Arc<FlushInfo>,
     writer: W,
+    skip_list_writer: S,
     posting_format: PostingFormat,
 }
 
@@ -38,8 +45,18 @@ pub struct FlushInfo {
     doc_count: AcqRelUsize,
 }
 
-impl<W: io::Write> PostingWriter<W> {
+impl<W: Write> PostingWriter<W, NoSkipListWriter> {
     pub fn new(posting_format: PostingFormat, writer: W) -> Self {
+        Self::new_with_skip_list(posting_format, writer, NoSkipListWriter)
+    }
+}
+
+impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
+    pub fn new_with_skip_list(
+        posting_format: PostingFormat,
+        writer: W,
+        skip_list_writer: S,
+    ) -> Self {
         let building_block = Arc::new(BuildingPostingBlock::new(&posting_format));
         let flush_info = Arc::new(FlushInfo::new());
 
@@ -53,6 +70,7 @@ impl<W: io::Write> PostingWriter<W> {
             doc_count_flushed: 0,
             flush_info,
             writer,
+            skip_list_writer,
             posting_format,
         }
     }
@@ -96,7 +114,7 @@ impl<W: io::Write> PostingWriter<W> {
         }
     }
 
-    pub fn flush(&mut self) -> io::Result<usize> {
+    pub fn flush(&mut self) -> io::Result<()> {
         if self.block_len > 0 {
             let building_block = self.building_block.as_ref();
             let posting_encoder = PostingEncoder;
@@ -128,16 +146,16 @@ impl<W: io::Write> PostingWriter<W> {
             self.doc_count_flushed += self.block_len;
             self.flush_info.doc_count.store(self.doc_count_flushed);
 
-            // self.skip_list_writer
-            //     .add_skip_item(self.last_docid, flushed_size, None);
+            if self.block_len == POSTING_BLOCK_LEN {
+                self.skip_list_writer
+                    .add_skip_item(self.last_docid, flushed_size as u32, None)?;
+            }
 
             building_block.clear();
             self.block_len = 0;
-
-            Ok(flushed_size)
-        } else {
-            Ok(0)
         }
+
+        Ok(())
     }
 }
 

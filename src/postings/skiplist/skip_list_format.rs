@@ -1,21 +1,21 @@
 #[derive(Default, Clone)]
 pub struct SkipListFormat {
-    has_tflist: bool,
+    has_value: bool,
 }
 
 #[derive(Default)]
 pub struct SkipListFormatBuilder {
-    has_tflist: bool,
+    has_value: bool,
 }
 
 impl SkipListFormatBuilder {
-    pub fn with_tflist(self) -> Self {
-        Self { has_tflist: true }
+    pub fn with_value(self) -> Self {
+        Self { has_value: true }
     }
 
     pub fn build(self) -> SkipListFormat {
         SkipListFormat {
-            has_tflist: self.has_tflist,
+            has_value: self.has_value,
         }
     }
 }
@@ -25,7 +25,7 @@ impl SkipListFormat {
         SkipListFormatBuilder::default()
     }
 
-    pub fn has_tflist(&self) -> bool {
-        self.has_tflist
+    pub fn has_value(&self) -> bool {
+        self.has_value
     }
 }
