@@ -30,7 +30,7 @@ impl<R: io::Read> SkipListReader<R> {
     }
 
     pub fn eof(&self) -> bool {
-        self.read_count == self.item_count
+        self.read_count == self.item_count && self.current_cursor >= self.skip_list_block.len
     }
 
     // return (offset, skipped_item_count)
@@ -91,10 +91,7 @@ mod tests {
 
     use crate::{
         postings::{
-            skiplist::{
-                skip_list_reader::{self, SkipListReader},
-                SkipListFormat,
-            },
+            skiplist::{skip_list_reader::SkipListReader, SkipListFormat},
             PostingEncoder,
         },
         DocId, SKIPLIST_BLOCK_LEN,
@@ -112,7 +109,7 @@ mod tests {
         let docids = &docids[..];
         let offsets: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| ((i + 1) * 100 + i % 8) as u32)
+            .map(|(i, _)| (100 + i % 8) as u32)
             .collect();
         let offsets = &offsets[..];
         let docids_encoded: Vec<_> = std::iter::once(docids[0])
@@ -137,6 +134,20 @@ mod tests {
             .encode_u32(&offsets[0..BLOCK_LEN], &mut buf)
             .unwrap();
 
+        posting_encoder
+            .encode_u32(&docids_encoded[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
+            .unwrap();
+        posting_encoder
+            .encode_u32(&offsets[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
+            .unwrap();
+
+        posting_encoder
+            .encode_u32(&docids_encoded[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
+            .unwrap();
+        posting_encoder
+            .encode_u32(&offsets[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
+            .unwrap();
+
         let buf_reader = BufReader::new(buf.as_slice());
         let mut reader = SkipListReader::open(BLOCK_LEN * 2 + 3, skip_list_format, buf_reader);
         assert!(!reader.eof());
@@ -159,9 +170,17 @@ mod tests {
         assert_eq!(offset, total_offsets[3]);
         assert_eq!(skipped_item_count, 3);
 
-        let (offset, skipped_item_count) = reader.seek(docids.last().cloned().unwrap())?;
-        assert_eq!(offset, total_offsets.last().cloned().unwrap());
-        assert_eq!(skipped_item_count, 3);
+        let (offset, skipped_item_count) = reader.seek(docids[BLOCK_LEN * 2 + 3 - 1])?;
+        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 2]);
+        assert_eq!(skipped_item_count, BLOCK_LEN * 2 + 2 - 4);
+
+        let (offset, skipped_item_count) = reader.seek(docids[BLOCK_LEN * 2 + 3 - 1] + 1)?;
+        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 1]);
+        assert_eq!(skipped_item_count, 1);
+
+        let (offset, skipped_item_count) = reader.seek(docids[BLOCK_LEN * 2 + 3 - 1] + 2)?;
+        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 1]);
+        assert_eq!(skipped_item_count, 0);
 
         Ok(())
     }
