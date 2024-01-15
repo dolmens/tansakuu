@@ -5,14 +5,15 @@ use crate::{postings::PostingEncoder, SKIPLIST_BLOCK_LEN};
 use super::{SkipListBlock, SkipListFormat};
 
 pub trait SkipListSeek {
-    // return (offset, skipped_item_count)
-    fn seek(&mut self, key: u32) -> io::Result<(usize, usize)>;
+    // return (offset, last_key, skip_count)
+    fn seek(&mut self, key: u32) -> io::Result<(usize, u32, usize)>;
 }
 
 pub struct SkipListReader<R: Read> {
+    skip_count: usize,
     read_count: usize,
     item_count: usize,
-    current_key: u32,
+    last_key: u32,
     current_offset: usize,
     current_cursor: usize,
     skip_list_block: SkipListBlock,
@@ -23,9 +24,10 @@ pub struct SkipListReader<R: Read> {
 impl<R: Read> SkipListReader<R> {
     pub fn open(skip_list_format: SkipListFormat, item_count: usize, reader: R) -> Self {
         Self {
+            skip_count: 0,
             read_count: 0,
             item_count,
-            current_key: 0,
+            last_key: 0,
             current_offset: 0,
             current_cursor: 0,
             skip_list_block: SkipListBlock::new(&skip_list_format),
@@ -36,10 +38,6 @@ impl<R: Read> SkipListReader<R> {
 
     pub fn eof(&self) -> bool {
         self.read_count == self.item_count && self.current_cursor >= self.skip_list_block.len
-    }
-
-    pub fn current_key(&self) -> u32 {
-        self.current_key
     }
 
     fn decode_one_block(&mut self) -> io::Result<()> {
@@ -68,37 +66,36 @@ impl<R: Read> SkipListReader<R> {
 }
 
 impl<R: Read> SkipListSeek for SkipListReader<R> {
-    fn seek(&mut self, key: u32) -> io::Result<(usize, usize)> {
+    fn seek(&mut self, key: u32) -> io::Result<(usize, u32, usize)> {
         if self.eof() {
-            return Ok((self.current_offset, 0));
+            return Ok((self.current_offset, self.last_key, self.skip_count));
         }
 
-        let mut skipped_item_count = 0;
         loop {
-            if self.current_cursor >= self.skip_list_block.len {
+            if self.current_cursor == self.skip_list_block.len {
                 self.decode_one_block()?;
                 if self.skip_list_block.len == 0 {
                     break;
                 }
             }
-            if self.current_key + self.skip_list_block.keys[self.current_cursor] >= key {
+            if self.last_key + self.skip_list_block.keys[self.current_cursor] >= key {
                 break;
             }
-            self.current_key += self.skip_list_block.keys[self.current_cursor];
+            self.last_key += self.skip_list_block.keys[self.current_cursor];
             self.current_offset += self.skip_list_block.offsets[self.current_cursor] as usize;
             self.current_cursor += 1;
-            skipped_item_count += 1;
+            self.skip_count += 1;
         }
 
-        Ok((self.current_offset, skipped_item_count))
+        Ok((self.current_offset, self.last_key, self.skip_count))
     }
 }
 
 pub struct NoSkipList;
 
 impl SkipListSeek for NoSkipList {
-    fn seek(&mut self, _key: u32) -> io::Result<(usize, usize)> {
-        Ok((0, 0))
+    fn seek(&mut self, _key: u32) -> io::Result<(usize, u32, usize)> {
+        Ok((0, 0, 0))
     }
 }
 
@@ -168,41 +165,41 @@ mod tests {
             .unwrap();
 
         let buf_reader = BufReader::new(buf.as_slice());
-        let mut reader = SkipListReader::open(skip_list_format, BLOCK_LEN * 2 + 3, buf_reader);
+        let mut reader =
+            SkipListReader::open(skip_list_format.clone(), BLOCK_LEN * 2 + 3, buf_reader);
         assert!(!reader.eof());
         assert_eq!(reader.item_count, BLOCK_LEN * 2 + 3);
         assert_eq!(reader.read_count, 0);
 
-        let (offset, skipped_item_count) = reader.seek(0)?;
+        let (offset, last_key, skipped) = reader.seek(0)?;
         assert_eq!(offset, 0);
-        assert_eq!(skipped_item_count, 0);
+        assert_eq!(last_key, 0);
+        assert_eq!(skipped, 0);
 
-        let (offset, skipped_item_count) = reader.seek(keys[0])?;
-        assert_eq!(offset, 0);
-        assert_eq!(skipped_item_count, 0);
+        for (i, &key) in keys.iter().enumerate().skip(1) {
+            let (offset, last_key, skipped) = reader.seek(key)?;
+            assert_eq!(offset, total_offsets[i - 1]);
+            assert_eq!(last_key, keys[i - 1]);
+            assert_eq!(skipped, i);
+        }
 
-        let (offset, skipped_item_count) = reader.seek(keys[1])?;
-        assert_eq!(offset, total_offsets[0]);
-        assert_eq!(skipped_item_count, 1);
+        let (offset, last_key, skipped) = reader.seek(keys.last().cloned().unwrap() + 1)?;
+        assert_eq!(offset, total_offsets.last().cloned().unwrap());
+        assert_eq!(last_key, keys.last().cloned().unwrap());
+        assert_eq!(skipped, BLOCK_LEN * 2 + 3);
 
-        let (offset, skipped_item_count) = reader.seek(keys[4])?;
-        assert_eq!(offset, total_offsets[3]);
-        assert_eq!(skipped_item_count, 3);
+        let (offset, last_key, skipped) = reader.seek(keys.last().cloned().unwrap() + 2)?;
+        assert_eq!(offset, total_offsets.last().cloned().unwrap());
+        assert_eq!(last_key, keys.last().cloned().unwrap());
+        assert_eq!(skipped, BLOCK_LEN * 2 + 3);
 
-        let (offset, skipped_item_count) = reader.seek(keys[BLOCK_LEN * 2 + 3 - 1])?;
-        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 2]);
-        assert_eq!(skipped_item_count, BLOCK_LEN * 2 + 2 - 4);
-        assert_eq!(reader.current_key(), keys[BLOCK_LEN * 2 + 3 - 2]);
-
-        let (offset, skipped_item_count) = reader.seek(keys[BLOCK_LEN * 2 + 3 - 1] + 1)?;
-        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 1]);
-        assert_eq!(skipped_item_count, 1);
-        assert_eq!(reader.current_key(), keys[BLOCK_LEN * 2 + 3 - 1]);
-
-        let (offset, skipped_item_count) = reader.seek(keys[BLOCK_LEN * 2 + 3 - 1] + 2)?;
-        assert_eq!(offset, total_offsets[BLOCK_LEN * 2 + 3 - 1]);
-        assert_eq!(skipped_item_count, 0);
-        assert_eq!(reader.current_key(), keys[BLOCK_LEN * 2 + 3 - 1]);
+        let buf_reader = BufReader::new(buf.as_slice());
+        let mut reader =
+            SkipListReader::open(skip_list_format.clone(), BLOCK_LEN * 2 + 3, buf_reader);
+        let (offset, last_key, skipped) = reader.seek(keys.last().cloned().unwrap())?;
+        assert_eq!(offset, total_offsets.iter().rev().nth(1).cloned().unwrap());
+        assert_eq!(last_key, keys.iter().rev().nth(1).cloned().unwrap());
+        assert_eq!(skipped, total_offsets.len() - 1);
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::{DocId, POSTING_BLOCK_LEN};
 
@@ -7,7 +7,8 @@ use super::{
     PostingBlock, PostingEncoder, PostingFormat,
 };
 
-pub struct PostingReader<R: Read, S: SkipListSeek = NoSkipList> {
+pub struct PostingReader<R: Read + Seek, S: SkipListSeek = NoSkipList> {
+    current_seek: usize,
     last_docid: DocId,
     read_count: usize,
     doc_count: usize,
@@ -16,9 +17,10 @@ pub struct PostingReader<R: Read, S: SkipListSeek = NoSkipList> {
     posting_format: PostingFormat,
 }
 
-impl<R: Read> PostingReader<R, NoSkipList> {
+impl<R: Read + Seek> PostingReader<R, NoSkipList> {
     pub fn open(posting_format: PostingFormat, doc_count: usize, reader: R) -> Self {
         Self {
+            current_seek: 0,
             last_docid: 0,
             read_count: 0,
             doc_count,
@@ -29,7 +31,7 @@ impl<R: Read> PostingReader<R, NoSkipList> {
     }
 }
 
-impl<R: Read, S: SkipListSeek> PostingReader<R, S> {
+impl<R: Read + Seek, S: SkipListSeek> PostingReader<R, S> {
     pub fn open_with_skip_list(
         posting_format: PostingFormat,
         doc_count: usize,
@@ -37,6 +39,7 @@ impl<R: Read, S: SkipListSeek> PostingReader<R, S> {
         skip_list_reader: S,
     ) -> Self {
         Self {
+            current_seek: 0,
             last_docid: 0,
             read_count: 0,
             doc_count,
@@ -50,15 +53,38 @@ impl<R: Read, S: SkipListSeek> PostingReader<R, S> {
         self.read_count == self.doc_count
     }
 
-    pub fn seek_block(
-        &mut self,
-        docid: DocId,
-        posting_block: &mut PostingBlock,
-    ) -> io::Result<bool> {
-        let (offset, skipped_item_count) = self.skip_list_reader.seek(docid)?;
-        if offset > 0 {}
+    pub fn doc_count(&self) -> usize {
+        self.doc_count
+    }
 
-        Ok(false)
+    pub fn read_count(&self) -> usize {
+        self.read_count
+    }
+
+    pub fn last_docid(&self) -> DocId {
+        self.last_docid
+    }
+
+    pub fn seek(&mut self, docid: DocId, posting_block: &mut PostingBlock) -> io::Result<bool> {
+        if self.eof() {
+            return Ok(false);
+        }
+        let (offset, last_docid, skip_count) = self.skip_list_reader.seek(docid)?;
+        if offset > self.current_seek {
+            self.reader.seek(SeekFrom::Start(offset as u64))?;
+            self.current_seek = offset;
+            self.last_docid = last_docid;
+            self.read_count = skip_count * POSTING_BLOCK_LEN;
+        }
+        loop {
+            self.decode_one_block(posting_block)?;
+            if posting_block.len == 0 {
+                return Ok(false);
+            }
+            if posting_block.last_docid() >= docid {
+                return Ok(true);
+            }
+        }
     }
 
     pub fn decode_one_block(&mut self, posting_block: &mut PostingBlock) -> io::Result<()> {
@@ -95,12 +121,12 @@ impl<R: Read, S: SkipListSeek> PostingReader<R, S> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{self, BufReader};
-
-    use posting_block::PostingBlock;
+    use std::io::{self, BufReader, Cursor};
 
     use crate::{
-        postings::{posting_block, PostingEncoder, PostingFormat, PostingReader},
+        postings::{
+            skiplist::SkipListReader, PostingBlock, PostingEncoder, PostingFormat, PostingReader,
+        },
         DocId, TermFreq, POSTING_BLOCK_LEN,
     };
 
@@ -140,7 +166,7 @@ mod tests {
             .encode_u32(&termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
 
-        let buf_reader = BufReader::new(buf.as_slice());
+        let buf_reader = Cursor::new(buf.as_slice());
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut block = PostingBlock::new(&posting_format);
         let mut reader = PostingReader::open(posting_format, BLOCK_LEN * 2 + 3, buf_reader);
@@ -189,6 +215,229 @@ mod tests {
         assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
         assert_eq!(reader.read_count, BLOCK_LEN * 2 + 3);
         assert_eq!(block.len, 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_seek() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let block_count = 5;
+        assert!(block_count >= 4);
+        let docids: Vec<_> = (0..BLOCK_LEN * block_count + 3)
+            .enumerate()
+            .map(|(i, _)| (i * 10) as DocId)
+            .collect();
+        let docids_encoded: Vec<_> = std::iter::once(docids[0])
+            .chain(docids.windows(2).map(|pair| pair[1] - pair[0]))
+            .collect();
+
+        let mut buf = vec![];
+        let mut skip_buf = vec![];
+
+        let mut flushed_sizes = vec![];
+
+        let posting_encoder = PostingEncoder;
+
+        for i in 0..block_count {
+            let flushed_size = posting_encoder
+                .encode_u32(
+                    &docids_encoded[i * BLOCK_LEN..(i + 1) * BLOCK_LEN],
+                    &mut buf,
+                )
+                .unwrap();
+            flushed_sizes.push(flushed_size as u32);
+        }
+
+        posting_encoder
+            .encode_u32(
+                &docids_encoded[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3],
+                &mut buf,
+            )
+            .unwrap();
+
+        posting_encoder.encode_u32(&flushed_sizes[..], &mut skip_buf)?;
+
+        let posting_format = PostingFormat::builder().build();
+        let mut block = PostingBlock::new(&posting_format);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+        );
+
+        for i in 0..block_count {
+            let block_last_id = (((i + 1) * BLOCK_LEN - 1) * 10) as DocId;
+            assert!(reader.seek(block_last_id, &mut block)?);
+            assert_eq!(block.len, BLOCK_LEN);
+            assert_eq!(block.docids, &docids[i * BLOCK_LEN..(i + 1) * BLOCK_LEN]);
+        }
+
+        assert!(reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
+
+        // eof
+        assert!(!reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+        );
+
+        assert!(reader.seek(((3 * BLOCK_LEN - 1) * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, BLOCK_LEN);
+        assert_eq!(block.docids, &docids[2 * BLOCK_LEN..(2 + 1) * BLOCK_LEN]);
+
+        assert!(reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+        );
+
+        assert!(reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_block_with_skip_list() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let block_count = 5;
+        assert!(block_count >= 4);
+        let docids: Vec<_> = (0..BLOCK_LEN * block_count + 3)
+            .enumerate()
+            .map(|(i, _)| (i * 10) as DocId)
+            .collect();
+        let docids_encoded: Vec<_> = std::iter::once(docids[0])
+            .chain(docids.windows(2).map(|pair| pair[1] - pair[0]))
+            .collect();
+
+        let mut buf = vec![];
+        let mut skip_buf = vec![];
+
+        let mut end_docids = vec![];
+        let mut flushed_sizes = vec![];
+
+        let posting_encoder = PostingEncoder;
+
+        for i in 0..block_count {
+            end_docids.push(docids[(i + 1) * BLOCK_LEN - 1]);
+            let flushed_size = posting_encoder
+                .encode_u32(
+                    &docids_encoded[i * BLOCK_LEN..(i + 1) * BLOCK_LEN],
+                    &mut buf,
+                )
+                .unwrap();
+            flushed_sizes.push(flushed_size as u32);
+        }
+
+        posting_encoder
+            .encode_u32(
+                &docids_encoded[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3],
+                &mut buf,
+            )
+            .unwrap();
+
+        let end_docids_encoded: Vec<_> = std::iter::once(end_docids[0])
+            .chain(end_docids.windows(2).map(|pair| pair[1] - pair[0]))
+            .collect();
+
+        posting_encoder.encode_u32(&end_docids_encoded[..], &mut skip_buf)?;
+        posting_encoder.encode_u32(&flushed_sizes[..], &mut skip_buf)?;
+
+        let posting_format = PostingFormat::builder().build();
+        let mut block = PostingBlock::new(&posting_format);
+
+        let skip_list_format = posting_format.skip_list_format().clone();
+
+        let skip_buf_reader = BufReader::new(skip_buf.as_slice());
+        let skip_list_reader =
+            SkipListReader::open(skip_list_format.clone(), block_count, skip_buf_reader);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open_with_skip_list(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        for i in 0..block_count {
+            let block_last_id = end_docids[i];
+            assert!(reader.seek(block_last_id, &mut block)?);
+            assert_eq!(block.len, BLOCK_LEN);
+            assert_eq!(block.docids, &docids[i * BLOCK_LEN..(i + 1) * BLOCK_LEN]);
+        }
+
+        assert!(reader.seek(end_docids[block_count - 1] + 1, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
+
+        let skip_buf_reader = BufReader::new(skip_buf.as_slice());
+        let skip_list_reader =
+            SkipListReader::open(skip_list_format.clone(), block_count, skip_buf_reader);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open_with_skip_list(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(reader.seek(((3 * BLOCK_LEN - 1) * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, BLOCK_LEN);
+        assert_eq!(block.docids, &docids[2 * BLOCK_LEN..(2 + 1) * BLOCK_LEN]);
+
+        assert!(reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
+
+        let skip_buf_reader = BufReader::new(skip_buf.as_slice());
+        let skip_list_reader =
+            SkipListReader::open(skip_list_format.clone(), block_count, skip_buf_reader);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let mut reader = PostingReader::open_with_skip_list(
+            posting_format.clone(),
+            BLOCK_LEN * block_count + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(reader.seek((block_count * BLOCK_LEN * 10) as DocId, &mut block)?);
+        assert_eq!(block.len, 3);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * block_count..BLOCK_LEN * block_count + 3]
+        );
 
         Ok(())
     }

@@ -23,6 +23,7 @@ pub struct BuildingSkipListWriter<A: Allocator = Global> {
 }
 
 pub struct BuildingSkipListReader<'a> {
+    skip_count: usize,
     current_key: u32,
     current_offset: usize,
     current_cursor: usize,
@@ -93,6 +94,7 @@ impl<'a> BuildingSkipListReader<'a> {
             SkipListReader::open(skip_list_format, item_count, byte_slice_reader);
 
         Self {
+            skip_count: 0,
             current_key: 0,
             current_offset: 0,
             current_cursor: 0,
@@ -122,16 +124,15 @@ impl<'a> BuildingSkipListReader<'a> {
 }
 
 impl<'a> SkipListSeek for BuildingSkipListReader<'a> {
-    fn seek(&mut self, key: u32) -> io::Result<(usize, usize)> {
-        let mut skipped_item_count = 0;
+    fn seek(&mut self, key: u32) -> io::Result<(usize, u32, usize)> {
         if !self.skip_list_reader.eof() {
-            let (offset, skipped) = self.skip_list_reader.seek(key)?;
+            let (offset, current_key, skip_count) = self.skip_list_reader.seek(key)?;
             if !self.skip_list_reader.eof() {
-                return Ok((offset, skipped));
+                return Ok((offset, current_key, skip_count));
             }
+            self.skip_count = skip_count;
             self.current_offset = offset;
-            self.current_key = self.skip_list_reader.current_key();
-            skipped_item_count = skipped;
+            self.current_key = current_key;
         }
         while self.current_cursor < self.building_block_snapshot.len()
             && self.current_key + self.building_block_snapshot.keys[self.current_cursor] < key
@@ -140,10 +141,10 @@ impl<'a> SkipListSeek for BuildingSkipListReader<'a> {
             self.current_offset +=
                 self.building_block_snapshot.offsets[self.current_cursor] as usize;
             self.current_cursor += 1;
-            skipped_item_count += 1;
+            self.skip_count += 1;
         }
 
-        Ok((self.current_offset, skipped_item_count))
+        Ok((self.current_offset, self.current_key, self.skip_count))
     }
 }
 
@@ -168,26 +169,31 @@ mod tests {
         let building_skip_list = skip_list_writer.building_skip_list();
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 0);
-        let (offset, skipped) = skip_list_reader.seek(0)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(0)?;
         assert_eq!(offset, 0);
+        assert_eq!(current_key, 0);
         assert_eq!(skipped, 0);
 
         skip_list_writer.add_skip_item(1000, 100, None)?;
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 1);
-        let (offset, skipped) = skip_list_reader.seek(0)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(0)?;
         assert_eq!(offset, 0);
+        assert_eq!(current_key, 0);
         assert_eq!(skipped, 0);
-        let (offset, skipped) = skip_list_reader.seek(1000)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(1000)?;
         assert_eq!(offset, 0);
+        assert_eq!(current_key, 0);
         assert_eq!(skipped, 0);
-        let (offset, skipped) = skip_list_reader.seek(1001)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(1001)?;
         assert_eq!(offset, 100);
+        assert_eq!(current_key, 1000);
         assert_eq!(skipped, 1);
-        let (offset, skipped) = skip_list_reader.seek(1002)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(1002)?;
         assert_eq!(offset, 100);
-        assert_eq!(skipped, 0);
+        assert_eq!(current_key, 1000);
+        assert_eq!(skipped, 1);
 
         for i in 1..BLOCK_LEN {
             skip_list_writer.add_skip_item(((i + 1) * 1000) as u32, 100, None)?;
@@ -195,23 +201,29 @@ mod tests {
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 0);
 
-        let (offset, skipped) = skip_list_reader.seek(1000)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(1000)?;
         assert_eq!(offset, 0);
+        assert_eq!(current_key, 0);
         assert_eq!(skipped, 0);
 
         for i in 1..BLOCK_LEN {
-            let (offset, skipped) = skip_list_reader.seek(((i + 1) * 1000) as u32)?;
+            let (offset, current_key, skipped) = skip_list_reader.seek(((i + 1) * 1000) as u32)?;
             assert_eq!(offset, i * 100);
-            assert_eq!(skipped, 1);
+            assert_eq!(current_key, (i * 1000) as u32);
+            assert_eq!(skipped, i);
         }
 
-        let (offset, skipped) = skip_list_reader.seek((BLOCK_LEN * 1000 + 1) as u32)?;
+        let (offset, current_key, skipped) =
+            skip_list_reader.seek((BLOCK_LEN * 1000 + 1) as u32)?;
         assert_eq!(offset, BLOCK_LEN * 100);
-        assert_eq!(skipped, 1);
+        assert_eq!(current_key, (BLOCK_LEN * 1000) as u32);
+        assert_eq!(skipped, BLOCK_LEN);
 
-        let (offset, skipped) = skip_list_reader.seek((BLOCK_LEN * 1000 + 2) as u32)?;
+        let (offset, current_key, skipped) =
+            skip_list_reader.seek((BLOCK_LEN * 1000 + 2) as u32)?;
         assert_eq!(offset, BLOCK_LEN * 100);
-        assert_eq!(skipped, 0);
+        assert_eq!(current_key, (BLOCK_LEN * 1000) as u32);
+        assert_eq!(skipped, BLOCK_LEN);
 
         for i in 0..3 {
             skip_list_writer.add_skip_item(((BLOCK_LEN + i + 1) * 1000) as u32, 100, None)?;
@@ -220,46 +232,24 @@ mod tests {
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 3);
 
-        let (offset, skipped) = skip_list_reader.seek(1000)?;
+        let (offset, current_key, skipped) = skip_list_reader.seek(1000)?;
         assert_eq!(offset, 0);
+        assert_eq!(current_key, 0);
         assert_eq!(skipped, 0);
 
-        for i in 1..BLOCK_LEN {
-            let (offset, skipped) = skip_list_reader.seek(((i + 1) * 1000) as u32)?;
+        for i in 1..BLOCK_LEN + 4 {
+            let (offset, current_key, skipped) = skip_list_reader.seek(((i + 1) * 1000) as u32)?;
             assert_eq!(offset, i * 100);
-            assert_eq!(skipped, 1);
+            assert_eq!(current_key, (i * 1000) as u32);
+            assert_eq!(skipped, i);
         }
-
-        assert!(!skip_list_reader.skip_list_reader.eof());
-
-        let (offset, skipped) = skip_list_reader.seek(((BLOCK_LEN + 1) * 1000) as u32)?;
-        assert_eq!(offset, BLOCK_LEN * 100);
-        assert_eq!(skipped, 1);
-
-        assert!(skip_list_reader.skip_list_reader.eof());
-        assert_eq!(skip_list_reader.current_cursor, 0);
-
-        let (offset, skipped) = skip_list_reader.seek(((BLOCK_LEN + 2) * 1000) as u32)?;
-        assert_eq!(offset, BLOCK_LEN * 100 + 100);
-        assert_eq!(skipped, 1);
-
-        assert_eq!(skip_list_reader.current_cursor, 1);
-
-        let (offset, skipped) = skip_list_reader.seek(((BLOCK_LEN + 3) * 1000) as u32)?;
-        assert_eq!(offset, BLOCK_LEN * 100 + 200);
-        assert_eq!(skipped, 1);
-
-        assert_eq!(skip_list_reader.current_cursor, 2);
-
-        let (offset, skipped) = skip_list_reader.seek(((BLOCK_LEN + 4) * 1000) as u32)?;
-        assert_eq!(offset, BLOCK_LEN * 100 + 300);
-        assert_eq!(skipped, 1);
 
         assert_eq!(skip_list_reader.current_cursor, 3);
 
-        let (offset, skipped) = skip_list_reader.seek(((BLOCK_LEN + 5) * 1000) as u32)?;
-        assert_eq!(offset, BLOCK_LEN * 100 + 300);
-        assert_eq!(skipped, 0);
+        let (offset, current_key, skipped) = skip_list_reader.seek(u32::MAX)?;
+        assert_eq!(offset, (BLOCK_LEN + 3) * 100);
+        assert_eq!(current_key, ((BLOCK_LEN + 3) * 1000) as u32);
+        assert_eq!(skipped, BLOCK_LEN + 3);
 
         Ok(())
     }
@@ -280,25 +270,31 @@ mod tests {
         });
         let r = thread::spawn(move || loop {
             let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
-            let (offset, skipped) = skip_list_reader
+            let (offset, current_key, skipped) = skip_list_reader
                 .seek(((BLOCK_LEN + 4) * 1000) as u32)
                 .unwrap();
-            if offset == BLOCK_LEN * 100 + 300 {
+            if offset == (BLOCK_LEN + 3) * 100 {
+                assert_eq!(current_key, ((BLOCK_LEN + 3) * 1000) as u32);
                 assert_eq!(skipped, BLOCK_LEN + 3);
                 let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
                 for i in 0..BLOCK_LEN + 3 {
-                    let (offset, skipped) = skip_list_reader.seek(((i + 2) * 1000) as u32).unwrap();
+                    let (offset, current_key, skipped) =
+                        skip_list_reader.seek(((i + 2) * 1000) as u32).unwrap();
                     assert_eq!(offset, (i + 1) * 100);
-                    assert_eq!(skipped, 1);
+                    assert_eq!(current_key, ((i + 1) * 1000) as u32);
+                    assert_eq!(skipped, i + 1);
                 }
-                let (offset, skipped) = skip_list_reader
+                let (offset, current_key, skipped) = skip_list_reader
                     .seek(((BLOCK_LEN + 5) * 1000) as u32)
                     .unwrap();
-                assert_eq!(offset, BLOCK_LEN * 100 + 300);
-                assert_eq!(skipped, 0);
+                assert_eq!(offset, (BLOCK_LEN + 3) * 100);
+                assert_eq!(current_key, ((BLOCK_LEN + 3) * 1000) as u32);
+                assert_eq!(skipped, BLOCK_LEN + 3);
                 break;
             }
+            thread::yield_now();
         });
+
         w.join().unwrap();
         r.join().unwrap();
     }

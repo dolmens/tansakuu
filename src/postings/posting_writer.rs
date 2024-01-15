@@ -146,6 +146,7 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
             self.doc_count_flushed += self.block_len;
             self.flush_info.doc_count.store(self.doc_count_flushed);
 
+            // Only full block will have a skip item
             if self.block_len == POSTING_BLOCK_LEN {
                 self.skip_list_writer
                     .add_skip_item(self.last_docid, flushed_size as u32, None)?;

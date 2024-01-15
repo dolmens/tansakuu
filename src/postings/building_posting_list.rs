@@ -125,6 +125,34 @@ impl<'a> BuildingPostingReader<'a> {
         self.read_count == self.doc_count
     }
 
+    pub fn doc_count(&self) -> usize {
+        self.doc_count
+    }
+
+    pub fn read_count(&self) -> usize {
+        self.read_count
+    }
+
+    pub fn seek(&mut self, docid: DocId, posting_block: &mut PostingBlock) -> io::Result<bool> {
+        if self.eof() {
+            return Ok(false);
+        }
+
+        if !self.posting_reader.eof() {
+            let ok = self.posting_reader.seek(docid, posting_block)?;
+            self.last_docid = self.posting_reader.last_docid();
+            self.read_count = self.posting_reader.read_count();
+            if ok {
+                return Ok(true);
+            }
+            debug_assert!(self.posting_reader.eof());
+        }
+
+        self.decode_one_block(posting_block)?;
+
+        Ok(posting_block.len > 0 && posting_block.last_docid() >= docid)
+    }
+
     pub fn decode_one_block(&mut self, posting_block: &mut PostingBlock) -> io::Result<()> {
         posting_block.len = 0;
 
@@ -336,6 +364,308 @@ mod tests {
                 if posting_reader.doc_count == BLOCK_LEN * 2 + 3 {
                     break;
                 }
+                thread::yield_now();
+            });
+
+            w.join().unwrap();
+            r.join().unwrap();
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_seek_basic() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut posting_writer: BuildingPostingWriter =
+            BuildingPostingWriter::new(posting_format.clone(), 1024);
+        let posting_list = posting_writer.building_posting_list();
+        let mut posting_block = PostingBlock::new(&posting_format);
+
+        let docids: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+            .enumerate()
+            .map(|(i, _)| (i * 5 + i % 3) as DocId)
+            .collect();
+        let docids = &docids[..];
+        let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+            .enumerate()
+            .map(|(i, _)| (i % 3 + 1) as TermFreq)
+            .collect();
+        let termfreqs = &termfreqs[..];
+
+        for _ in 0..termfreqs[0] {
+            posting_writer.add_pos(1);
+        }
+        posting_writer.end_doc(docids[0]);
+
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(0, &mut posting_block)?);
+        assert_eq!(posting_block.len, 1);
+        assert_eq!(posting_block.docids[0], docids[0]);
+        assert_eq!(posting_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
+
+        for _ in 0..termfreqs[1] {
+            posting_writer.add_pos(1);
+        }
+        posting_writer.end_doc(docids[1]);
+
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(0, &mut posting_block)?);
+        assert_eq!(posting_block.len, 2);
+        assert_eq!(posting_block.docids[0], docids[0]);
+        assert_eq!(posting_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
+        assert_eq!(posting_block.docids[1], docids[1]);
+        assert_eq!(posting_block.termfreqs.as_ref().unwrap()[1], termfreqs[1]);
+
+        assert!(posting_reader.eof());
+        assert!(!posting_reader.seek(0, &mut posting_block)?);
+
+        for i in 2..BLOCK_LEN {
+            for _ in 0..termfreqs[i] {
+                posting_writer.add_pos(1);
+            }
+            posting_writer.end_doc(docids[i]);
+        }
+
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(docids[BLOCK_LEN - 1], &mut posting_block)?);
+        assert_eq!(posting_block.len, BLOCK_LEN);
+        assert_eq!(posting_block.docids, &docids[0..BLOCK_LEN]);
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+            &termfreqs[0..BLOCK_LEN]
+        );
+
+        assert!(posting_reader.eof());
+        assert!(!posting_reader.seek(0, &mut posting_block)?);
+
+        for i in 0..BLOCK_LEN + 3 {
+            for _ in 0..termfreqs[i + BLOCK_LEN] {
+                posting_writer.add_pos(1);
+            }
+            posting_writer.end_doc(docids[i + BLOCK_LEN]);
+        }
+
+        // block one by one
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(docids[BLOCK_LEN - 1], &mut posting_block)?);
+        assert_eq!(posting_block.len, BLOCK_LEN);
+        assert_eq!(posting_block.docids, &docids[0..BLOCK_LEN]);
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+            &termfreqs[0..BLOCK_LEN]
+        );
+
+        assert!(posting_reader.seek(docids[BLOCK_LEN * 2 - 1], &mut posting_block)?);
+        assert_eq!(posting_block.len, BLOCK_LEN);
+        assert_eq!(posting_block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+            &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
+        );
+
+        assert!(posting_reader.seek(docids.last().cloned().unwrap(), &mut posting_block)?);
+        assert_eq!(posting_block.len, 3);
+        assert_eq!(
+            &posting_block.docids[0..3],
+            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..3],
+            &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
+        assert!(posting_reader.eof());
+        assert!(!posting_reader.seek(0, &mut posting_block)?);
+
+        // skip some block
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(docids[BLOCK_LEN * 2 - 1], &mut posting_block)?);
+        assert_eq!(posting_block.len, BLOCK_LEN);
+        assert_eq!(posting_block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+            &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
+        );
+
+        assert!(posting_reader.seek(docids.last().cloned().unwrap(), &mut posting_block)?);
+        assert_eq!(posting_block.len, 3);
+        assert_eq!(
+            &posting_block.docids[0..3],
+            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..3],
+            &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
+        assert!(posting_reader.eof());
+        assert!(!posting_reader.seek(0, &mut posting_block)?);
+
+        // seek the last block
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(posting_reader.seek(docids.last().cloned().unwrap(), &mut posting_block)?);
+        assert_eq!(posting_block.len, 3);
+        assert_eq!(
+            &posting_block.docids[0..3],
+            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+        assert_eq!(
+            &posting_block.termfreqs.as_ref().unwrap()[0..3],
+            &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
+        assert!(posting_reader.eof());
+        assert!(!posting_reader.seek(0, &mut posting_block)?);
+
+        // seek eof
+        let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+        assert!(!posting_reader.eof());
+        assert!(!posting_reader.seek(DocId::MAX, &mut posting_block)?);
+        assert!(posting_reader.eof());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_seek_multi_thread() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut posting_writer: BuildingPostingWriter =
+            BuildingPostingWriter::new(posting_format.clone(), 1024);
+        let posting_list = posting_writer.building_posting_list();
+
+        let docids: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+            .enumerate()
+            .map(|(i, _)| (i * 5 + i % 3) as DocId)
+            .collect();
+        let docids = &docids[..];
+        let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+            .enumerate()
+            .map(|(i, _)| (i % 3 + 1) as TermFreq)
+            .collect();
+        let termfreqs = &termfreqs[..];
+
+        thread::scope(|scope| {
+            let w = scope.spawn(move || {
+                for i in 0..BLOCK_LEN * 2 + 3 {
+                    for _ in 0..termfreqs[i] {
+                        posting_writer.add_pos(1);
+                    }
+                    posting_writer.end_doc(docids[i]);
+                    thread::yield_now();
+                }
+            });
+
+            let r = scope.spawn(move || loop {
+                let mut posting_block = PostingBlock::new(&posting_format);
+                let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+                if posting_reader.doc_count() == BLOCK_LEN * 2 + 3 {
+                    // block one by one
+                    let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+                    assert!(posting_reader
+                        .seek(docids[BLOCK_LEN - 1], &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, BLOCK_LEN);
+                    assert_eq!(posting_block.docids, &docids[0..BLOCK_LEN]);
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+                        &termfreqs[0..BLOCK_LEN]
+                    );
+
+                    assert!(posting_reader
+                        .seek(docids[BLOCK_LEN * 2 - 1], &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, BLOCK_LEN);
+                    assert_eq!(posting_block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+                        &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
+                    );
+
+                    assert!(posting_reader
+                        .seek(docids.last().cloned().unwrap(), &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, 3);
+                    assert_eq!(
+                        &posting_block.docids[0..3],
+                        &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..3],
+                        &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+
+                    assert!(posting_reader.eof());
+                    assert!(!posting_reader.seek(0, &mut posting_block).unwrap());
+
+                    // skip some block
+                    let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+                    assert!(posting_reader
+                        .seek(docids[BLOCK_LEN * 2 - 1], &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, BLOCK_LEN);
+                    assert_eq!(posting_block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+                        &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
+                    );
+
+                    assert!(posting_reader
+                        .seek(docids.last().cloned().unwrap(), &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, 3);
+                    assert_eq!(
+                        &posting_block.docids[0..3],
+                        &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..3],
+                        &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+
+                    assert!(posting_reader.eof());
+                    assert!(!posting_reader.seek(0, &mut posting_block).unwrap());
+
+                    // seek the last block
+                    let mut posting_reader = BuildingPostingReader::open(&posting_list);
+
+                    assert!(posting_reader
+                        .seek(docids.last().cloned().unwrap(), &mut posting_block)
+                        .unwrap());
+                    assert_eq!(posting_block.len, 3);
+                    assert_eq!(
+                        &posting_block.docids[0..3],
+                        &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+                    assert_eq!(
+                        &posting_block.termfreqs.as_ref().unwrap()[0..3],
+                        &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+                    );
+
+                    assert!(posting_reader.eof());
+                    assert!(!posting_reader.seek(0, &mut posting_block).unwrap());
+
+                    // seek eof
+                    let mut posting_reader = BuildingPostingReader::open(&posting_list);
+                    assert!(!posting_reader.eof());
+                    assert!(!posting_reader.seek(DocId::MAX, &mut posting_block).unwrap());
+                    assert!(posting_reader.eof());
+
+                    break;
+                }
+
                 thread::yield_now();
             });
 
