@@ -2,17 +2,19 @@ use std::collections::HashMap;
 
 use crate::{index::IndexSegmentData, DocId};
 
+use super::PrimaryKeyDict;
+
 pub struct PrimaryKeyPersistentSegmentData {
-    pub keys: HashMap<String, DocId>,
+    pub keys: PrimaryKeyDict,
 }
 
 impl PrimaryKeyPersistentSegmentData {
-    pub fn new(keys: HashMap<String, DocId>) -> Self {
+    pub fn new(keys: PrimaryKeyDict) -> Self {
         Self { keys }
     }
 
     pub fn lookup(&self, key: &str) -> Option<DocId> {
-        self.keys.get(key).cloned()
+        self.keys.get(key).ok().unwrap()
     }
 }
 

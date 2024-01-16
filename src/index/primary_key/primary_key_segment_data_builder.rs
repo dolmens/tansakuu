@@ -1,12 +1,14 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader}, sync::Arc,
 };
+
+use tantivy_common::file_slice::{FileSlice, WrapFile};
 
 use crate::{index::IndexSegmentDataBuilder, schema::Index, DocId};
 
-use super::PrimaryKeyPersistentSegmentData;
+use super::{PrimaryKeyPersistentSegmentData, PrimaryKeyDict};
 
 pub struct PrimaryKeySegmentDataBuilder {}
 
@@ -20,19 +22,12 @@ impl IndexSegmentDataBuilder for PrimaryKeySegmentDataBuilder {
     fn build(
         &self,
         index: &Index,
-        path: &std::path::Path,
+        directory: &std::path::Path,
     ) -> Box<dyn crate::index::IndexSegmentData> {
-        let _ = index;
-        let mut keys = HashMap::new();
-        let file = File::open(path).unwrap();
-        let file_reader = BufReader::new(file);
-        for line in file_reader.lines() {
-            let line = line.unwrap();
-            let mut key_and_docid = line.split_whitespace();
-            let key = key_and_docid.next().unwrap();
-            let docid = key_and_docid.next().unwrap().parse::<DocId>().unwrap();
-            keys.insert(key.to_string(), docid);
-        }
+        let index_path = directory.join(index.name());
+        let index_file = File::open(index_path).unwrap();
+        let index_data = FileSlice::new(Arc::new(WrapFile::new(index_file).unwrap()));
+        let keys = PrimaryKeyDict::open(index_data).unwrap();
 
         Box::new(PrimaryKeyPersistentSegmentData::new(keys))
     }

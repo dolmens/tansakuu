@@ -27,12 +27,8 @@ impl PrimaryKeyBuildingSegmentData {
         self.keys.get(key).cloned()
     }
 
-    pub fn keys(&self) -> HashMap<String, DocId> {
-        let mut keys = HashMap::new();
-        for (k, v) in self.keys.iter() {
-            keys.insert(k.clone(), *v);
-        }
-        keys
+    pub fn keys(&self) -> impl Iterator<Item = (&str, DocId)> {
+        self.keys.iter().map(|(k, &v)| (k.as_str(), v))
     }
 }
 

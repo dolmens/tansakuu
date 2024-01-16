@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 use crate::{index::IndexSerializer, schema::Index};
 
-use super::{PrimaryKeyBuildingSegmentData, PrimaryKeySerializerWriter};
+use super::{PrimaryKeyBuildingSegmentData, PrimaryKeyDictBuilder};
 
 pub struct PrimaryKeySerializer {
     index_name: String,
@@ -20,11 +20,21 @@ impl PrimaryKeySerializer {
 
 impl IndexSerializer for PrimaryKeySerializer {
     fn serialize(&self, directory: &std::path::Path) {
-        // let path = directory.join(&self.index_name);
-        // let mut writer = PrimaryKeySerializerWriter::new(path);
-        // let keys = self.index_data.keys();
-        // for (key, &docid) in &keys {
-        //     writer.write(key, docid);
-        // }
+        let mut keys: Vec<_> = self.index_data.keys().collect();
+        keys.sort_by(|a, b| a.0.cmp(b.0));
+        let index_path = directory.join(&self.index_name);
+        let index_file = File::create(index_path).unwrap();
+        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_file);
+        for (key, docid) in keys.iter() {
+            primary_key_dict_writer.insert(key, docid).unwrap();
+        }
+        primary_key_dict_writer.finish().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_basic() {
     }
 }
