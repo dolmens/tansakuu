@@ -44,8 +44,8 @@ impl IndexSerializer for InvertedIndexSerializer {
         let posting_output_writer = File::create(posting_path).unwrap();
         let mut posting_counting_writer = CountingWriter::wrap(posting_output_writer);
 
-        let mut skip_offset = 0;
-        let mut posting_offset = 0;
+        let mut skip_start = 0;
+        let mut posting_start = 0;
 
         let mut postings: Vec<_> = self.index_data.postings.iter().collect();
         postings.sort_by(|a, b| a.0.cmp(b.0));
@@ -84,18 +84,18 @@ impl IndexSerializer for InvertedIndexSerializer {
             posting_counting_writer = posting_writer;
             skip_list_counting_writer = skip_list_writer.finish();
 
-            let skip_len = skip_list_counting_writer.written_bytes() as usize;
-            let posting_len = posting_counting_writer.written_bytes() as usize;
+            let skip_end = skip_list_counting_writer.written_bytes() as usize;
+            let posting_end = posting_counting_writer.written_bytes() as usize;
             let term_info = TermInfo {
                 skip_item_count,
-                skip_offset,
-                skip_len,
+                skip_start,
+                skip_end,
                 posting_item_count,
-                posting_offset,
-                posting_len,
+                posting_start,
+                posting_end,
             };
-            skip_offset += skip_len;
-            posting_offset += posting_len;
+            skip_start = skip_end;
+            posting_start = posting_end;
             term_dict_writer.insert(tok.as_bytes(), &term_info).unwrap();
         }
         term_dict_writer.finish().unwrap();

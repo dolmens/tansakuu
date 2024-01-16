@@ -150,24 +150,24 @@ impl TableData {
             index_serializer.serialize(&index_directory);
         }
 
-        // if !building_segment_data.deletemap().is_empty() {
-        //     let path = segment_directory.join("deletionmap");
-        //     building_segment_data.deletemap().save(path);
-        // }
+        if !building_segment_data.deletemap().is_empty() {
+            let path = segment_directory.join("deletionmap");
+            building_segment_data.deletemap().save(path);
+        }
 
-        // let meta = SegmentMetaData::new(building_segment_data.doc_count());
-        // meta.save(segment_directory.join("meta.json"));
-        // let mut version = self.version.next_version();
-        // version.add_segment(building_segment_data.segment_id().clone());
-        // version.save(&self.directory);
+        let meta = SegmentMetaData::new(building_segment_data.doc_count());
+        meta.save(segment_directory.join("meta.json"));
+        let mut version = self.version.next_version();
+        version.add_segment(building_segment_data.segment_id().clone());
+        version.save(&self.directory);
 
-        // self.remove_building_segment(building_segment_data);
-        // self.reload();
+        self.remove_building_segment(building_segment_data);
+        self.reload();
 
-        // if version.segments().len() > 1 {
-        //     let mut version_merged = version.next_version();
-        //     self.merge_segments(&mut version_merged);
-        // }
+        if version.segments().len() > 1 {
+            let mut version_merged = version.next_version();
+            self.merge_segments(&mut version_merged);
+        }
     }
 
     pub fn remove_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {

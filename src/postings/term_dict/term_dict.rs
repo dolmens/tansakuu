@@ -63,18 +63,18 @@ impl ValueReader for TermInfoValueReader {
         let num_els = VInt::deserialize_u64(&mut data)?;
         for _ in 0..num_els {
             let skip_item_count = VInt::deserialize_u64(&mut data)? as usize;
-            let skip_offset = VInt::deserialize_u64(&mut data)? as usize;
-            let skip_len = VInt::deserialize_u64(&mut data)? as usize;
+            let skip_start = VInt::deserialize_u64(&mut data)? as usize;
+            let skip_end = VInt::deserialize_u64(&mut data)? as usize;
             let posting_item_count = VInt::deserialize_u64(&mut data)? as usize;
-            let posting_offset = VInt::deserialize_u64(&mut data)? as usize;
-            let posting_len = VInt::deserialize_u64(&mut data)? as usize;
+            let posting_start = VInt::deserialize_u64(&mut data)? as usize;
+            let posting_end = VInt::deserialize_u64(&mut data)? as usize;
             let term_info = TermInfo {
                 skip_item_count,
-                skip_offset,
-                skip_len,
+                skip_start,
+                skip_end,
                 posting_item_count,
-                posting_offset,
-                posting_len,
+                posting_start,
+                posting_end,
             };
             self.term_infos.push(term_info);
         }
@@ -102,11 +102,11 @@ impl ValueWriter for TermInfoValueWriter {
         }
         for term_info in &self.term_infos {
             VInt(term_info.skip_item_count as u64).serialize_into_vec(buffer);
-            VInt(term_info.skip_offset as u64).serialize_into_vec(buffer);
-            VInt(term_info.skip_len as u64).serialize_into_vec(buffer);
+            VInt(term_info.skip_start as u64).serialize_into_vec(buffer);
+            VInt(term_info.skip_end as u64).serialize_into_vec(buffer);
             VInt(term_info.posting_item_count as u64).serialize_into_vec(buffer);
-            VInt(term_info.posting_offset as u64).serialize_into_vec(buffer);
-            VInt(term_info.posting_len as u64).serialize_into_vec(buffer);
+            VInt(term_info.posting_start as u64).serialize_into_vec(buffer);
+            VInt(term_info.posting_end as u64).serialize_into_vec(buffer);
         }
     }
 

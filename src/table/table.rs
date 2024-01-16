@@ -326,11 +326,18 @@ mod tests {
         let docids = get_all_docs(&mut *posting_iter);
         assert_eq!(docids, vec![0]);
 
+        // Open new reader
         let reader = table.reader();
+
         let index_reader = reader.index_reader();
         let mut posting_iter = index_reader.lookup(&term).unwrap();
         let docids = get_all_docs(&mut *posting_iter);
         assert_eq!(docids, vec![0, 2]);
+
+        let term = Term::new("title".to_string(), "world".to_string());
+        let mut posting_iter = index_reader.lookup(&term).unwrap();
+        let docids = get_all_docs(&mut *posting_iter);
+        assert_eq!(docids, vec![0, 1]);
 
         // writer.new_segment();
     }

@@ -5,7 +5,10 @@ use std::{
     sync::Arc,
 };
 
-use tantivy_common::file_slice::{FileSlice, WrapFile};
+use tantivy_common::{
+    file_slice::{FileSlice, WrapFile},
+    HasLen, OwnedBytes,
+};
 
 use crate::{index::IndexSegmentDataBuilder, postings::TermDict, schema::Index};
 
@@ -31,10 +34,14 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
         let dict_data = FileSlice::new(Arc::new(WrapFile::new(dict_file).unwrap()));
         let term_dict = TermDict::open(dict_data).unwrap();
 
-        let skip_path = path.join(index_name.to_string() + ".skip");
+        let skip_path = path.join(index_name.to_string() + ".skiplist");
         let skip_file = File::open(skip_path).unwrap();
         let skip_data = FileSlice::new(Arc::new(WrapFile::new(skip_file).unwrap()));
-        let skip_data = skip_data.read_bytes().unwrap();
+        let skip_data = if skip_data.len() > 0 {
+            skip_data.read_bytes().unwrap()
+        } else {
+            OwnedBytes::empty()
+        };
 
         let posting_path = path.join(index_name.to_string() + ".posting");
         let posting_file = File::open(posting_path).unwrap();
