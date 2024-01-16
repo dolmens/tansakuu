@@ -1,6 +1,6 @@
 use std::{sync::Arc, thread, time::Duration};
 
-use rindex::{
+use tansakuu::{
     document::Document,
     index::PostingIterator,
     query::Term,
