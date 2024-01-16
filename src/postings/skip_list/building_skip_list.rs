@@ -153,7 +153,7 @@ mod tests {
     use std::{io, thread};
 
     use crate::{
-        postings::skiplist::{
+        postings::skip_list::{
             BuildingSkipListReader, BuildingSkipListWriter, SkipListFormat, SkipListSeek,
             SkipListWrite,
         },

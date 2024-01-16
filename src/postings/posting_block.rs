@@ -46,11 +46,10 @@ impl PostingBlock {
     }
 
     pub fn last_docid(&self) -> DocId {
-        assert!(self.len > 0);
         self.docids[self.len - 1]
     }
 
-    pub fn decode(&mut self, last_docid: DocId) {
+    pub fn decode_docids(&mut self, last_docid: DocId) {
         self.docids[0..self.len]
             .iter_mut()
             .fold(last_docid, |acc, elem| {

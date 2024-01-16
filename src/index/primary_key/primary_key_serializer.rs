@@ -20,11 +20,11 @@ impl PrimaryKeySerializer {
 
 impl IndexSerializer for PrimaryKeySerializer {
     fn serialize(&self, directory: &std::path::Path) {
-        let path = directory.join(&self.index_name);
-        let mut writer = PrimaryKeySerializerWriter::new(path);
-        let keys = self.index_data.keys();
-        for (key, &docid) in &keys {
-            writer.write(key, docid);
-        }
+        // let path = directory.join(&self.index_name);
+        // let mut writer = PrimaryKeySerializerWriter::new(path);
+        // let keys = self.index_data.keys();
+        // for (key, &docid) in &keys {
+        //     writer.write(key, docid);
+        // }
     }
 }

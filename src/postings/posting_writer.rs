@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    skiplist::{NoSkipListWriter, SkipListWrite},
+    skip_list::{NoSkipListWriter, SkipListWrite},
     PostingBlock, PostingEncoder, PostingFormat,
 };
 
@@ -158,6 +158,10 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
 
         Ok(())
     }
+
+    pub fn finish(self) -> (W, S) {
+        (self.writer, self.skip_list_writer)
+    }
 }
 
 impl BuildingPostingBlock {
@@ -304,15 +308,6 @@ mod tests {
 
     use super::PostingWriter;
 
-    fn restore_docids(last_docid: &mut DocId, docids: &mut [DocId]) {
-        let last_docid_curr = *last_docid;
-        docids.iter_mut().fold(last_docid_curr, |acc, elem| {
-            *elem += acc;
-            *elem
-        });
-        *last_docid = docids.last().unwrap().clone();
-    }
-
     #[test]
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
@@ -322,11 +317,17 @@ mod tests {
         let building_block = posting_writer.building_block().clone();
         let flush_info = posting_writer.flush_info().clone();
 
-        let docids: Vec<_> = (0..BLOCK_LEN * 2 + 3)
-            .enumerate()
-            .map(|(i, _)| (i * 5 + i % 3) as DocId)
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas = &docids_deltas[..];
+        let docids: Vec<_> = docids_deltas
+            .iter()
+            .scan(0, |acc, &x| {
+                *acc += x;
+                Some(*acc)
+            })
             .collect();
         let docids = &docids[..];
+
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
             .map(|(i, _)| (i % 3 + 1) as TermFreq)
@@ -391,27 +392,23 @@ mod tests {
 
         let posting_encoder = PostingEncoder;
 
-        let mut last_docid = 0;
         let mut decoded_docids = [0; BLOCK_LEN];
         let mut decoded_termfreqs = [0; BLOCK_LEN];
 
         let mut reader = BufReader::new(buf.as_slice());
         posting_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
-        restore_docids(&mut last_docid, &mut decoded_docids);
-        assert_eq!(&docids[0..BLOCK_LEN], decoded_docids);
+        assert_eq!(&docids_deltas[0..BLOCK_LEN], decoded_docids);
         posting_encoder.decode_u32(&mut reader, &mut decoded_termfreqs)?;
         assert_eq!(&termfreqs[0..BLOCK_LEN], decoded_termfreqs);
 
         posting_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
-        restore_docids(&mut last_docid, &mut decoded_docids);
-        assert_eq!(&docids[BLOCK_LEN..BLOCK_LEN * 2], decoded_docids);
+        assert_eq!(&docids_deltas[BLOCK_LEN..BLOCK_LEN * 2], decoded_docids);
         posting_encoder.decode_u32(&mut reader, &mut decoded_termfreqs)?;
         assert_eq!(&termfreqs[BLOCK_LEN..BLOCK_LEN * 2], decoded_termfreqs);
 
         posting_encoder.decode_u32(&mut reader, &mut decoded_docids[0..3])?;
-        restore_docids(&mut last_docid, &mut decoded_docids[0..3]);
         assert_eq!(
-            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
+            &docids_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
             &decoded_docids[0..3]
         );
         posting_encoder.decode_u32(&mut reader, &mut decoded_termfreqs[0..3])?;

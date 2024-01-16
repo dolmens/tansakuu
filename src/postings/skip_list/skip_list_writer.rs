@@ -71,6 +71,10 @@ impl<W: Write> SkipListWriter<W> {
     pub fn skip_list_format(&self) -> &SkipListFormat {
         &self.skip_list_format
     }
+
+    pub fn finish(self) -> W {
+        self.writer
+    }
 }
 
 impl<W: Write> SkipListWrite for SkipListWriter<W> {
@@ -238,7 +242,7 @@ mod tests {
 
     use crate::{
         postings::{
-            skiplist::{SkipListFormat, SkipListWrite, SkipListWriter},
+            skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
             PostingEncoder,
         },
         SKIPLIST_BLOCK_LEN,

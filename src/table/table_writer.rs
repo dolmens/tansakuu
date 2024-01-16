@@ -49,12 +49,3 @@ impl<'a> TableWriter<'a> {
         self.segment_writer.building_segment()
     }
 }
-
-impl<'a> Drop for TableWriter<'a> {
-    fn drop(&mut self) {
-        if !self.segment_writer.is_empty() {
-            self.table
-                .dump_building_segment(self.building_segment().clone());
-        }
-    }
-}

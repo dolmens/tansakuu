@@ -1,10 +1,10 @@
-use super::skiplist::SkipListFormat;
+use super::skip_list::SkipListFormat;
 
 #[derive(Default, Clone)]
 pub struct PostingFormat {
     has_tflist: bool,
     has_fieldmask: bool,
-    skiplist_format: SkipListFormat,
+    skip_list_format: SkipListFormat,
 }
 
 #[derive(Default)]
@@ -29,11 +29,11 @@ impl PostingFormatBuilder {
     }
 
     pub fn build(self) -> PostingFormat {
-        let skiplist_format = SkipListFormat::builder().build();
+        let skip_list_format = SkipListFormat::builder().build();
         PostingFormat {
             has_tflist: self.has_tflist,
             has_fieldmask: self.has_fieldmask,
-            skiplist_format,
+            skip_list_format,
         }
     }
 }
@@ -52,6 +52,6 @@ impl PostingFormat {
     }
 
     pub fn skip_list_format(&self) -> &SkipListFormat {
-        &self.skiplist_format
+        &self.skip_list_format
     }
 }

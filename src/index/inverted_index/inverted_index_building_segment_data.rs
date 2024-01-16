@@ -1,7 +1,4 @@
-use std::{
-    collections::{hash_map::RandomState, HashMap},
-    sync::Arc,
-};
+use std::collections::{hash_map::RandomState, HashMap};
 
 use crate::{
     index::IndexSegmentData,
@@ -11,7 +8,7 @@ use crate::{
 };
 
 pub struct InvertedIndexBuildingSegmentData {
-    pub postings: LayeredHashMap<String, Arc<BuildingPostingList>>,
+    pub postings: LayeredHashMap<String, BuildingPostingList>,
 }
 
 impl InvertedIndexBuildingSegmentData {

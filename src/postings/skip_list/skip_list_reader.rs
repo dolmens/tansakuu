@@ -105,7 +105,7 @@ mod tests {
 
     use crate::{
         postings::{
-            skiplist::{
+            skip_list::{
                 skip_list_reader::SkipListReader, skip_list_reader::SkipListSeek, SkipListFormat,
             },
             PostingEncoder,

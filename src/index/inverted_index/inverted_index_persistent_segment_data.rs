@@ -1,24 +1,18 @@
-use std::collections::HashMap;
-
 use tantivy_common::OwnedBytes;
 
-use crate::{index::IndexSegmentData, postings::TermDict, DocId};
+use crate::{index::IndexSegmentData, postings::TermDict};
 
 pub struct InvertedIndexPersistentSegmentData {
-    pub postings: HashMap<String, Vec<DocId>>,
     pub term_dict: TermDict,
+    pub skip_data: OwnedBytes,
     pub posting_data: OwnedBytes,
 }
 
 impl InvertedIndexPersistentSegmentData {
-    pub fn new(
-        postings: HashMap<String, Vec<DocId>>,
-        term_dict: TermDict,
-        posting_data: OwnedBytes,
-    ) -> Self {
+    pub fn new(term_dict: TermDict, skip_data: OwnedBytes, posting_data: OwnedBytes) -> Self {
         Self {
-            postings,
             term_dict,
+            skip_data,
             posting_data,
         }
     }
