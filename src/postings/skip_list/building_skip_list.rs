@@ -82,7 +82,11 @@ impl<'a> BuildingSkipListReader<'a> {
         let building_block = building_skip_list.building_block.as_ref();
         let skip_list_format = building_skip_list.skip_list_format.clone();
         let mut item_count = flush_info.flushed_count();
-        let mut byte_slice_reader = ByteSliceReader::open(byte_slice_list);
+        let mut byte_slice_reader = if item_count == 0 {
+            ByteSliceReader::empty()
+        } else {
+            ByteSliceReader::open(byte_slice_list)
+        };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
         let item_count_updated = building_skip_list.flush_info.flushed_count();
         if item_count < item_count_updated {
