@@ -466,6 +466,8 @@ mod tests {
 
         writer.new_segment();
 
+        let term = Term::new("title".to_string(), "hello".to_string());
+
         // Open new reader
         let reader = table.reader();
 

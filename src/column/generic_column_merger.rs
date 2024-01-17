@@ -24,9 +24,9 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
             let segment_data = segment
                 .downcast_ref::<GenericColumnPersistentSegmentData<T>>()
                 .unwrap();
-            for docid in segment_docid_mappings {
-                if let Some(docid) = docid.clone() {
-                    writer.write(segment_data.get(docid).unwrap());
+            for (i, docid) in segment_docid_mappings.iter().enumerate() {
+                if docid.is_some() {
+                    writer.write(segment_data.get(i as DocId).unwrap());
                 }
             }
         }

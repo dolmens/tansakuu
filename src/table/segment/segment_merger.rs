@@ -34,10 +34,10 @@ impl SegmentMerger {
                 if deletionmap.is_some_and(|deletionmap| {
                     deletionmap.is_deleted(segment.segment_id(), i as DocId)
                 }) {
+                    segment_docid_mappings.push(None);
+                } else {
                     segment_docid_mappings.push(Some(docid));
                     docid += 1;
-                } else {
-                    segment_docid_mappings.push(None);
                 }
             }
             docid_mappings.push(segment_docid_mappings);
