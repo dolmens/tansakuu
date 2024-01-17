@@ -1,14 +1,10 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader}, sync::Arc,
-};
+use std::{fs::File, sync::Arc};
 
 use tantivy_common::file_slice::{FileSlice, WrapFile};
 
-use crate::{index::IndexSegmentDataBuilder, schema::Index, DocId};
+use crate::{index::IndexSegmentDataBuilder, schema::Index};
 
-use super::{PrimaryKeyPersistentSegmentData, PrimaryKeyDict};
+use super::{PrimaryKeyDict, PrimaryKeyPersistentSegmentData};
 
 pub struct PrimaryKeySegmentDataBuilder {}
 

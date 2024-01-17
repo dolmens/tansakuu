@@ -2,7 +2,7 @@ use crate::DocId;
 
 pub struct SegmentPosting {
     base_docid: DocId,
-    docids: Vec<DocId>,
+    pub docids: Vec<DocId>,
 }
 
 impl SegmentPosting {

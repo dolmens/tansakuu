@@ -62,7 +62,7 @@ impl SegmentMerger {
             let index_merger = index_merger_factory.create(index);
             let index_data: Vec<_> = segments
                 .iter()
-                .map(|seg| seg.index_data(index.name()).as_ref())
+                .map(|seg| seg.index_data(index.name()))
                 .collect();
             index_merger.merge(&index_directory, index, &index_data, &docid_mappings);
         }

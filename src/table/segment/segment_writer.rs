@@ -48,8 +48,4 @@ impl SegmentWriter {
     pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {
         &self.building_segment
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.doc_count == 0
-    }
 }

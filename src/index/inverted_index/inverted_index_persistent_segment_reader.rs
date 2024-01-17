@@ -1,7 +1,7 @@
 use std::{io::Cursor, sync::Arc};
 
 use crate::{
-    index::{posting_iterator, SegmentPosting},
+    index::SegmentPosting,
     postings::{PostingFormat, PostingIterator, PostingReader, SkipListFormat, SkipListReader},
     DocId, END_DOCID,
 };

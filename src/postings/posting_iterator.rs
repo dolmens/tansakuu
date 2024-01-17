@@ -60,10 +60,7 @@ mod tests {
     use std::io;
 
     use crate::{
-        postings::{
-            BuildingPostingReader, BuildingPostingWriter, PostingBlock, PostingFormat,
-            PostingIterator,
-        },
+        postings::{BuildingPostingReader, BuildingPostingWriter, PostingFormat, PostingIterator},
         DocId, TermFreq, END_DOCID, INVALID_DOCID, POSTING_BLOCK_LEN,
     };
 
@@ -74,7 +71,6 @@ mod tests {
         let mut posting_writer: BuildingPostingWriter =
             BuildingPostingWriter::new(posting_format.clone(), 1024);
         let posting_list = posting_writer.building_posting_list();
-        let mut posting_block = PostingBlock::new(&posting_format);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
         let docids_deltas = &docids_deltas[..];

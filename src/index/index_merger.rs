@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use crate::{schema::Index, DocId};
 
@@ -9,7 +9,7 @@ pub trait IndexMerger {
         &self,
         directory: &Path,
         index: &Index,
-        segments: &[&dyn IndexSegmentData],
+        segments: &[&Arc<dyn IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
     );
 }

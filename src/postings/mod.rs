@@ -1,7 +1,5 @@
-// mod building_doc_list;
 mod building_posting_list;
 mod byte_slice_list;
-// mod compression;
 mod encoder;
 mod match_data;
 mod posting_block;
@@ -24,6 +22,6 @@ pub use posting_format::{PostingFormat, PostingFormatBuilder};
 pub use posting_iterator::PostingIterator;
 pub use posting_reader::{PostingRead, PostingReader};
 pub use posting_writer::{BuildingPostingBlock, PostingBlockSnapshot, PostingWriter};
-pub use skip_list::{SkipListReader, SkipListWrite, SkipListWriter,SkipListFormat};
+pub use skip_list::{SkipListFormat, SkipListReader, SkipListWrite, SkipListWriter};
 pub use term_dict::{TermDict, TermDictBuilder};
 pub use term_info::TermInfo;

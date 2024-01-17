@@ -22,6 +22,36 @@ impl TermDict {
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> io::Result<Option<TermInfo>> {
         self.0.get(key)
     }
+
+    pub fn iter(&self) -> TermDictIterator {
+        TermDictIterator { idx: 0, dict: self }
+    }
+}
+
+pub struct TermDictIterator<'a> {
+    idx: usize,
+    dict: &'a TermDict,
+}
+
+impl<'a> Iterator for TermDictIterator<'a> {
+    type Item = (Vec<u8>, TermInfo);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.dict.0.num_terms() {
+            let mut term = Vec::new();
+            assert!(self.dict.0.ord_to_term(self.idx as u64, &mut term).unwrap());
+            let term_info = self
+                .dict
+                .0
+                .term_info_from_ord(self.idx as u64)
+                .unwrap()
+                .unwrap();
+            self.idx += 1;
+            Some((term, term_info))
+        } else {
+            None
+        }
+    }
 }
 
 impl<W: Write> TermDictBuilder<W> {

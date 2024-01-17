@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{BufRead, BufReader},
-    sync::Arc,
-};
+use std::{fs::File, sync::Arc};
 
 use tantivy_common::{
     file_slice::{FileSlice, WrapFile},

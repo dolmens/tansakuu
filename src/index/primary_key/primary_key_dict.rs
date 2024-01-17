@@ -34,6 +34,36 @@ impl PrimaryKeyDict {
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> io::Result<Option<DocId>> {
         self.0.get(key)
     }
+
+    pub fn iter(&self) -> PrimaryKeyDictIterator {
+        PrimaryKeyDictIterator { idx: 0, dict: self }
+    }
+}
+
+pub struct PrimaryKeyDictIterator<'a> {
+    idx: usize,
+    dict: &'a PrimaryKeyDict,
+}
+
+impl<'a> Iterator for PrimaryKeyDictIterator<'a> {
+    type Item = (Vec<u8>, DocId);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.dict.0.num_terms() {
+            let mut term = Vec::new();
+            assert!(self.dict.0.ord_to_term(self.idx as u64, &mut term).unwrap());
+            let docid = self
+                .dict
+                .0
+                .term_info_from_ord(self.idx as u64)
+                .unwrap()
+                .unwrap();
+            self.idx += 1;
+            Some((term, docid))
+        } else {
+            None
+        }
+    }
 }
 
 pub struct DocIdSSTable;

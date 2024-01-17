@@ -1,4 +1,4 @@
-use std::collections::{hash_map::RandomState, HashMap};
+use std::collections::hash_map::RandomState;
 
 use crate::{
     index::IndexSegmentData,

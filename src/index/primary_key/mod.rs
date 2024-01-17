@@ -8,7 +8,6 @@ mod primary_key_posting_iterator;
 mod primary_key_reader;
 mod primary_key_segment_data_builder;
 mod primary_key_serializer;
-// mod primary_key_serializer_writer;
 mod primary_key_writer;
 
 pub use primary_key_building_segment_data::PrimaryKeyBuildingSegmentData;
@@ -21,5 +20,4 @@ pub use primary_key_posting_iterator::PrimaryKeyPostingIterator;
 pub use primary_key_reader::PrimaryKeyReader;
 pub use primary_key_segment_data_builder::PrimaryKeySegmentDataBuilder;
 pub use primary_key_serializer::PrimaryKeySerializer;
-// pub use primary_key_serializer_writer::PrimaryKeySerializerWriter;
 pub use primary_key_writer::PrimaryKeyWriter;

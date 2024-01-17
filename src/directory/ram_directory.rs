@@ -6,7 +6,6 @@ use std::{fmt, result};
 
 use tantivy_common::HasLen;
 
-use super::directory::DirectoryClone;
 use super::error::{CreateDirectoryError, OpenDirectoryError};
 use super::{FileHandle, META_FILEPATH};
 // use crate::core::META_FILEPATH;
@@ -86,7 +85,7 @@ enum DirectoryEntry {
 impl DirectoryEntry {
     fn mem_usage(&self) -> usize {
         match self {
-            Self::Directory(directory) => 0,
+            Self::Directory(directory) => directory.total_mem_usage(),
             Self::File(file) => file.len(),
         }
     }
@@ -212,7 +211,7 @@ impl RamDirectory {
     /// written using the [`Directory::atomic_write()`] api.
     ///
     /// If an error is encountered, files may be persisted partially.
-    pub fn dump(&self, dest: &dyn Directory) -> crate::Result<()> {
+    pub fn dump(&self, _dest: &dyn Directory) -> crate::Result<()> {
         // let wlock = self.fs.write().unwrap();
         // for (path, file) in wlock.fs.iter() {
         //     let mut dest_wrt = dest.open_write(path)?;

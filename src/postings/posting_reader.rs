@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek};
 
 use crate::{DocId, POSTING_BLOCK_LEN};
 
