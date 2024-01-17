@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     postings::PostingEncoder,
-    util::{AcqRelUsize, RelaxedU32},
+    util::{AcqRelU64, RelaxedU32},
     SKIPLIST_BLOCK_LEN,
 };
 
@@ -27,7 +27,6 @@ pub struct SkipListWriter<W: Write> {
 }
 
 pub struct BuildingSkipListBlock {
-    len: AcqRelUsize,
     keys: [RelaxedU32; SKIPLIST_BLOCK_LEN],
     offsets: [RelaxedU32; SKIPLIST_BLOCK_LEN],
     values: Option<Box<[RelaxedU32]>>,
@@ -41,7 +40,11 @@ pub struct SkipListBlockSnapshot {
 }
 
 pub struct SkipListFlushInfo {
-    item_count: AcqRelUsize,
+    value: AcqRelU64,
+}
+
+pub struct SkipListFlushInfoSnapshot {
+    value: u64,
 }
 
 impl<W: Write> SkipListWriter<W> {
@@ -87,7 +90,8 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
         building_block.add_skip_item(key - self.last_key, offset, self.block_len, value);
 
         self.block_len += 1;
-        building_block.len.store(self.block_len);
+        self.flush_info.set_buffer_len(self.block_len);
+
         if self.block_len == SKIPLIST_BLOCK_LEN {
             self.flush()?;
         }
@@ -122,10 +126,11 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
             }
 
             self.item_count_flushed += self.block_len;
-            self.flush_info.item_count.store(self.item_count_flushed);
-
-            building_block.clear();
             self.block_len = 0;
+            let mut flush_info = SkipListFlushInfoSnapshot::new(0);
+            flush_info.set_buffer_len(self.block_len);
+            flush_info.set_flushed_count(self.item_count_flushed);
+            self.flush_info.save(flush_info);
         }
 
         Ok(())
@@ -170,15 +175,13 @@ impl BuildingSkipListBlock {
         };
 
         Self {
-            len: AcqRelUsize::new(0),
             keys,
             offsets,
             values,
         }
     }
 
-    pub fn snapshot(&self) -> SkipListBlockSnapshot {
-        let len = self.len();
+    pub fn snapshot(&self, len: usize) -> SkipListBlockSnapshot {
         let keys = self.keys[0..len].iter().map(|k| k.load()).collect();
         let offsets = self.offsets[0..len]
             .iter()
@@ -195,14 +198,6 @@ impl BuildingSkipListBlock {
             offsets,
             values,
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.len.load()
-    }
-
-    fn clear(&self) {
-        self.len.store(0);
     }
 
     fn add_skip_item(&self, key: u32, offset: u32, index: usize, value: Option<u32>) {
@@ -227,12 +222,52 @@ impl SkipListBlockSnapshot {
 impl SkipListFlushInfo {
     pub fn new() -> Self {
         Self {
-            item_count: AcqRelUsize::new(0),
+            value: AcqRelU64::new(0),
         }
     }
 
-    pub fn item_count(&self) -> usize {
-        self.item_count.load()
+    pub fn load(&self) -> SkipListFlushInfoSnapshot {
+        SkipListFlushInfoSnapshot::new(self.value.load())
+    }
+
+    fn save(&self, flush_info: SkipListFlushInfoSnapshot) {
+        self.value.store(flush_info.value);
+    }
+
+    pub fn flushed_count(&self) -> usize {
+        self.load().flushed_count()
+    }
+
+    fn set_buffer_len(&self, buffer_len: usize) {
+        let mut flush_info = self.load();
+        flush_info.set_buffer_len(buffer_len);
+        self.save(flush_info);
+    }
+}
+
+impl SkipListFlushInfoSnapshot {
+    const BUFFER_LEN_MASK: u64 = 0xFFFF_FFFF;
+    const FLUSHED_COUNT_MASK: u64 = 0xFFFF_FFFF_0000_0000;
+
+    pub fn new(value: u64) -> Self {
+        Self { value }
+    }
+
+    pub fn buffer_len(&self) -> usize {
+        (self.value & Self::BUFFER_LEN_MASK) as usize
+    }
+
+    pub fn set_buffer_len(&mut self, buffer_len: usize) {
+        self.value =
+            (self.value & Self::FLUSHED_COUNT_MASK) | ((buffer_len as u64) & Self::BUFFER_LEN_MASK);
+    }
+
+    pub fn flushed_count(&self) -> usize {
+        (self.value >> 32) as usize
+    }
+
+    pub fn set_flushed_count(&mut self, flushed_count: usize) {
+        self.value = (self.value & Self::BUFFER_LEN_MASK) | ((flushed_count as u64) << 32);
     }
 }
 
@@ -254,7 +289,6 @@ mod tests {
         let skip_list_format = SkipListFormat::builder().build();
         let mut buf = vec![];
         let mut skip_list_writer = SkipListWriter::new(skip_list_format, &mut buf);
-        let building_block = skip_list_writer.building_block().clone();
         let flush_info = skip_list_writer.flush_info().clone();
 
         let keys: Vec<_> = (0..BLOCK_LEN * 2 + 3)
@@ -275,13 +309,15 @@ mod tests {
             skip_list_writer.add_skip_item(keys[i], offsets[i], None)?;
         }
 
-        assert_eq!(building_block.len(), 3);
-        assert_eq!(flush_info.item_count(), BLOCK_LEN * 2);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.buffer_len(), 3);
+        assert_eq!(flush_info.flushed_count(), BLOCK_LEN * 2);
 
         skip_list_writer.flush()?;
 
-        assert_eq!(building_block.len(), 0);
-        assert_eq!(flush_info.item_count(), BLOCK_LEN * 2 + 3);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.buffer_len(), 0);
+        assert_eq!(flush_info.flushed_count(), BLOCK_LEN * 2 + 3);
 
         let posting_encoder = PostingEncoder;
         let mut decoded_keys = [0; BLOCK_LEN];

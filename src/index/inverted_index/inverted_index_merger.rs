@@ -86,12 +86,12 @@ impl IndexMerger for InvertedIndexMerger {
             }
 
             posting_writer.flush().unwrap();
-            let posting_item_count = posting_writer.flush_info().doc_count();
+            let posting_item_count = posting_writer.flush_info().flushed_count();
 
             let (posting_writer, mut skip_list_writer) = posting_writer.finish();
 
             skip_list_writer.flush().unwrap();
-            let skip_item_count = skip_list_writer.flush_info().item_count();
+            let skip_item_count = skip_list_writer.flush_info().flushed_count();
 
             posting_counting_writer = posting_writer;
             skip_list_counting_writer = skip_list_writer.finish();

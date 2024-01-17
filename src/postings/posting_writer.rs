@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    util::{AcqRelUsize, RelaxedU32, RelaxedU8},
+    util::{AcqRelU64, RelaxedU32, RelaxedU8},
     DocId, FieldMask, TermFreq, INVALID_DOCID, POSTING_BLOCK_LEN,
 };
 
@@ -28,7 +28,6 @@ pub struct PostingWriter<W: Write, S: SkipListWrite = NoSkipListWriter> {
 }
 
 pub struct BuildingPostingBlock {
-    len: AcqRelUsize,
     docids: [RelaxedU32; POSTING_BLOCK_LEN],
     termfreqs: Option<Box<[RelaxedU32]>>,
     fieldmasks: Option<Box<[RelaxedU8]>>,
@@ -42,7 +41,11 @@ pub struct PostingBlockSnapshot {
 }
 
 pub struct FlushInfo {
-    doc_count: AcqRelUsize,
+    value: AcqRelU64,
+}
+
+pub struct FlushInfoSnapshot {
+    value: u64,
 }
 
 impl<W: Write> PostingWriter<W, NoSkipListWriter> {
@@ -107,7 +110,7 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
         self.current_tf = 0;
 
         self.block_len += 1;
-        building_block.len.store(self.block_len);
+        self.flush_info.set_buffer_len(self.block_len);
 
         if self.block_len == POSTING_BLOCK_LEN {
             self.flush().unwrap();
@@ -144,16 +147,17 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
             }
 
             self.doc_count_flushed += self.block_len;
-            self.flush_info.doc_count.store(self.doc_count_flushed);
+            self.block_len = 0;
+            let mut flush_info = FlushInfoSnapshot::new(0);
+            flush_info.set_buffer_len(self.block_len);
+            flush_info.set_flushed_count(self.doc_count_flushed);
+            self.flush_info.save(flush_info);
 
             // Only full block will have a skip item
             if self.block_len == POSTING_BLOCK_LEN {
                 self.skip_list_writer
                     .add_skip_item(self.last_docid, flushed_size as u32, None)?;
             }
-
-            building_block.clear();
-            self.block_len = 0;
         }
 
         Ok(())
@@ -194,15 +198,13 @@ impl BuildingPostingBlock {
         };
 
         Self {
-            len: AcqRelUsize::new(0),
             docids,
             termfreqs,
             fieldmasks,
         }
     }
 
-    pub fn snapshot(&self) -> PostingBlockSnapshot {
-        let len = self.len();
+    pub fn snapshot(&self, len: usize) -> PostingBlockSnapshot {
         let docids = self.docids[0..len]
             .iter()
             .map(|docid| docid.load())
@@ -222,14 +224,6 @@ impl BuildingPostingBlock {
             termfreqs,
             fieldmasks,
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.len.load()
-    }
-
-    fn clear(&self) {
-        self.len.store(0);
     }
 
     fn add_docid(&self, offset: usize, docid: DocId) {
@@ -288,12 +282,52 @@ impl PostingBlockSnapshot {
 impl FlushInfo {
     pub fn new() -> Self {
         Self {
-            doc_count: AcqRelUsize::new(0),
+            value: AcqRelU64::new(0),
         }
     }
 
-    pub fn doc_count(&self) -> usize {
-        self.doc_count.load()
+    pub fn load(&self) -> FlushInfoSnapshot {
+        FlushInfoSnapshot::new(self.value.load())
+    }
+
+    fn save(&self, flush_info: FlushInfoSnapshot) {
+        self.value.store(flush_info.value);
+    }
+
+    pub fn flushed_count(&self) -> usize {
+        self.load().flushed_count()
+    }
+
+    fn set_buffer_len(&self, buffer_len: usize) {
+        let mut flush_info = self.load();
+        flush_info.set_buffer_len(buffer_len);
+        self.save(flush_info);
+    }
+}
+
+impl FlushInfoSnapshot {
+    const BUFFER_LEN_MASK: u64 = 0xFFFF_FFFF;
+    const FLUSHED_COUNT_MASK: u64 = 0xFFFF_FFFF_0000_0000;
+
+    pub fn new(value: u64) -> Self {
+        Self { value }
+    }
+
+    pub fn buffer_len(&self) -> usize {
+        (self.value & Self::BUFFER_LEN_MASK) as usize
+    }
+
+    pub fn set_buffer_len(&mut self, buffer_len: usize) {
+        self.value =
+            (self.value & Self::FLUSHED_COUNT_MASK) | ((buffer_len as u64) & Self::BUFFER_LEN_MASK);
+    }
+
+    pub fn flushed_count(&self) -> usize {
+        (self.value >> 32) as usize
+    }
+
+    pub fn set_flushed_count(&mut self, flushed_count: usize) {
+        self.value = (self.value & Self::BUFFER_LEN_MASK) | ((flushed_count as u64) << 32);
     }
 }
 
@@ -339,8 +373,9 @@ mod tests {
         }
         posting_writer.end_doc(docids[0]);
 
-        assert_eq!(flush_info.doc_count(), 0);
-        assert_eq!(building_block.len(), 1);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), 0);
+        assert_eq!(flush_info_snapshot.buffer_len(), 1);
         assert_eq!(building_block.docids[0].load(), docids[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
@@ -352,8 +387,9 @@ mod tests {
         }
         posting_writer.end_doc(docids[1]);
 
-        assert_eq!(flush_info.doc_count(), 0);
-        assert_eq!(building_block.len(), 2);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), 0);
+        assert_eq!(flush_info_snapshot.buffer_len(), 2);
         assert_eq!(building_block.docids[0].load(), docids[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
@@ -372,8 +408,9 @@ mod tests {
             posting_writer.end_doc(docids[i]);
         }
 
-        assert_eq!(building_block.len(), 0);
-        assert_eq!(flush_info.doc_count(), BLOCK_LEN);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN);
+        assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
         for i in 0..BLOCK_LEN + 3 {
             for _ in 0..termfreqs[i + BLOCK_LEN] {
@@ -382,13 +419,15 @@ mod tests {
             posting_writer.end_doc(docids[i + BLOCK_LEN]);
         }
 
-        assert_eq!(flush_info.doc_count(), BLOCK_LEN * 2);
-        assert_eq!(building_block.len(), 3);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
+        assert_eq!(flush_info_snapshot.buffer_len(), 3);
 
         posting_writer.flush()?;
 
-        assert_eq!(building_block.len(), 0);
-        assert_eq!(flush_info.doc_count(), BLOCK_LEN * 2 + 3);
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
+        assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
         let posting_encoder = PostingEncoder;
 

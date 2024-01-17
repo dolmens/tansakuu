@@ -87,14 +87,14 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
 
 impl<'a> BuildingPostingReader<'a> {
     pub fn open<A: Allocator>(building_posting_list: &'a BuildingPostingList<A>) -> Self {
-        let flush_info = building_posting_list.flush_info.as_ref();
+        let flush_info = building_posting_list.flush_info.load();
         let byte_slice_list = building_posting_list.byte_slice_list.as_ref();
         let building_block = building_posting_list.building_block.as_ref();
         let posting_format = building_posting_list.posting_format.clone();
-        let mut doc_count = flush_info.doc_count();
+        let mut doc_count = flush_info.flushed_count();
         let mut byte_slice_reader = ByteSliceReader::open(byte_slice_list);
-        let mut building_block_snapshot = building_block.snapshot();
-        let doc_count_updated = flush_info.doc_count();
+        let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
+        let doc_count_updated = building_posting_list.flush_info.flushed_count();
         if doc_count < doc_count_updated {
             building_block_snapshot.clear();
             doc_count = doc_count_updated;
