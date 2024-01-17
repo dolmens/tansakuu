@@ -92,7 +92,11 @@ impl<'a> BuildingPostingReader<'a> {
         let building_block = building_posting_list.building_block.as_ref();
         let posting_format = building_posting_list.posting_format.clone();
         let mut doc_count = flush_info.flushed_count();
-        let mut byte_slice_reader = ByteSliceReader::open(byte_slice_list);
+        let mut byte_slice_reader = if doc_count == 0 {
+            ByteSliceReader::empty()
+        } else {
+            ByteSliceReader::open(byte_slice_list)
+        };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
         let doc_count_updated = building_posting_list.flush_info.flushed_count();
         if doc_count < doc_count_updated {

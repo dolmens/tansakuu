@@ -221,6 +221,16 @@ impl<A: Allocator> Write for ByteSliceWriter<A> {
 }
 
 impl<'a> ByteSliceReader<'a> {
+    pub fn empty() -> Self {
+        Self {
+            total_size: 0,
+            global_offset: 0,
+            current_slice_offset: 0,
+            current_slice: NonNull::dangling(),
+            _marker: PhantomData,
+        }
+    }
+
     pub fn open<A: Allocator>(byte_slice_list: &'a ByteSliceList<A>) -> Self {
         Self {
             total_size: byte_slice_list.total_size(),
