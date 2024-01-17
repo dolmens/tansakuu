@@ -135,9 +135,12 @@ impl<'a> SkipListSeek for BuildingSkipListReader<'a> {
             self.current_key = current_key;
         }
         while self.current_cursor < self.building_block_snapshot.len()
-            && self.current_key + self.building_block_snapshot.keys[self.current_cursor] < key
+            && self.current_key
+                + self.building_block_snapshot.keys.as_ref().unwrap()[self.current_cursor]
+                < key
         {
-            self.current_key += self.building_block_snapshot.keys[self.current_cursor];
+            self.current_key +=
+                self.building_block_snapshot.keys.as_ref().unwrap()[self.current_cursor];
             self.current_offset +=
                 self.building_block_snapshot.offsets[self.current_cursor] as usize;
             self.current_cursor += 1;

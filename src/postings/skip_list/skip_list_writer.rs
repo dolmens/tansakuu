@@ -32,9 +32,10 @@ pub struct BuildingSkipListBlock {
     values: Option<Box<[RelaxedU32]>>,
 }
 
+#[derive(Default)]
 pub struct SkipListBlockSnapshot {
     len: usize,
-    pub keys: Box<[u32]>,
+    pub keys: Option<Box<[u32]>>,
     pub offsets: Box<[u32]>,
     pub values: Option<Box<[u32]>>,
 }
@@ -182,21 +183,25 @@ impl BuildingSkipListBlock {
     }
 
     pub fn snapshot(&self, len: usize) -> SkipListBlockSnapshot {
-        let keys = self.keys[0..len].iter().map(|k| k.load()).collect();
-        let offsets = self.offsets[0..len]
-            .iter()
-            .map(|offset| offset.load())
-            .collect();
-        let values = self
-            .values
-            .as_ref()
-            .map(|values| values[0..len].iter().map(|v| v.load()).collect());
+        if len > 0 {
+            let keys = self.keys[0..len].iter().map(|k| k.load()).collect();
+            let offsets = self.offsets[0..len]
+                .iter()
+                .map(|offset| offset.load())
+                .collect();
+            let values = self
+                .values
+                .as_ref()
+                .map(|values| values[0..len].iter().map(|v| v.load()).collect());
 
-        SkipListBlockSnapshot {
-            len,
-            keys,
-            offsets,
-            values,
+            SkipListBlockSnapshot {
+                len,
+                keys: Some(keys),
+                offsets,
+                values,
+            }
+        } else {
+            SkipListBlockSnapshot::default()
         }
     }
 

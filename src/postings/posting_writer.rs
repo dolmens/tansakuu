@@ -33,9 +33,10 @@ pub struct BuildingPostingBlock {
     fieldmasks: Option<Box<[RelaxedU8]>>,
 }
 
+#[derive(Default)]
 pub struct PostingBlockSnapshot {
     len: usize,
-    docids: Box<[DocId]>,
+    docids: Option<Box<[DocId]>>,
     termfreqs: Option<Box<[TermFreq]>>,
     fieldmasks: Option<Box<[FieldMask]>>,
 }
@@ -205,24 +206,28 @@ impl BuildingPostingBlock {
     }
 
     pub fn snapshot(&self, len: usize) -> PostingBlockSnapshot {
-        let docids = self.docids[0..len]
-            .iter()
-            .map(|docid| docid.load())
-            .collect();
-        let termfreqs = self
-            .termfreqs
-            .as_ref()
-            .map(|termfreqs| termfreqs[0..len].iter().map(|tf| tf.load()).collect());
-        let fieldmasks = self
-            .fieldmasks
-            .as_ref()
-            .map(|fieldmasks| fieldmasks[0..len].iter().map(|fm| fm.load()).collect());
+        if len > 0 {
+            let docids = self.docids[0..len]
+                .iter()
+                .map(|docid| docid.load())
+                .collect();
+            let termfreqs = self
+                .termfreqs
+                .as_ref()
+                .map(|termfreqs| termfreqs[0..len].iter().map(|tf| tf.load()).collect());
+            let fieldmasks = self
+                .fieldmasks
+                .as_ref()
+                .map(|fieldmasks| fieldmasks[0..len].iter().map(|fm| fm.load()).collect());
 
-        PostingBlockSnapshot {
-            len,
-            docids,
-            termfreqs,
-            fieldmasks,
+            PostingBlockSnapshot {
+                len,
+                docids: Some(docids),
+                termfreqs,
+                fieldmasks,
+            }
+        } else {
+            PostingBlockSnapshot::default()
         }
     }
 
@@ -260,7 +265,7 @@ impl PostingBlockSnapshot {
         let len = self.len;
         posting_block.len = len;
         if len > 0 {
-            posting_block.docids[0..len].copy_from_slice(&self.docids[0..len]);
+            posting_block.docids[0..len].copy_from_slice(&self.docids.as_ref().unwrap()[0..len]);
             if let Some(termfreqs) = &mut posting_block.termfreqs {
                 if let Some(mytermfreqs) = &self.termfreqs {
                     termfreqs[0..len].copy_from_slice(&mytermfreqs[0..len]);
