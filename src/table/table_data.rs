@@ -150,9 +150,9 @@ impl TableData {
             index_serializer.serialize(&index_directory);
         }
 
-        if !building_segment_data.deletemap().is_empty() {
+        if !building_segment_data.deletionmap().is_empty() {
             let path = segment_directory.join("deletionmap");
-            building_segment_data.deletemap().save(path);
+            building_segment_data.deletionmap().save(path);
         }
 
         let meta = SegmentMetaData::new(building_segment_data.doc_count());

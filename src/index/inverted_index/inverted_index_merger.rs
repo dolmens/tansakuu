@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fs::File, sync::Arc};
+use std::{collections::BTreeSet, fs::File, sync::Arc};
 
 use tantivy_common::CountingWriter;
 
@@ -23,7 +23,7 @@ impl IndexMerger for InvertedIndexMerger {
         segments: &[&Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
     ) {
-        let mut terms = HashSet::<Vec<u8>>::new();
+        let mut terms = BTreeSet::<Vec<u8>>::new();
         for &segment in segments.iter() {
             let index_segment_data = segment
                 .downcast_ref::<InvertedIndexPersistentSegmentData>()
@@ -33,8 +33,6 @@ impl IndexMerger for InvertedIndexMerger {
                 terms.insert(term);
             }
         }
-        let mut terms: Vec<_> = terms.iter().collect();
-        terms.sort();
 
         let posting_format = PostingFormat::default();
         let skip_list_format = posting_format.skip_list_format().clone();
@@ -53,7 +51,7 @@ impl IndexMerger for InvertedIndexMerger {
         let mut skip_start = 0;
         let mut posting_start = 0;
 
-        for term in terms {
+        for term in &terms {
             let tok = unsafe { std::str::from_utf8_unchecked(term) };
 
             let skip_list_writer =

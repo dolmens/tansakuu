@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use uuid::Uuid;
 
 use serde::{Deserialize, Serialize};
@@ -13,10 +15,20 @@ impl SegmentId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 impl From<String> for SegmentId {
     fn from(value: String) -> Self {
         SegmentId(value)
+    }
+}
+
+impl Borrow<str> for SegmentId {
+    fn borrow(&self) -> &str {
+        &self.0
     }
 }

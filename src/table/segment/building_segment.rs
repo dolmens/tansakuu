@@ -16,7 +16,7 @@ pub struct BuildingSegmentData {
     dumping: AtomicBool,
     column_data: BuildingSegmentColumnData,
     index_data: BuildingSegmentIndexData,
-    deletemap: Arc<BuildingDeletionMap>,
+    deletionmap: Arc<BuildingDeletionMap>,
 }
 
 impl BuildingSegment {
@@ -41,7 +41,7 @@ impl BuildingSegmentData {
     pub fn new(
         column_data: BuildingSegmentColumnData,
         index_data: BuildingSegmentIndexData,
-        deletemap: Arc<BuildingDeletionMap>,
+        deletionmap: Arc<BuildingDeletionMap>,
     ) -> Self {
         Self {
             segment_id: SegmentId::new(),
@@ -49,7 +49,7 @@ impl BuildingSegmentData {
             dumping: AtomicBool::new(false),
             column_data,
             index_data,
-            deletemap,
+            deletionmap,
         }
     }
 
@@ -82,7 +82,7 @@ impl BuildingSegmentData {
         &self.index_data
     }
 
-    pub fn deletemap(&self) -> &Arc<BuildingDeletionMap> {
-        &self.deletemap
+    pub fn deletionmap(&self) -> &Arc<BuildingDeletionMap> {
+        &self.deletionmap
     }
 }

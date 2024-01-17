@@ -67,25 +67,24 @@ impl SegmentMerger {
             index_merger.merge(&index_directory, index, &index_data, &docid_mappings);
         }
 
-        let segment_ids: HashSet<_> = segments
-            .iter()
-            .map(|segment| segment.segment_id())
-            .cloned()
-            .collect();
-        let deletionmap = segments
+        let deletionmaps: Vec<_> = segments
             .iter()
             .map(|segment| segment.deletionmap())
-            .map(|deletionmap| {
-                deletionmap.map_or(DeletionMap::default(), |deletionmap| {
-                    deletionmap.remove_segments_cloned(&segment_ids)
-                })
-            })
-            .fold(DeletionMap::default(), |acc, deletionmap| {
-                acc.merge(&deletionmap)
-            });
-        if !deletionmap.is_empty() {
-            let deletionmap_path = segment_directory.join("deletionmap");
-            deletionmap.save(deletionmap_path);
+            .filter_map(|d| d)
+            .map(|d| d.as_ref())
+            .collect();
+        if !deletionmaps.is_empty() {
+            let deletionmap = DeletionMap::merge(&deletionmaps);
+            let segment_ids: HashSet<_> = segments
+                .iter()
+                .map(|segment| segment.segment_id())
+                .cloned()
+                .collect();
+            let deletionmap_tuned = deletionmap.remove_segments_cloned(&segment_ids);
+            if !deletionmap_tuned.is_empty() {
+                let deletionmap_path = segment_directory.join("deletionmap");
+                deletionmap_tuned.save(deletionmap_path);
+            }
         }
 
         let doc_count = docid_mappings

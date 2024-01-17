@@ -4,11 +4,9 @@ use crate::{
     DocId,
 };
 
-use std::{
-    collections::{hash_map::RandomState, HashMap, HashSet},
-    fs,
-    path::Path,
-};
+use std::{collections::hash_map::RandomState, fs::File, path::Path};
+
+use super::DeletionDictBuilder;
 
 pub struct BuildingDeletionMap {
     deleted: LayeredHashMap<SegmentId, LayeredHashMap<DocId, ()>>,
@@ -48,17 +46,16 @@ impl BuildingDeletionMap {
     }
 
     pub fn save(&self, path: impl AsRef<Path>) {
-        let deleted = self.to_normal_hashmap();
-        let json = serde_json::to_string_pretty(&deleted).unwrap();
-        fs::write(path, json).unwrap();
-    }
-
-    fn to_normal_hashmap(&self) -> HashMap<SegmentId, HashSet<DocId>> {
-        let mut deleted = HashMap::<SegmentId, HashSet<DocId>>::new();
+        let file = File::create(path).unwrap();
+        let mut dict_builder = DeletionDictBuilder::new(file);
+        let mut keybuf = [0_u8; 36];
         for (seg, docs) in self.deleted.iter() {
-            let docs: HashSet<_> = docs.iter().map(|(&x, _)| x).collect();
-            deleted.insert(seg.clone(), docs);
+            keybuf[..32].copy_from_slice(seg.as_bytes());
+            for (&docid, _) in docs.iter() {
+                keybuf[32..36].copy_from_slice(&docid.to_be_bytes());
+                dict_builder.insert(&keybuf).unwrap();
+            }
         }
-        deleted
+        dict_builder.finish().unwrap();
     }
 }
