@@ -204,15 +204,15 @@ impl<A: Allocator> Write for ByteSliceWriter<A> {
         }
         let current_slice = self.current_slice();
         let remain_space = current_slice.capacity - self.current_slice_offset;
-        let size = std::cmp::min(remain_space, buf.len());
-        let data_dst = current_slice.data_slice_mut(self.current_slice_offset, size);
-        data_dst.copy_from_slice(&buf[..size]);
+        let size_to_write = std::cmp::min(remain_space, buf.len());
+        let data_dst = current_slice.data_slice_mut(self.current_slice_offset, size_to_write);
+        data_dst.copy_from_slice(&buf[..size_to_write]);
 
-        self.current_slice_offset += size;
-        self.total_size += size;
+        self.current_slice_offset += size_to_write;
+        self.total_size += size_to_write;
         self.byte_slice_list.total_size.store(self.total_size);
 
-        Ok(size)
+        Ok(size_to_write)
     }
 
     fn flush(&mut self) -> io::Result<()> {
