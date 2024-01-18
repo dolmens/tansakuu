@@ -69,8 +69,7 @@ impl SegmentMerger {
 
         let deletionmaps: Vec<_> = segments
             .iter()
-            .map(|segment| segment.deletionmap())
-            .filter_map(|d| d)
+            .filter_map(|seg| seg.deletionmap())
             .map(|d| d.as_ref())
             .collect();
         if !deletionmaps.is_empty() {
@@ -80,10 +79,10 @@ impl SegmentMerger {
                 .map(|segment| segment.segment_id())
                 .cloned()
                 .collect();
-            let deletionmap_tuned = deletionmap.remove_segments_cloned(&segment_ids);
-            if !deletionmap_tuned.is_empty() {
+            let deletionmap_refined = deletionmap.remove_segments_cloned(&segment_ids);
+            if !deletionmap_refined.is_empty() {
                 let deletionmap_path = segment_directory.join("deletionmap");
-                deletionmap_tuned.save(deletionmap_path);
+                deletionmap_refined.save(deletionmap_path);
             }
         }
 
