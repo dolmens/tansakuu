@@ -43,7 +43,7 @@ impl<R: Read> SkipListReader<R> {
     }
 
     pub fn eof(&self) -> bool {
-        self.read_count == self.item_count && self.current_cursor == self.skip_list_block.len
+        self.read_count == self.item_count && self.current_cursor >= self.skip_list_block.len
     }
 
     fn decode_one_block(&mut self) -> io::Result<bool> {
