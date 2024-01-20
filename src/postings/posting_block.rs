@@ -1,11 +1,14 @@
-use crate::{DocId, FieldMask, TermFreq, POSTING_BLOCK_LEN};
+use crate::{DocId, FieldMask, TermFrequency, TotalTF, POSTING_BLOCK_LEN};
 
 use super::PostingFormat;
 
 pub struct PostingBlock {
+    pub prev_docid: DocId,
+    pub last_docid: DocId,
+    pub prev_ttf: TotalTF,
     pub len: usize,
     pub docids: [DocId; POSTING_BLOCK_LEN],
-    pub termfreqs: Option<Box<[TermFreq]>>,
+    pub termfreqs: Option<Box<[TermFrequency]>>,
     pub fieldmasks: Option<Box<[FieldMask]>>,
 }
 
@@ -33,6 +36,9 @@ impl PostingBlock {
         };
 
         Self {
+            prev_docid: 0,
+            last_docid: 0,
+            prev_ttf: 0,
             len: 0,
             docids: [0; POSTING_BLOCK_LEN],
             termfreqs,
@@ -40,14 +46,14 @@ impl PostingBlock {
         }
     }
 
-    pub fn first_docid(&self) -> DocId {
-        assert!(self.len > 0);
-        self.docids[0]
-    }
+    // pub fn first_docid(&self) -> DocId {
+    //     assert!(self.len > 0);
+    //     self.docids[0]
+    // }
 
-    pub fn last_docid(&self) -> DocId {
-        self.docids[self.len - 1]
-    }
+    // pub fn last_docid(&self) -> DocId {
+    //     self.docids[self.len - 1]
+    // }
 
     pub fn decode_docids(&mut self, last_docid: DocId) {
         self.docids[0..self.len]

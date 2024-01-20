@@ -7,8 +7,10 @@ mod skip_list_writer;
 pub use building_skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter};
 pub use skip_list_block::SkipListBlock;
 pub use skip_list_format::SkipListFormat;
-pub use skip_list_reader::{NoSkipList, SkipListReader, SkipListSeek};
+pub use skip_list_reader::{SkipListRead, SkipListReader};
 pub use skip_list_writer::{
-    BuildingSkipListBlock, NoSkipListWriter, SkipListBlockSnapshot, SkipListFlushInfo,
-    SkipListWrite, SkipListWriter,
+    BuildingSkipListBlock, SkipListBlockSnapshot, SkipListFlushInfo, SkipListWrite, SkipListWriter,
 };
+
+#[cfg(test)]
+pub use skip_list_reader::MockSkipListReader;

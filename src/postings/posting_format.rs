@@ -4,6 +4,7 @@ use super::skip_list::SkipListFormat;
 pub struct PostingFormat {
     has_tflist: bool,
     has_fieldmask: bool,
+    has_position_list: bool,
     skip_list_format: SkipListFormat,
 }
 
@@ -32,6 +33,7 @@ impl PostingFormatBuilder {
         let skip_list_format = SkipListFormat::builder().build();
         PostingFormat {
             has_tflist: self.has_tflist,
+            has_position_list: false,
             has_fieldmask: self.has_fieldmask,
             skip_list_format,
         }

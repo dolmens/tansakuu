@@ -3,26 +3,27 @@ use std::{
     sync::Arc,
 };
 
+use tantivy_common::CountingWriter;
+
 use crate::{
     util::{AcqRelU64, RelaxedU32, RelaxedU8},
-    DocId, FieldMask, TermFreq, INVALID_DOCID, POSTING_BLOCK_LEN,
+    DocId, FieldMask, TermFrequency, TotalTF, INVALID_DOCID, POSTING_BLOCK_LEN,
 };
 
 use super::{
-    skip_list::{NoSkipListWriter, SkipListWrite},
-    PostingBlock, PostingEncoder, PostingFormat,
+    skip_list::SkipListWrite, PostingBlock, PostingEncoder, PostingFormat, SkipListWriter,
 };
 
-pub struct PostingWriter<W: Write, S: SkipListWrite = NoSkipListWriter> {
+pub struct PostingWriter<W: Write, S: SkipListWrite> {
     last_docid: DocId,
-    current_tf: TermFreq,
-    total_tf: TermFreq,
+    current_tf: TermFrequency,
+    total_tf: TotalTF,
     fieldmask: FieldMask,
-    block_len: usize,
-    building_block: Arc<BuildingPostingBlock>,
+    buffer_len: usize,
     doc_count_flushed: usize,
     flush_info: Arc<FlushInfo>,
-    writer: W,
+    building_block: Arc<BuildingPostingBlock>,
+    writer: CountingWriter<W>,
     skip_list_writer: S,
     posting_format: PostingFormat,
 }
@@ -37,7 +38,7 @@ pub struct BuildingPostingBlock {
 pub struct PostingBlockSnapshot {
     len: usize,
     docids: Option<Box<[DocId]>>,
-    termfreqs: Option<Box<[TermFreq]>>,
+    termfreqs: Option<Box<[TermFrequency]>>,
     fieldmasks: Option<Box<[FieldMask]>>,
 }
 
@@ -49,14 +50,16 @@ pub struct FlushInfoSnapshot {
     value: u64,
 }
 
-impl<W: Write> PostingWriter<W, NoSkipListWriter> {
-    pub fn new(posting_format: PostingFormat, writer: W) -> Self {
-        Self::new_with_skip_list(posting_format, writer, NoSkipListWriter)
+impl<W: Write, SW: Write> PostingWriter<W, SkipListWriter<SW>> {
+    pub fn new(posting_format: PostingFormat, writer: W, skip_list_writer: SW) -> Self {
+        let skip_list_format = posting_format.skip_list_format().clone();
+        let skip_list_writer = SkipListWriter::new(skip_list_format, skip_list_writer);
+        Self::new_with_skip_list_writer(posting_format, writer, skip_list_writer)
     }
 }
 
 impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
-    pub fn new_with_skip_list(
+    pub fn new_with_skip_list_writer(
         posting_format: PostingFormat,
         writer: W,
         skip_list_writer: S,
@@ -69,23 +72,27 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
             current_tf: 0,
             total_tf: 0,
             fieldmask: 0,
-            block_len: 0,
-            building_block,
+            buffer_len: 0,
             doc_count_flushed: 0,
             flush_info,
-            writer,
+            building_block,
+            writer: CountingWriter::wrap(writer),
             skip_list_writer,
             posting_format,
         }
+    }
+
+    pub fn flush_info(&self) -> &Arc<FlushInfo> {
+        &self.flush_info
     }
 
     pub fn building_block(&self) -> &Arc<BuildingPostingBlock> {
         &self.building_block
     }
 
-    pub fn flush_info(&self) -> &Arc<FlushInfo> {
-        &self.flush_info
-    }
+    // pub fn skip_list_writer(&self) -> &SkipListWriter<S> {
+    //     &self.skip_list_writer
+    // }
 
     pub fn posting_format(&self) -> &PostingFormat {
         &self.posting_format
@@ -96,87 +103,82 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
         self.total_tf += 1;
     }
 
-    pub fn end_doc(&mut self, docid: DocId) {
+    pub fn end_doc(&mut self, docid: DocId) -> io::Result<()> {
         if self.last_docid == INVALID_DOCID {
             self.last_docid = 0;
         } else {
             assert!(docid > self.last_docid);
         }
         let building_block = self.building_block.as_ref();
-        building_block.add_docid(self.block_len, docid - self.last_docid);
-        building_block.add_tf(self.block_len, self.current_tf);
-        building_block.add_fieldmask(self.block_len, self.fieldmask);
+        building_block.add_docid(self.buffer_len, docid - self.last_docid);
+        building_block.add_tf(self.buffer_len, self.current_tf);
+        building_block.add_fieldmask(self.buffer_len, self.fieldmask);
 
         self.last_docid = docid;
         self.current_tf = 0;
 
-        self.block_len += 1;
-        self.flush_info.set_buffer_len(self.block_len);
+        self.buffer_len += 1;
+        let flush_info = FlushInfoSnapshot::new(self.doc_count_flushed, self.buffer_len);
+        self.flush_info.store(flush_info);
 
-        if self.block_len == POSTING_BLOCK_LEN {
-            self.flush().unwrap();
-        }
-    }
-
-    pub fn flush(&mut self) -> io::Result<()> {
-        if self.block_len > 0 {
-            let building_block = self.building_block.as_ref();
-            let posting_encoder = PostingEncoder;
-            let mut flushed_size = 0;
-            let docids = building_block.docids[0..self.block_len]
-                .iter()
-                .map(|a| a.load())
-                .collect::<Vec<_>>();
-            flushed_size += posting_encoder.encode_u32(&docids, &mut self.writer)?;
-            if self.posting_format.has_tflist() {
-                if let Some(termfreqs_atomics) = &building_block.termfreqs {
-                    let termfreqs = termfreqs_atomics[0..self.block_len]
-                        .iter()
-                        .map(|a| a.load())
-                        .collect::<Vec<_>>();
-                    flushed_size += posting_encoder.encode_u32(&termfreqs, &mut self.writer)?;
-                }
-            }
-            if self.posting_format.has_fieldmask() {
-                if let Some(fieldmaps_atomics) = &building_block.fieldmasks {
-                    let fieldmaps = fieldmaps_atomics[0..self.block_len]
-                        .iter()
-                        .map(|a| a.load())
-                        .collect::<Vec<_>>();
-                    flushed_size += posting_encoder.encode_u8(&fieldmaps, &mut self.writer)?;
-                }
-            }
-
-            self.doc_count_flushed += self.block_len;
-            self.block_len = 0;
-            let mut flush_info = FlushInfoSnapshot::new(0);
-            flush_info.set_buffer_len(self.block_len);
-            flush_info.set_flushed_count(self.doc_count_flushed);
-            self.flush_info.save(flush_info);
-
-            // Only full block will have a skip item
-            if self.block_len == POSTING_BLOCK_LEN {
-                self.skip_list_writer
-                    .add_skip_item(self.last_docid, flushed_size as u32, None)?;
-            }
+        if self.buffer_len == POSTING_BLOCK_LEN {
+            self.flush()?;
         }
 
         Ok(())
     }
 
-    pub fn finish(self) -> (W, S) {
-        (self.writer, self.skip_list_writer)
+    pub fn flush(&mut self) -> io::Result<()> {
+        if self.buffer_len > 0 {
+            let building_block = self.building_block.as_ref();
+            let posting_encoder = PostingEncoder;
+            let docids = building_block.docids[0..self.buffer_len]
+                .iter()
+                .map(|a| a.load())
+                .collect::<Vec<_>>();
+            posting_encoder.encode_u32(&docids, &mut self.writer)?;
+            if self.posting_format.has_tflist() {
+                if let Some(termfreqs_atomics) = &building_block.termfreqs {
+                    let termfreqs = termfreqs_atomics[0..self.buffer_len]
+                        .iter()
+                        .map(|a| a.load())
+                        .collect::<Vec<_>>();
+                    posting_encoder.encode_u32(&termfreqs, &mut self.writer)?;
+                }
+            }
+            if self.posting_format.has_fieldmask() {
+                if let Some(fieldmaps_atomics) = &building_block.fieldmasks {
+                    let fieldmaps = fieldmaps_atomics[0..self.buffer_len]
+                        .iter()
+                        .map(|a| a.load())
+                        .collect::<Vec<_>>();
+                    posting_encoder.encode_u8(&fieldmaps, &mut self.writer)?;
+                }
+            }
+
+            // Only full block will have a skip item
+            if self.buffer_len == POSTING_BLOCK_LEN {
+                self.skip_list_writer.add_skip_item(
+                    self.last_docid as u64,
+                    self.writer.written_bytes(),
+                    None,
+                )?;
+            }
+
+            self.doc_count_flushed += self.buffer_len;
+            self.buffer_len = 0;
+            let flush_info = FlushInfoSnapshot::new(self.doc_count_flushed, 0);
+            self.flush_info.store(flush_info);
+        }
+
+        Ok(())
     }
 }
 
 impl BuildingPostingBlock {
     pub fn new(posting_format: &PostingFormat) -> Self {
-        let docids = std::iter::repeat_with(|| RelaxedU32::new(0))
-            .take(POSTING_BLOCK_LEN)
-            .collect::<Vec<_>>()
-            .try_into()
-            .ok()
-            .unwrap();
+        const ZERO: RelaxedU32 = RelaxedU32::new(0);
+        let docids = [ZERO; POSTING_BLOCK_LEN];
         let termfreqs = if posting_format.has_tflist() {
             Some(
                 std::iter::repeat_with(|| RelaxedU32::new(0))
@@ -235,7 +237,7 @@ impl BuildingPostingBlock {
         self.docids[offset].store(docid);
     }
 
-    fn add_tf(&self, offset: usize, tf: TermFreq) {
+    fn add_tf(&self, offset: usize, tf: TermFrequency) {
         self.termfreqs.as_ref().map(|termfreqs| {
             termfreqs[offset].store(tf);
         });
@@ -292,21 +294,11 @@ impl FlushInfo {
     }
 
     pub fn load(&self) -> FlushInfoSnapshot {
-        FlushInfoSnapshot::new(self.value.load())
+        FlushInfoSnapshot::with_value(self.value.load())
     }
 
-    fn save(&self, flush_info: FlushInfoSnapshot) {
+    fn store(&self, flush_info: FlushInfoSnapshot) {
         self.value.store(flush_info.value);
-    }
-
-    pub fn flushed_count(&self) -> usize {
-        self.load().flushed_count()
-    }
-
-    fn set_buffer_len(&self, buffer_len: usize) {
-        let mut flush_info = self.load();
-        flush_info.set_buffer_len(buffer_len);
-        self.save(flush_info);
     }
 }
 
@@ -314,7 +306,12 @@ impl FlushInfoSnapshot {
     const BUFFER_LEN_MASK: u64 = 0xFFFF_FFFF;
     const FLUSHED_COUNT_MASK: u64 = 0xFFFF_FFFF_0000_0000;
 
-    pub fn new(value: u64) -> Self {
+    pub fn new(flushed_count: usize, buffer_len: usize) -> Self {
+        let value = ((flushed_count as u64) << 32) | ((buffer_len as u64) & Self::BUFFER_LEN_MASK);
+        Self { value }
+    }
+
+    pub fn with_value(value: u64) -> Self {
         Self { value }
     }
 
@@ -342,7 +339,7 @@ mod tests {
 
     use crate::{
         postings::{PostingEncoder, PostingFormat},
-        DocId, TermFreq, POSTING_BLOCK_LEN,
+        DocId, TermFrequency, POSTING_BLOCK_LEN,
     };
 
     use super::PostingWriter;
@@ -352,7 +349,8 @@ mod tests {
         const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut buf = vec![];
-        let mut posting_writer = PostingWriter::new(posting_format, &mut buf);
+        let mut skip_list_buf = vec![];
+        let mut posting_writer = PostingWriter::new(posting_format, &mut buf, &mut skip_list_buf);
         let building_block = posting_writer.building_block().clone();
         let flush_info = posting_writer.flush_info().clone();
 
@@ -369,14 +367,14 @@ mod tests {
 
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| (i % 3 + 1) as TermFreq)
+            .map(|(i, _)| (i % 3 + 1) as TermFrequency)
             .collect();
         let termfreqs = &termfreqs[..];
 
         for _ in 0..termfreqs[0] {
             posting_writer.add_pos(1);
         }
-        posting_writer.end_doc(docids[0]);
+        posting_writer.end_doc(docids[0])?;
 
         let flush_info_snapshot = flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
@@ -390,7 +388,7 @@ mod tests {
         for _ in 0..termfreqs[1] {
             posting_writer.add_pos(1);
         }
-        posting_writer.end_doc(docids[1]);
+        posting_writer.end_doc(docids[1])?;
 
         let flush_info_snapshot = flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
@@ -410,7 +408,7 @@ mod tests {
             for _ in 0..termfreqs[i] {
                 posting_writer.add_pos(1);
             }
-            posting_writer.end_doc(docids[i]);
+            posting_writer.end_doc(docids[i])?;
         }
 
         let flush_info_snapshot = flush_info.load();
@@ -421,7 +419,7 @@ mod tests {
             for _ in 0..termfreqs[i + BLOCK_LEN] {
                 posting_writer.add_pos(1);
             }
-            posting_writer.end_doc(docids[i + BLOCK_LEN]);
+            posting_writer.end_doc(docids[i + BLOCK_LEN])?;
         }
 
         let flush_info_snapshot = flush_info.load();

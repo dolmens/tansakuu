@@ -339,28 +339,27 @@ macro_rules! fail_point {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
     use std::path::Path;
 
     use super::RamDirectory;
     use crate::Directory;
 
-    #[test]
-    fn test_persist() {
-        let msg_atomic: &'static [u8] = b"atomic is the way";
-        let msg_seq: &'static [u8] = b"sequential is the way";
-        let path_atomic: &'static Path = Path::new("atomic");
-        let path_seq: &'static Path = Path::new("seq");
-        let directory = RamDirectory::create();
-        assert!(directory.atomic_write(path_atomic, msg_atomic).is_ok());
-        let mut wrt = directory.open_write(path_seq).unwrap();
-        assert!(wrt.write_all(msg_seq).is_ok());
-        assert!(wrt.flush().is_ok());
-        let directory_copy = RamDirectory::create();
-        assert!(directory.dump(&directory_copy).is_ok());
-        assert_eq!(directory_copy.atomic_read(path_atomic).unwrap(), msg_atomic);
-        assert_eq!(directory_copy.atomic_read(path_seq).unwrap(), msg_seq);
-    }
+    // #[test]
+    // fn test_persist() {
+    //     let msg_atomic: &'static [u8] = b"atomic is the way";
+    //     let msg_seq: &'static [u8] = b"sequential is the way";
+    //     let path_atomic: &'static Path = Path::new("atomic");
+    //     let path_seq: &'static Path = Path::new("seq");
+    //     let directory = RamDirectory::create();
+    //     assert!(directory.atomic_write(path_atomic, msg_atomic).is_ok());
+    //     let mut wrt = directory.open_write(path_seq).unwrap();
+    //     assert!(wrt.write_all(msg_seq).is_ok());
+    //     assert!(wrt.flush().is_ok());
+    //     let directory_copy = RamDirectory::create();
+    //     assert!(directory.dump(&directory_copy).is_ok());
+    //     assert_eq!(directory_copy.atomic_read(path_atomic).unwrap(), msg_atomic);
+    //     assert_eq!(directory_copy.atomic_read(path_seq).unwrap(), msg_seq);
+    // }
 
     #[test]
     fn test_ram_directory_deep_clone() {

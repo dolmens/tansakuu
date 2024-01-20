@@ -19,7 +19,7 @@ macro_rules! atomic {
         pub struct $name($underlying);
 
         impl $name {
-            pub fn new(v: $raw) -> Self {
+            pub const fn new(v: $raw) -> Self {
                 Self($underlying::new(v))
             }
             pub fn load(&self) -> $raw {

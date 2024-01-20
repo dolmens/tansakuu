@@ -18,9 +18,9 @@ pub mod table;
 pub mod util;
 
 pub type DocId = u32;
-pub type DocUniqueId = u64;
-pub type TermFreq = u32;
-pub type DocFreq = u32;
+pub type TermFrequency = u32;
+pub type TotalTF = u64;
+pub type TokenPos = u32;
 pub type FieldMask = u8;
 pub type VersionId = u64;
 
@@ -29,6 +29,8 @@ pub const INVALID_DOCID: DocId = DocId::MAX;
 
 pub const POSTING_BLOCK_LEN: usize = 128;
 pub const SKIPLIST_BLOCK_LEN: usize = 32;
+pub const POSITION_BLOCK_LEN: usize = 128;
+pub const POS_SKIP_BLOCK_LEN: usize = 32;
 
 pub const INVALID_VERSION_ID: VersionId = 0;
 

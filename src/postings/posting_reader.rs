@@ -1,20 +1,18 @@
-use std::io::{self, Read, Seek};
+use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::{DocId, POSTING_BLOCK_LEN};
+use crate::{DocId, TotalTF, POSTING_BLOCK_LEN};
 
-use super::{
-    skip_list::{NoSkipList, SkipListSeek},
-    PostingBlock, PostingEncoder, PostingFormat,
-};
+use super::{skip_list::SkipListRead, PostingBlock, PostingEncoder, PostingFormat, SkipListReader};
 
 pub trait PostingRead {
-    fn posting_format(&self) -> &PostingFormat;
-    fn decode_one_block(&mut self, posting_block: &mut PostingBlock) -> io::Result<()>;
+    fn decode_one_block(
+        &mut self,
+        docid: DocId,
+        posting_block: &mut PostingBlock,
+    ) -> io::Result<bool>;
 }
 
-pub struct PostingReader<R: Read + Seek, S: SkipListSeek = NoSkipList> {
-    // current_seek: usize,
-    last_docid: DocId,
+pub struct PostingReader<R: Read + Seek, S: SkipListRead> {
     read_count: usize,
     doc_count: usize,
     reader: R,
@@ -22,30 +20,30 @@ pub struct PostingReader<R: Read + Seek, S: SkipListSeek = NoSkipList> {
     posting_format: PostingFormat,
 }
 
-impl<R: Read + Seek> PostingReader<R, NoSkipList> {
-    pub fn open(posting_format: PostingFormat, doc_count: usize, reader: R) -> Self {
-        Self {
-            // current_seek: 0,
-            last_docid: 0,
-            read_count: 0,
-            doc_count,
-            reader,
-            skip_list_reader: NoSkipList,
-            posting_format,
-        }
+impl<R: Read + Seek, SR: Read> PostingReader<R, SkipListReader<SR>> {
+    pub fn open(
+        posting_format: PostingFormat,
+        doc_count: usize,
+        reader: R,
+        skip_list_item_count: usize,
+        skip_list_reader: SR,
+    ) -> Self {
+        let skip_list_format = posting_format.skip_list_format().clone();
+        let skip_list_reader =
+            SkipListReader::open(skip_list_format, skip_list_item_count, skip_list_reader);
+
+        Self::open_with_skip_list_reader(posting_format, doc_count, reader, skip_list_reader)
     }
 }
 
-impl<R: Read + Seek, S: SkipListSeek> PostingReader<R, S> {
-    pub fn open_with_skip_list(
+impl<R: Read + Seek, S: SkipListRead> PostingReader<R, S> {
+    pub fn open_with_skip_list_reader(
         posting_format: PostingFormat,
         doc_count: usize,
         reader: R,
         skip_list_reader: S,
     ) -> Self {
         Self {
-            // current_seek: 0,
-            last_docid: 0,
             read_count: 0,
             doc_count,
             reader,
@@ -66,47 +64,71 @@ impl<R: Read + Seek, S: SkipListSeek> PostingReader<R, S> {
         self.read_count
     }
 
-    pub fn last_docid(&self) -> DocId {
-        self.last_docid
-    }
-
-    // pub fn seek(&mut self, docid: DocId, posting_block: &mut PostingBlock) -> io::Result<bool> {
-    //     if self.eof() {
-    //         return Ok(false);
-    //     }
-    //     let (offset, last_docid, skip_count) = self.skip_list_reader.seek(docid)?;
-    //     if offset > self.current_seek {
-    //         self.reader.seek(SeekFrom::Start(offset as u64))?;
-    //         self.current_seek = offset;
-    //         self.last_docid = last_docid;
-    //         self.read_count = skip_count * POSTING_BLOCK_LEN;
-    //     }
-    //     loop {
-    //         self.decode_one_block(posting_block)?;
-    //         if posting_block.len == 0 {
-    //             return Ok(false);
-    //         }
-    //         if posting_block.last_docid() >= docid {
-    //             return Ok(true);
-    //         }
-    //     }
-    // }
-}
-
-impl<R: Read + Seek, S: SkipListSeek> PostingRead for PostingReader<R, S> {
-    fn posting_format(&self) -> &PostingFormat {
+    pub fn posting_format(&self) -> &PostingFormat {
         &self.posting_format
     }
+}
 
-    fn decode_one_block(&mut self, posting_block: &mut PostingBlock) -> io::Result<()> {
-        posting_block.len = 0;
-        if self.eof() {
-            return Ok(());
+impl<R: Read + Seek, S: SkipListRead> PostingRead for PostingReader<R, S> {
+    fn decode_one_block(
+        &mut self,
+        docid: DocId,
+        posting_block: &mut PostingBlock,
+    ) -> io::Result<bool> {
+        if self.doc_count == 0 {
+            posting_block.prev_docid = 0;
+            posting_block.last_docid = 0;
+            posting_block.prev_ttf = 0;
+            return Ok(false);
         }
+
+        let (skip_found, prev_key, block_last_key, start_offset, _end_offset, skipped_count) =
+            self.skip_list_reader.seek(docid as u64)?;
+        posting_block.prev_docid = prev_key as DocId;
+        posting_block.last_docid = block_last_key as DocId;
+        posting_block.prev_ttf = if self.posting_format.has_tflist() {
+            self.skip_list_reader.prev_value()
+        } else {
+            0
+        };
+        self.read_count = skipped_count * POSTING_BLOCK_LEN;
+        if !skip_found {
+            // The last block in skip list may be not full block,
+            // so read_count would be false greater than doc_count
+            if self.read_count >= self.doc_count {
+                self.read_count = self.doc_count;
+                return Ok(false);
+            }
+        }
+        self.reader.seek(SeekFrom::Start(start_offset))?;
+
         let block_len = std::cmp::min(self.doc_count - self.read_count, POSTING_BLOCK_LEN);
+        self.read_count += block_len;
         posting_block.len = block_len;
         let posting_encoder = PostingEncoder;
         posting_encoder.decode_u32(&mut self.reader, &mut posting_block.docids[0..block_len])?;
+        if !skip_found {
+            let mut block_last_docid = posting_block.prev_docid;
+            for i in 0..block_len {
+                block_last_docid += posting_block.docids[i];
+            }
+            posting_block.last_docid = block_last_docid;
+            if block_last_docid < docid {
+                posting_block.prev_docid = block_last_docid;
+                if self.posting_format.has_tflist() {
+                    if let Some(termfreqs) = posting_block.termfreqs.as_deref_mut() {
+                        posting_encoder
+                            .decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
+                        let mut prev_ttf = posting_block.prev_ttf;
+                        for i in 0..block_len {
+                            prev_ttf += termfreqs[i] as TotalTF;
+                        }
+                        posting_block.prev_ttf = prev_ttf;
+                    }
+                }
+                return Ok(false);
+            }
+        }
         if self.posting_format.has_tflist() {
             if let Some(termfreqs) = posting_block.termfreqs.as_deref_mut() {
                 posting_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
@@ -123,10 +145,8 @@ impl<R: Read + Seek, S: SkipListSeek> PostingRead for PostingReader<R, S> {
                 posting_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..block_len])?;
             }
         }
-        posting_block.decode_docids(self.last_docid);
-        self.last_docid = posting_block.last_docid();
-        self.read_count += block_len;
-        Ok(())
+
+        Ok(true)
     }
 }
 
@@ -135,12 +155,73 @@ mod tests {
     use std::io::{self, Cursor};
 
     use crate::{
-        postings::{PostingBlock, PostingEncoder, PostingFormat, PostingRead, PostingReader},
-        DocId, TermFreq, POSTING_BLOCK_LEN,
+        postings::{
+            skip_list::MockSkipListReader, PostingBlock, PostingEncoder, PostingFormat,
+            PostingRead, PostingReader,
+        },
+        DocId, TermFrequency, TotalTF, POSTING_BLOCK_LEN,
     };
 
     #[test]
     fn test_basic() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let mut buf = vec![];
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN - 1) as DocId).collect();
+        let docids_deltas = &docids_deltas[..];
+        let docids: Vec<_> = docids_deltas
+            .iter()
+            .scan(0, |acc, &x| {
+                *acc += x;
+                Some(*acc)
+            })
+            .collect();
+        let docids = &docids[..];
+
+        let mut termfreqs = vec![];
+        for i in 0..BLOCK_LEN - 1 {
+            let termfreq = (i % 3 + 1) as TermFrequency;
+            termfreqs.push(termfreq);
+        }
+        let termfreqs = &termfreqs[..];
+        let ttf: TotalTF = termfreqs.iter().fold(0u64, |acc, &x| acc + (x as u64));
+
+        let posting_encoder = PostingEncoder;
+        posting_encoder.encode_u32(docids_deltas, &mut buf).unwrap();
+        posting_encoder.encode_u32(termfreqs, &mut buf).unwrap();
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut block = PostingBlock::new(&posting_format);
+
+        let skipbuf = vec![];
+        let mut reader =
+            PostingReader::open(posting_format, BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
+        assert!(!reader.eof());
+        assert_eq!(reader.doc_count, BLOCK_LEN - 1);
+        assert_eq!(reader.read_count, 0);
+
+        let last_docid = docids.last().cloned().unwrap();
+        assert!(reader.decode_one_block(last_docid, &mut block)?);
+        assert_eq!(block.len, BLOCK_LEN - 1);
+        assert_eq!(block.prev_docid, 0);
+        assert_eq!(block.last_docid, docids.last().cloned().unwrap());
+        assert_eq!(block.prev_ttf, 0);
+        block.decode_docids(block.prev_docid);
+        assert_eq!(&block.docids[0..block.len], docids);
+        assert_eq!(&block.termfreqs.as_ref().unwrap()[0..block.len], termfreqs);
+
+        assert!(reader.eof());
+
+        assert!(!reader.decode_one_block(last_docid + 1, &mut block)?);
+        assert_eq!(block.prev_docid, docids.last().cloned().unwrap());
+        assert_eq!(block.last_docid, docids.last().cloned().unwrap());
+        assert_eq!(block.prev_ttf, ttf);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_skip_list() -> io::Result<()> {
         const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
         let mut buf = vec![];
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -156,23 +237,35 @@ mod tests {
 
         let mut termfreqs = vec![];
         for i in 0..BLOCK_LEN * 2 + 3 {
-            let termfreq = (i % 3 + 1) as TermFreq;
+            let termfreq = (i % 3 + 1) as TermFrequency;
             termfreqs.push(termfreq);
         }
+        let termfreqs = &termfreqs[..];
+
+        let mut block_last_docids: Vec<u64> = vec![];
+        let mut block_offsets = Vec::<u64>::new();
+        let mut offset: usize = 0;
 
         let posting_encoder = PostingEncoder;
-        posting_encoder
+
+        offset += posting_encoder
             .encode_u32(&docids_deltas[0..BLOCK_LEN], &mut buf)
             .unwrap();
-        posting_encoder
+        offset += posting_encoder
             .encode_u32(&termfreqs[0..BLOCK_LEN], &mut buf)
             .unwrap();
-        posting_encoder
+        block_last_docids.push(docids[BLOCK_LEN - 1] as u64);
+        block_offsets.push(offset as u64);
+
+        offset += posting_encoder
             .encode_u32(&docids_deltas[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
             .unwrap();
-        posting_encoder
+        offset += posting_encoder
             .encode_u32(&termfreqs[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
             .unwrap();
+        block_last_docids.push(docids[BLOCK_LEN * 2 - 1] as u64);
+        block_offsets.push(offset as u64);
+
         posting_encoder
             .encode_u32(&docids_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
@@ -180,41 +273,57 @@ mod tests {
             .encode_u32(&termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
 
+        let skip_list_reader =
+            MockSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
+
         let buf_reader = Cursor::new(buf.as_slice());
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut block = PostingBlock::new(&posting_format);
-        let mut reader = PostingReader::open(posting_format, BLOCK_LEN * 2 + 3, buf_reader);
+        let mut reader = PostingReader::open_with_skip_list_reader(
+            posting_format,
+            BLOCK_LEN * 2 + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
         assert!(!reader.eof());
         assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
         assert_eq!(reader.read_count, 0);
 
-        reader.decode_one_block(&mut block)?;
-        assert!(!reader.eof());
-        assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
-        assert_eq!(reader.read_count, BLOCK_LEN);
+        assert!(reader.decode_one_block(0, &mut block)?);
+
+        assert_eq!(block.prev_docid, 0);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN - 1]);
+        assert_eq!(block.prev_ttf, 0);
         assert_eq!(block.len, BLOCK_LEN);
+        block.decode_docids(block.prev_docid);
         assert_eq!(block.docids, &docids[0..BLOCK_LEN]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
             &termfreqs[0..BLOCK_LEN]
         );
 
-        reader.decode_one_block(&mut block)?;
-        assert!(!reader.eof());
-        assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
-        assert_eq!(reader.read_count, BLOCK_LEN * 2);
+        let block_last_docid = block.last_docid;
+        assert!(reader.decode_one_block(block_last_docid + 1, &mut block)?);
+
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(block.prev_ttf, 0);
         assert_eq!(block.len, BLOCK_LEN);
+        block.decode_docids(block.prev_docid);
         assert_eq!(block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
             &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
         );
 
-        reader.decode_one_block(&mut block)?;
-        assert!(reader.eof());
-        assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
-        assert_eq!(reader.read_count, BLOCK_LEN * 2 + 3);
+        let block_last_docid = block.last_docid;
+        assert!(reader.decode_one_block(block_last_docid + 1, &mut block)?);
+
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
         assert_eq!(block.len, 3);
+        block.decode_docids(block.prev_docid);
         assert_eq!(
             &block.docids[0..3],
             &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -224,11 +333,190 @@ mod tests {
             &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
 
-        reader.decode_one_block(&mut block)?;
         assert!(reader.eof());
-        assert_eq!(reader.doc_count, BLOCK_LEN * 2 + 3);
-        assert_eq!(reader.read_count, BLOCK_LEN * 2 + 3);
-        assert_eq!(block.len, 0);
+
+        let block_last_docid = block.last_docid;
+        assert!(!reader.decode_one_block(block_last_docid + 1, &mut block)?);
+        // if eof, block's prev_docid, last_docid would be set to the end
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN * 2 + 3 - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 3 - 1]);
+
+        // skip one block
+
+        let skip_list_reader =
+            MockSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut block = PostingBlock::new(&posting_format);
+        let mut reader = PostingReader::open_with_skip_list_reader(
+            posting_format,
+            BLOCK_LEN * 2 + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(reader.decode_one_block(docids[BLOCK_LEN - 1] + 1, &mut block)?);
+
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(block.len, BLOCK_LEN);
+        block.decode_docids(block.prev_docid);
+        assert_eq!(block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+        assert_eq!(
+            &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
+            &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
+        );
+
+        let block_last_docid = block.last_docid;
+        assert!(reader.decode_one_block(block_last_docid + 1, &mut block)?);
+
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
+        assert_eq!(block.len, 3);
+        block.decode_docids(block.prev_docid);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+        assert_eq!(
+            &block.termfreqs.as_ref().unwrap()[0..3],
+            &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
+        assert!(reader.eof());
+
+        // skip two block
+
+        let skip_list_reader =
+            MockSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut block = PostingBlock::new(&posting_format);
+        let mut reader = PostingReader::open_with_skip_list_reader(
+            posting_format,
+            BLOCK_LEN * 2 + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(reader.decode_one_block(docids[BLOCK_LEN * 2 - 1] + 1, &mut block)?);
+
+        assert_eq!(block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
+        assert_eq!(block.len, 3);
+        block.decode_docids(block.prev_docid);
+        assert_eq!(
+            &block.docids[0..3],
+            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+        assert_eq!(
+            &block.termfreqs.as_ref().unwrap()[0..3],
+            &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
+        assert!(reader.eof());
+
+        // skip to end
+
+        let skip_list_reader =
+            MockSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut block = PostingBlock::new(&posting_format);
+        let mut reader = PostingReader::open_with_skip_list_reader(
+            posting_format,
+            BLOCK_LEN * 2 + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(!reader.decode_one_block(docids.last().cloned().unwrap() + 1, &mut block)?);
+        assert_eq!(block.prev_docid, docids.last().cloned().unwrap());
+        assert_eq!(block.last_docid, docids.last().cloned().unwrap());
+
+        assert!(reader.eof());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_last_block_is_not_full() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSTING_BLOCK_LEN;
+        let mut buf = vec![];
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas = &docids_deltas[..];
+        let docids: Vec<_> = docids_deltas
+            .iter()
+            .scan(0, |acc, &x| {
+                *acc += x;
+                Some(*acc)
+            })
+            .collect();
+        let docids = &docids[..];
+
+        let mut termfreqs = vec![];
+        for i in 0..BLOCK_LEN * 2 + 3 {
+            let termfreq = (i % 3 + 1) as TermFrequency;
+            termfreqs.push(termfreq);
+        }
+        let termfreqs = &termfreqs[..];
+
+        let mut block_last_docids: Vec<u64> = vec![];
+        let mut block_offsets = Vec::<u64>::new();
+        let mut offset: usize = 0;
+
+        let posting_encoder = PostingEncoder;
+
+        offset += posting_encoder
+            .encode_u32(&docids_deltas[0..BLOCK_LEN], &mut buf)
+            .unwrap();
+        offset += posting_encoder
+            .encode_u32(&termfreqs[0..BLOCK_LEN], &mut buf)
+            .unwrap();
+        block_last_docids.push(docids[BLOCK_LEN - 1] as u64);
+        block_offsets.push(offset as u64);
+
+        offset += posting_encoder
+            .encode_u32(&docids_deltas[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
+            .unwrap();
+        offset += posting_encoder
+            .encode_u32(&termfreqs[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
+            .unwrap();
+        block_last_docids.push(docids[BLOCK_LEN * 2 - 1] as u64);
+        block_offsets.push(offset as u64);
+
+        offset += posting_encoder
+            .encode_u32(&docids_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
+            .unwrap();
+        offset += posting_encoder
+            .encode_u32(&termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
+            .unwrap();
+        block_last_docids.push(docids[BLOCK_LEN * 2 + 3 - 1] as u64);
+        block_offsets.push(offset as u64);
+
+        let skip_list_reader =
+            MockSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
+
+        let buf_reader = Cursor::new(buf.as_slice());
+        let posting_format = PostingFormat::builder().with_tflist().build();
+        let mut block = PostingBlock::new(&posting_format);
+        let mut reader = PostingReader::open_with_skip_list_reader(
+            posting_format,
+            BLOCK_LEN * 2 + 3,
+            buf_reader,
+            skip_list_reader,
+        );
+
+        assert!(!reader.eof());
+
+        assert!(!reader.decode_one_block(docids.last().cloned().unwrap() + 1, &mut block)?);
+        assert_eq!(block.prev_docid, docids.last().cloned().unwrap());
+        assert_eq!(block.last_docid, docids.last().cloned().unwrap());
+
+        assert!(reader.eof());
 
         Ok(())
     }
