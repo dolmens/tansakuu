@@ -6,7 +6,7 @@ use std::{
 use tantivy_common::CountingWriter;
 
 use crate::{
-    postings::{skip_list::SkipListWrite, PostingEncoder, SkipListFormat, SkipListWriter},
+    postings::{skip_list::SkipListWrite, PostingEncoder, SkipListWriter},
     util::{AcqRelU64, RelaxedU32},
     POSITION_BLOCK_LEN,
 };
@@ -47,6 +47,22 @@ pub struct BuildingPositionListBlock {
 pub struct PositionListBlockSnapshot {
     len: usize,
     positions: Option<Box<[u32]>>,
+}
+
+pub struct EmptyPositionListWriter;
+
+impl PositionListWrite for EmptyPositionListWriter {
+    fn add_pos(&mut self, _pos: u32) -> io::Result<()> {
+        Ok(())
+    }
+    fn end_doc(&mut self) {}
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+pub fn none_position_list_writer() -> Option<EmptyPositionListWriter> {
+    None
 }
 
 impl PositionListFlushInfo {
@@ -140,7 +156,7 @@ impl PositionListBlockSnapshot {
 }
 
 impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
-    pub fn new_with_skip_list_writer(writer: W, skip_list_writer: S) -> Self {
+    pub fn new(writer: W, skip_list_writer: S) -> Self {
         let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
             last_pos: 0,
@@ -220,15 +236,92 @@ impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> 
 
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::io::{self, BufReader};
 
-    use crate::POSITION_BLOCK_LEN;
+    use crate::{
+        postings::{
+            positions::PositionListWrite, positions::PositionListWriter,
+            skip_list::MockSkipListWriter, PostingEncoder,
+        },
+        POSITION_BLOCK_LEN,
+    };
 
     #[test]
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
 
-        // let positions:Vec<_> = 0.
+        let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();
+        // the positions 0 and 1 are one doc, BLOCK_LEN and BLOCK_LEN + 1 are one doc.
+        let mut positions_deltas = vec![positions[0], positions[1] - positions[0], positions[2]];
+        positions_deltas.extend(
+            positions[2..BLOCK_LEN]
+                .windows(2)
+                .map(|pair| pair[1] - pair[0]),
+        );
+        positions_deltas.push(positions[BLOCK_LEN]);
+        positions_deltas.push(positions[BLOCK_LEN + 1] - positions[BLOCK_LEN]);
+        positions_deltas.push(positions[BLOCK_LEN + 2]);
+        positions_deltas.extend(
+            positions[BLOCK_LEN + 2..]
+                .windows(2)
+                .map(|pair| pair[1] - pair[0]),
+        );
+
+        let mut output_buf = vec![];
+        let mut skip_list_keys = vec![];
+        let mut skip_list_offsets = vec![];
+        let mut skip_list_values = vec![];
+        let skip_list_writer = MockSkipListWriter::new(
+            &mut skip_list_keys,
+            &mut skip_list_offsets,
+            Some(&mut skip_list_values),
+        );
+        let mut position_list_writer = PositionListWriter::new(&mut output_buf, skip_list_writer);
+        position_list_writer.add_pos(positions[0])?;
+        position_list_writer.add_pos(positions[1])?;
+        position_list_writer.end_doc();
+
+        for i in 2..BLOCK_LEN {
+            position_list_writer.add_pos(positions[i])?;
+        }
+        position_list_writer.end_doc();
+
+        position_list_writer.add_pos(positions[BLOCK_LEN])?;
+        position_list_writer.add_pos(positions[BLOCK_LEN + 1])?;
+        position_list_writer.end_doc();
+
+        for i in BLOCK_LEN + 2..BLOCK_LEN * 2 + 3 {
+            position_list_writer.add_pos(positions[i])?;
+        }
+        position_list_writer.end_doc();
+
+        position_list_writer.flush()?;
+
+        assert_eq!(skip_list_keys.len(), 3);
+        assert_eq!(skip_list_keys[0] as usize, BLOCK_LEN - 1);
+        assert_eq!(skip_list_keys[1] as usize, BLOCK_LEN * 2 - 1);
+        assert_eq!(skip_list_keys[2] as usize, BLOCK_LEN * 2 + 3 - 1);
+
+        let posting_encoder = PostingEncoder;
+
+        let mut buf_reader = BufReader::new(output_buf.as_slice());
+        let mut position_block = [0u32; POSITION_BLOCK_LEN];
+        let mut num_read_bytes =
+            posting_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
+        assert_eq!(num_read_bytes, skip_list_offsets[0] as usize);
+        assert_eq!(position_block, &positions_deltas[0..BLOCK_LEN]);
+
+        num_read_bytes += posting_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
+        assert_eq!(num_read_bytes, skip_list_offsets[1] as usize);
+        assert_eq!(position_block, &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]);
+
+        num_read_bytes += posting_encoder.decode_u32(&mut buf_reader, &mut position_block[0..3])?;
+        assert_eq!(num_read_bytes, skip_list_offsets[2] as usize);
+        assert_eq!(
+            &position_block[0..3],
+            &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
+        );
+
         Ok(())
     }
 }

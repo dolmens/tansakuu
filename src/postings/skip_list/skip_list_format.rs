@@ -9,8 +9,8 @@ pub struct SkipListFormatBuilder {
 }
 
 impl SkipListFormatBuilder {
-    pub fn with_value(self) -> Self {
-        Self { has_value: true }
+    pub fn with_value(self, has_value: bool) -> Self {
+        Self { has_value }
     }
 
     pub fn build(self) -> SkipListFormat {

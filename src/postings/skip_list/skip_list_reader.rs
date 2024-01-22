@@ -25,6 +25,26 @@ pub struct SkipListReader<R: Read> {
     skip_list_format: SkipListFormat,
 }
 
+pub struct EmptySkipListReader;
+
+impl SkipListRead for EmptySkipListReader {
+    fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
+        return Ok((false, 0, 0, 0, 0, 0))
+    }
+
+    fn prev_value(&self) -> u64 {
+        0
+    }
+
+    fn block_last_value(&self) -> u64 {
+        0
+    }
+}
+
+pub fn empty_skip_list_reader() -> EmptySkipListReader {
+    EmptySkipListReader
+}
+
 impl<R: Read> SkipListReader<R> {
     pub fn open(skip_list_format: SkipListFormat, item_count: usize, reader: R) -> Self {
         Self {

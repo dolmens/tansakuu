@@ -264,6 +264,9 @@ impl SkipListFlushInfoSnapshot {
 }
 
 #[cfg(test)]
+pub use tests::MockSkipListWriter;
+
+#[cfg(test)]
 mod tests {
     use std::io::{self, BufReader};
 
@@ -274,6 +277,41 @@ mod tests {
         },
         DocId, SKIPLIST_BLOCK_LEN,
     };
+
+    pub struct MockSkipListWriter<'a> {
+        keys: &'a mut Vec<u64>,
+        offsets: &'a mut Vec<u64>,
+        values: Option<&'a mut Vec<u64>>,
+    }
+
+    impl<'a> MockSkipListWriter<'a> {
+        pub fn new(
+            keys: &'a mut Vec<u64>,
+            offsets: &'a mut Vec<u64>,
+            values: Option<&'a mut Vec<u64>>,
+        ) -> Self {
+            Self {
+                keys,
+                offsets,
+                values,
+            }
+        }
+    }
+
+    impl<'a> SkipListWrite for MockSkipListWriter<'a> {
+        fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
+            self.keys.push(key);
+            self.offsets.push(offset);
+            self.values
+                .as_mut()
+                .map(|values| values.push(value.unwrap_or_default()));
+            Ok(())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_basic() -> io::Result<()> {

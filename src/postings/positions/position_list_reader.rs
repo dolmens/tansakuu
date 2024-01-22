@@ -15,6 +15,29 @@ pub struct PositionListReader<R: Read + Seek, S: SkipListRead> {
     skip_list_reader: S,
 }
 
+pub trait PositionListRead {
+    fn decode_one_block(
+        &mut self,
+        ttf: u64,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool>;
+}
+
+pub struct EmptyPositionListRead;
+impl PositionListRead for EmptyPositionListRead {
+    fn decode_one_block(
+        &mut self,
+        _from_ttf: u64,
+        _position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        Ok(false)
+    }
+}
+
+pub fn none_position_list_reader() -> Option<EmptyPositionListRead> {
+    None
+}
+
 impl<R: Read + Seek, SR: Read> PositionListReader<R, SkipListReader<SR>> {
     pub fn open(
         item_count: usize,
@@ -38,27 +61,29 @@ impl<R: Read + Seek, S: SkipListRead> PositionListReader<R, S> {
             skip_list_reader,
         }
     }
+}
 
-    pub fn decode_one_block(
+impl<R: Read + Seek, S: SkipListRead> PositionListRead for PositionListReader<R, S> {
+    fn decode_one_block(
         &mut self,
-        from_ttf: u64,
+        ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
         if self.read_count == self.item_count
-            || (from_ttf as usize) >= self.item_count
-            || (from_ttf as usize) < self.read_count
+            || (ttf as usize) >= self.item_count
+            || (ttf as usize) < self.read_count
         {
             return Ok(false);
         }
         let (_skip_found, _prev_key, _block_last_key, start_offset, _end_offset, skipped_count) =
-            self.skip_list_reader.seek(from_ttf)?;
+            self.skip_list_reader.seek(ttf)?;
         self.read_count = skipped_count * POSITION_BLOCK_LEN;
 
         self.reader.seek(SeekFrom::Start(start_offset))?;
 
         let block_len = std::cmp::min(self.item_count - self.read_count, POSITION_BLOCK_LEN);
         position_list_block.len = block_len;
-        position_list_block.offset = (from_ttf as usize) - self.read_count;
+        position_list_block.start_ttf = self.read_count as u64;
         let posting_encoder = PostingEncoder;
         posting_encoder.decode_u32(
             &mut self.reader,
@@ -69,10 +94,6 @@ impl<R: Read + Seek, S: SkipListRead> PositionListReader<R, S> {
 
         Ok(true)
     }
-
-    pub fn item_count(&self) -> usize {
-        self.item_count
-    }
 }
 
 #[cfg(test)]
@@ -81,7 +102,7 @@ mod tests {
 
     use crate::{
         postings::{
-            positions::{PositionListBlock, PositionListReader},
+            positions::{PositionListBlock, PositionListRead, PositionListReader},
             skip_list::MockSkipListReader,
             PostingEncoder,
         },
@@ -106,7 +127,7 @@ mod tests {
             let mut position_list_block = PositionListBlock::new();
             assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
             assert_eq!(position_list_block.len, BLOCK_LEN - 1);
-            assert_eq!(position_list_block.offset, 0);
+            assert_eq!(position_list_block.start_ttf, 0);
             assert_eq!(
                 &position_list_block.positions[0..BLOCK_LEN - 1],
                 &positions[..]
@@ -124,7 +145,7 @@ mod tests {
             let mut position_list_block = PositionListBlock::new();
             assert!(position_list_reader.decode_one_block(3, &mut position_list_block)?);
             assert_eq!(position_list_block.len, BLOCK_LEN - 1);
-            assert_eq!(position_list_block.offset, 3);
+            assert_eq!(position_list_block.start_ttf, 0);
             assert_eq!(
                 &position_list_block.positions[0..BLOCK_LEN - 1],
                 &positions[..]
@@ -176,7 +197,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[0..BLOCK_LEN]
@@ -192,7 +213,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
@@ -201,7 +222,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -221,7 +242,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(3, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 3);
+        assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[0..BLOCK_LEN]
@@ -230,7 +251,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN + 5) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 5);
+        assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
@@ -239,7 +260,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2 + 1) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 1);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -258,7 +279,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN + 3) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 3);
+        assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
@@ -268,7 +289,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 2);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -287,7 +308,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 2);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -335,7 +356,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 2);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]

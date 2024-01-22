@@ -7,8 +7,11 @@ pub use building_position_list::{
     BuildingPositionList, BuildingPositionListReader, BuildingPositionListWriter,
 };
 pub use position_list_block::PositionListBlock;
-pub use position_list_reader::PositionListReader;
+pub use position_list_reader::{
+    none_position_list_reader, EmptyPositionListRead, PositionListRead, PositionListReader,
+};
 pub use position_list_writer::{
-    BuildingPositionListBlock, PositionListBlockSnapshot, PositionListFlushInfo,
-    PositionListFlushInfoSnapshot, PositionListWrite, PositionListWriter,
+    none_position_list_writer, BuildingPositionListBlock, EmptyPositionListWriter,
+    PositionListBlockSnapshot, PositionListFlushInfo, PositionListFlushInfoSnapshot,
+    PositionListWrite, PositionListWriter,
 };

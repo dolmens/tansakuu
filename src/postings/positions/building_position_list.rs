@@ -9,7 +9,7 @@ use crate::postings::{
 
 use super::{
     BuildingPositionListBlock, PositionListBlock, PositionListBlockSnapshot, PositionListFlushInfo,
-    PositionListReader, PositionListWrite, PositionListWriter,
+    PositionListRead, PositionListReader, PositionListWrite, PositionListWriter,
 };
 
 #[derive(Clone)]
@@ -47,8 +47,7 @@ impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
         let skip_list_writer =
             BuildingSkipListWriter::new_in(skip_list_format, 1024, allocator.clone());
         let building_skip_list = skip_list_writer.building_skip_list().clone();
-        let position_list_writer =
-            PositionListWriter::new_with_skip_list_writer(byte_slice_writer, skip_list_writer);
+        let position_list_writer = PositionListWriter::new(byte_slice_writer, skip_list_writer);
         let flush_info = position_list_writer.flush_info().clone();
         let building_block = position_list_writer.building_block().clone();
         let building_position_list = BuildingPositionList {
@@ -69,7 +68,7 @@ impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
     }
 }
 
-impl<A: Allocator + Clone> PositionListWrite for BuildingPositionListWriter<A> {
+impl<A: Allocator> PositionListWrite for BuildingPositionListWriter<A> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
         self.position_list_writer.add_pos(pos)
     }
@@ -121,21 +120,23 @@ impl<'a> BuildingPositionListReader<'a> {
             position_list_reader,
         }
     }
+}
 
-    pub fn decode_one_block(
+impl<'a> PositionListRead for BuildingPositionListReader<'a> {
+    fn decode_one_block(
         &mut self,
-        from_ttf: u64,
+        ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if ((from_ttf as usize) >= self.flushed_count + self.buffer_len)
-            || ((from_ttf as usize) < self.read_count)
+        if ((ttf as usize) >= self.flushed_count + self.buffer_len)
+            || ((ttf as usize) < self.read_count)
         {
             return Ok(false);
         }
-        if (from_ttf as usize) < self.flushed_count {
+        if (ttf as usize) < self.flushed_count {
             if self
                 .position_list_reader
-                .decode_one_block(from_ttf, position_list_block)?
+                .decode_one_block(ttf, position_list_block)?
             {
                 self.read_count += position_list_block.len;
                 Ok(true)
@@ -144,7 +145,7 @@ impl<'a> BuildingPositionListReader<'a> {
             }
         } else {
             self.building_block_snapshot.copy_to(position_list_block);
-            position_list_block.offset = (from_ttf as usize) - self.flushed_count;
+            position_list_block.start_ttf = self.flushed_count as u64;
             self.read_count += self.buffer_len;
             Ok(true)
         }
@@ -158,7 +159,7 @@ mod tests {
     use crate::{
         postings::positions::{
             building_position_list::BuildingPositionListReader, BuildingPositionListWriter,
-            PositionListBlock, PositionListWrite,
+            PositionListBlock, PositionListRead, PositionListWrite,
         },
         POSITION_BLOCK_LEN,
     };
@@ -198,7 +199,7 @@ mod tests {
         let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
         assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 2);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..2],
             &positions_deltas[0..2]
@@ -213,7 +214,7 @@ mod tests {
         let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
         assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[0..BLOCK_LEN]
@@ -233,7 +234,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[0..BLOCK_LEN]
@@ -241,7 +242,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]
@@ -250,7 +251,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -264,7 +265,7 @@ mod tests {
 
         assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]
@@ -273,7 +274,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -288,7 +289,7 @@ mod tests {
         assert!(position_list_reader
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
-        assert_eq!(position_list_block.offset, 0);
+        assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -356,9 +357,9 @@ mod tests {
                         .decode_one_block(ttf as u64, &mut position_list_block)?
                     {
                         let len = position_list_block.len;
-                        let offset = position_list_block.offset;
+                        assert_eq!(position_list_block.start_ttf, ttf as u64);
                         assert_eq!(
-                            &position_list_block.positions[offset..offset + len],
+                            &position_list_block.positions[0..len],
                             &positions_deltas[ttf..ttf + len]
                         );
                         ttf += len;
