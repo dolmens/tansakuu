@@ -13,6 +13,12 @@ use crate::{
 
 use super::PositionListBlock;
 
+pub trait PositionListWrite {
+    fn add_pos(&mut self, pos: u32) -> io::Result<()>;
+    fn end_doc(&mut self);
+    fn flush(&mut self) -> io::Result<()>;
+}
+
 pub struct PositionListWriter<W: Write, S: SkipListWrite> {
     last_pos: u32,
     buffer_len: usize,
@@ -155,26 +161,6 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
         &self.building_block
     }
 
-    pub fn add_pos(&mut self, pos: u32) -> io::Result<()> {
-        self.building_block.positions[self.buffer_len].store(pos - self.last_pos);
-        self.buffer_len += 1;
-        let flush_info =
-            PositionListFlushInfoSnapshot::new(self.item_count_flushed, self.buffer_len);
-        self.flush_info.store(flush_info);
-
-        if self.buffer_len == POSITION_BLOCK_LEN {
-            self.flush_buffer()?;
-        }
-
-        self.last_pos = pos;
-
-        Ok(())
-    }
-
-    pub fn end_doc(&mut self) {
-        self.last_pos = 0;
-    }
-
     fn flush_buffer(&mut self) -> io::Result<()> {
         if self.buffer_len > 0 {
             let building_block = self.building_block.as_ref();
@@ -201,8 +187,30 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
 
         Ok(())
     }
+}
 
-    pub fn flush(&mut self) -> io::Result<()> {
+impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> {
+    fn add_pos(&mut self, pos: u32) -> io::Result<()> {
+        self.building_block.positions[self.buffer_len].store(pos - self.last_pos);
+        self.buffer_len += 1;
+        let flush_info =
+            PositionListFlushInfoSnapshot::new(self.item_count_flushed, self.buffer_len);
+        self.flush_info.store(flush_info);
+
+        if self.buffer_len == POSITION_BLOCK_LEN {
+            self.flush_buffer()?;
+        }
+
+        self.last_pos = pos;
+
+        Ok(())
+    }
+
+    fn end_doc(&mut self) {
+        self.last_pos = 0;
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
         self.flush_buffer()?;
         self.skip_list_writer.flush()?;
 

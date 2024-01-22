@@ -9,7 +9,7 @@ use crate::postings::{
 
 use super::{
     BuildingPositionListBlock, PositionListBlock, PositionListBlockSnapshot, PositionListFlushInfo,
-    PositionListReader, PositionListWriter,
+    PositionListReader, PositionListWrite, PositionListWriter,
 };
 
 #[derive(Clone)]
@@ -67,16 +67,18 @@ impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
     pub fn building_position_list(&self) -> &BuildingPositionList<A> {
         &self.building_position_list
     }
+}
 
-    pub fn add_pos(&mut self, pos: u32) -> io::Result<()> {
+impl<A: Allocator + Clone> PositionListWrite for BuildingPositionListWriter<A> {
+    fn add_pos(&mut self, pos: u32) -> io::Result<()> {
         self.position_list_writer.add_pos(pos)
     }
 
-    pub fn end_doc(&mut self) {
+    fn end_doc(&mut self) {
         self.position_list_writer.end_doc();
     }
 
-    pub fn flush(&mut self) -> io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.position_list_writer.flush()
     }
 }
@@ -156,7 +158,7 @@ mod tests {
     use crate::{
         postings::positions::{
             building_position_list::BuildingPositionListReader, BuildingPositionListWriter,
-            PositionListBlock,
+            PositionListBlock, PositionListWrite,
         },
         POSITION_BLOCK_LEN,
     };
