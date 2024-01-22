@@ -1,6 +1,6 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::{DocId, TotalTF, POSTING_BLOCK_LEN};
+use crate::{DocId, POSTING_BLOCK_LEN};
 
 use super::{skip_list::SkipListRead, PostingBlock, PostingEncoder, PostingFormat, SkipListReader};
 
@@ -121,7 +121,7 @@ impl<R: Read + Seek, S: SkipListRead> PostingRead for PostingReader<R, S> {
                             .decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
                         let mut prev_ttf = posting_block.prev_ttf;
                         for i in 0..block_len {
-                            prev_ttf += termfreqs[i] as TotalTF;
+                            prev_ttf += termfreqs[i] as u64;
                         }
                         posting_block.prev_ttf = prev_ttf;
                     }
@@ -159,7 +159,7 @@ mod tests {
             skip_list::MockSkipListReader, PostingBlock, PostingEncoder, PostingFormat,
             PostingRead, PostingReader,
         },
-        DocId, TermFrequency, TotalTF, POSTING_BLOCK_LEN,
+        DocId, POSTING_BLOCK_LEN,
     };
 
     #[test]
@@ -179,11 +179,11 @@ mod tests {
 
         let mut termfreqs = vec![];
         for i in 0..BLOCK_LEN - 1 {
-            let termfreq = (i % 3 + 1) as TermFrequency;
+            let termfreq = (i % 3 + 1) as u32;
             termfreqs.push(termfreq);
         }
         let termfreqs = &termfreqs[..];
-        let ttf: TotalTF = termfreqs.iter().fold(0u64, |acc, &x| acc + (x as u64));
+        let ttf: u64 = termfreqs.iter().fold(0u64, |acc, &x| acc + (x as u64));
 
         let posting_encoder = PostingEncoder;
         posting_encoder.encode_u32(docids_deltas, &mut buf).unwrap();
@@ -237,7 +237,7 @@ mod tests {
 
         let mut termfreqs = vec![];
         for i in 0..BLOCK_LEN * 2 + 3 {
-            let termfreq = (i % 3 + 1) as TermFrequency;
+            let termfreq = (i % 3 + 1) as u32;
             termfreqs.push(termfreq);
         }
         let termfreqs = &termfreqs[..];
@@ -459,7 +459,7 @@ mod tests {
 
         let mut termfreqs = vec![];
         for i in 0..BLOCK_LEN * 2 + 3 {
-            let termfreq = (i % 3 + 1) as TermFrequency;
+            let termfreq = (i % 3 + 1) as u32;
             termfreqs.push(termfreq);
         }
         let termfreqs = &termfreqs[..];

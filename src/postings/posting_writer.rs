@@ -7,7 +7,7 @@ use tantivy_common::CountingWriter;
 
 use crate::{
     util::{AcqRelU64, RelaxedU32, RelaxedU8},
-    DocId, FieldMask, TermFrequency, TotalTF, INVALID_DOCID, POSTING_BLOCK_LEN,
+    DocId, INVALID_DOCID, POSTING_BLOCK_LEN,
 };
 
 use super::{
@@ -16,9 +16,9 @@ use super::{
 
 pub struct PostingWriter<W: Write, S: SkipListWrite> {
     last_docid: DocId,
-    current_tf: TermFrequency,
-    total_tf: TotalTF,
-    fieldmask: FieldMask,
+    current_tf: u32,
+    total_tf: u64,
+    fieldmask: u8,
     buffer_len: usize,
     doc_count_flushed: usize,
     flush_info: Arc<FlushInfo>,
@@ -38,8 +38,8 @@ pub struct BuildingPostingBlock {
 pub struct PostingBlockSnapshot {
     len: usize,
     docids: Option<Box<[DocId]>>,
-    termfreqs: Option<Box<[TermFrequency]>>,
-    fieldmasks: Option<Box<[FieldMask]>>,
+    termfreqs: Option<Box<[u32]>>,
+    fieldmasks: Option<Box<[u8]>>,
 }
 
 pub struct FlushInfo {
@@ -90,10 +90,6 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
         &self.building_block
     }
 
-    // pub fn skip_list_writer(&self) -> &SkipListWriter<S> {
-    //     &self.skip_list_writer
-    // }
-
     pub fn posting_format(&self) -> &PostingFormat {
         &self.posting_format
     }
@@ -122,13 +118,13 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
         self.flush_info.store(flush_info);
 
         if self.buffer_len == POSTING_BLOCK_LEN {
-            self.flush()?;
+            self.flush_buffer()?;
         }
 
         Ok(())
     }
 
-    pub fn flush(&mut self) -> io::Result<()> {
+    fn flush_buffer(&mut self) -> io::Result<()> {
         if self.buffer_len > 0 {
             let building_block = self.building_block.as_ref();
             let posting_encoder = PostingEncoder;
@@ -156,7 +152,7 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
                 }
             }
 
-            // Only full block will have a skip item
+            // Only full block will have a skip item ??
             if self.buffer_len == POSTING_BLOCK_LEN {
                 self.skip_list_writer.add_skip_item(
                     self.last_docid as u64,
@@ -170,6 +166,13 @@ impl<W: Write, S: SkipListWrite> PostingWriter<W, S> {
             let flush_info = FlushInfoSnapshot::new(self.doc_count_flushed, 0);
             self.flush_info.store(flush_info);
         }
+
+        Ok(())
+    }
+
+    pub fn flush(&mut self) -> io::Result<()> {
+        self.flush_buffer()?;
+        self.skip_list_writer.flush()?;
 
         Ok(())
     }
@@ -237,13 +240,13 @@ impl BuildingPostingBlock {
         self.docids[offset].store(docid);
     }
 
-    fn add_tf(&self, offset: usize, tf: TermFrequency) {
+    fn add_tf(&self, offset: usize, tf: u32) {
         self.termfreqs.as_ref().map(|termfreqs| {
             termfreqs[offset].store(tf);
         });
     }
 
-    fn add_fieldmask(&self, offset: usize, fieldmask: FieldMask) {
+    fn add_fieldmask(&self, offset: usize, fieldmask: u8) {
         self.fieldmasks
             .as_ref()
             .map(|fieldmasks| fieldmasks[offset].store(fieldmask));
@@ -339,7 +342,7 @@ mod tests {
 
     use crate::{
         postings::{PostingEncoder, PostingFormat},
-        DocId, TermFrequency, POSTING_BLOCK_LEN,
+        DocId, POSTING_BLOCK_LEN,
     };
 
     use super::PostingWriter;
@@ -367,7 +370,7 @@ mod tests {
 
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| (i % 3 + 1) as TermFrequency)
+            .map(|(i, _)| (i % 3 + 1) as u32)
             .collect();
         let termfreqs = &termfreqs[..];
 

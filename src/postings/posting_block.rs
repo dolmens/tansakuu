@@ -1,15 +1,15 @@
-use crate::{DocId, FieldMask, TermFrequency, TotalTF, POSTING_BLOCK_LEN};
+use crate::{DocId, POSTING_BLOCK_LEN};
 
 use super::PostingFormat;
 
 pub struct PostingBlock {
     pub prev_docid: DocId,
     pub last_docid: DocId,
-    pub prev_ttf: TotalTF,
+    pub prev_ttf: u64,
     pub len: usize,
     pub docids: [DocId; POSTING_BLOCK_LEN],
-    pub termfreqs: Option<Box<[TermFrequency]>>,
-    pub fieldmasks: Option<Box<[FieldMask]>>,
+    pub termfreqs: Option<Box<[u32]>>,
+    pub fieldmasks: Option<Box<[u8]>>,
 }
 
 impl PostingBlock {

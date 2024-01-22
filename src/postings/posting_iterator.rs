@@ -63,7 +63,7 @@ mod tests {
 
     use crate::{
         postings::{BuildingPostingReader, BuildingPostingWriter, PostingFormat, PostingIterator},
-        DocId, TermFrequency, END_DOCID, INVALID_DOCID, POSTING_BLOCK_LEN,
+        DocId, END_DOCID, INVALID_DOCID, POSTING_BLOCK_LEN,
     };
 
     #[test]

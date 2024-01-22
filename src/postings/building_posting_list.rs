@@ -2,7 +2,7 @@ use std::{io, sync::Arc};
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::{DocId, TotalTF};
+use crate::DocId;
 
 use super::{
     posting_writer::{BuildingPostingBlock, FlushInfo, PostingWriter},
@@ -212,7 +212,7 @@ mod tests {
         postings::{
             BuildingPostingReader, BuildingPostingWriter, PostingBlock, PostingFormat, PostingRead,
         },
-        DocId, TermFrequency, POSTING_BLOCK_LEN,
+        DocId, POSTING_BLOCK_LEN,
     };
 
     #[test]
@@ -245,7 +245,7 @@ mod tests {
 
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| (i % 3 + 1) as TermFrequency)
+            .map(|(i, _)| (i % 3 + 1) as u32)
             .collect();
         let termfreqs = &termfreqs[..];
 
@@ -445,7 +445,7 @@ mod tests {
 
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
             .enumerate()
-            .map(|(i, _)| (i % 3 + 1) as TermFrequency)
+            .map(|(i, _)| (i % 3 + 1) as u32)
             .collect();
         let termfreqs = &termfreqs[..];
 
