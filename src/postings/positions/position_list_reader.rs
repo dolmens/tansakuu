@@ -2,8 +2,9 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::{
     postings::{
-        positions::PositionListBlock, skip_list::SkipListRead, PostingEncoder, SkipListFormat,
-        SkipListReader,
+        positions::PositionListBlock,
+        skip_list::{SkipListFormat, SkipListRead, SkipListReader},
+        PostingEncoder,
     },
     POSITION_BLOCK_LEN,
 };
@@ -23,8 +24,8 @@ pub trait PositionListRead {
     ) -> io::Result<bool>;
 }
 
-pub struct EmptyPositionListRead;
-impl PositionListRead for EmptyPositionListRead {
+pub struct EmptyPositionListReader;
+impl PositionListRead for EmptyPositionListReader {
     fn decode_one_block(
         &mut self,
         _from_ttf: u64,
@@ -34,7 +35,7 @@ impl PositionListRead for EmptyPositionListRead {
     }
 }
 
-pub fn none_position_list_reader() -> Option<EmptyPositionListRead> {
+pub fn none_position_list_reader() -> Option<EmptyPositionListReader> {
     None
 }
 

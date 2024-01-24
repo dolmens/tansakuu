@@ -3,8 +3,8 @@ use std::{io, sync::Arc};
 use allocator_api2::alloc::{Allocator, Global};
 
 use crate::postings::{
-    skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
-    ByteSliceList, ByteSliceReader, ByteSliceWriter, SkipListFormat,
+    skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter, SkipListFormat},
+    ByteSliceList, ByteSliceReader, ByteSliceWriter,
 };
 
 use super::{
@@ -79,6 +79,14 @@ impl<A: Allocator> PositionListWrite for BuildingPositionListWriter<A> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.position_list_writer.flush()
+    }
+
+    fn item_count(&self) -> (usize, usize) {
+        self.position_list_writer.item_count()
+    }
+
+    fn written_bytes(&self) -> (usize, usize) {
+        self.position_list_writer.written_bytes()
     }
 }
 

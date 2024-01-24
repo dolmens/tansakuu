@@ -23,8 +23,8 @@ pub struct BuildingSkipListWriter<A: Allocator = Global> {
 }
 
 pub struct BuildingSkipListReader<'a> {
-    flushed_read_finished: bool,
-    skipped_item_count: usize,
+    flushed_count: usize,
+    read_count: usize,
     current_key: u64,
     current_offset: u64,
     prev_value: u64,
@@ -77,6 +77,14 @@ impl<A: Allocator> SkipListWrite for BuildingSkipListWriter<A> {
     fn flush(&mut self) -> io::Result<()> {
         self.skip_list_writer.flush()
     }
+
+    fn item_count(&self) -> usize {
+        self.skip_list_writer.item_count()
+    }
+
+    fn written_bytes(&self) -> usize {
+        self.skip_list_writer.written_bytes()
+    }
 }
 
 impl<'a> BuildingSkipListReader<'a> {
@@ -85,25 +93,25 @@ impl<'a> BuildingSkipListReader<'a> {
         let byte_slice_list = building_skip_list.byte_slice_list.as_ref();
         let building_block = building_skip_list.building_block.as_ref();
         let skip_list_format = building_skip_list.skip_list_format.clone();
-        let mut item_count = flush_info.flushed_count();
-        let mut byte_slice_reader = if item_count == 0 {
+        let mut flushed_count = flush_info.flushed_count();
+        let mut byte_slice_reader = if flushed_count == 0 {
             ByteSliceReader::empty()
         } else {
             ByteSliceReader::open(byte_slice_list)
         };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
-        let item_count_updated = building_skip_list.flush_info.load().flushed_count();
-        if item_count < item_count_updated {
+        let flushed_count_updated = building_skip_list.flush_info.load().flushed_count();
+        if flushed_count < flushed_count_updated {
             building_block_snapshot.clear();
-            item_count = item_count_updated;
+            flushed_count = flushed_count_updated;
             byte_slice_reader = ByteSliceReader::open(byte_slice_list);
         }
         let skip_list_reader =
-            SkipListReader::open(skip_list_format, item_count, byte_slice_reader);
+            SkipListReader::open(skip_list_format, flushed_count, byte_slice_reader);
 
         Self {
-            flushed_read_finished: false,
-            skipped_item_count: 0,
+            flushed_count,
+            read_count: 0,
             current_key: 0,
             current_offset: 0,
             prev_value: 0,
@@ -117,9 +125,10 @@ impl<'a> BuildingSkipListReader<'a> {
 
 impl<'a> SkipListRead for BuildingSkipListReader<'a> {
     fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
-        if !self.flushed_read_finished {
+        if self.read_count < self.flushed_count {
             let (ok, prev_key, block_last_key, start_offset, end_offset, skipped_item_count) =
                 self.skip_list_reader.seek(key)?;
+            self.read_count = skipped_item_count;
             if ok {
                 return Ok((
                     true,
@@ -130,19 +139,17 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
                     skipped_item_count,
                 ));
             }
-            self.flushed_read_finished = true;
             self.current_key = prev_key;
             self.current_offset = start_offset;
             self.prev_value = self.skip_list_reader.prev_value();
             self.current_value = self.skip_list_reader.prev_value();
-            self.skipped_item_count = skipped_item_count;
         }
 
         while self.current_cursor < self.building_block_snapshot.len() {
             let prev_key = self.current_key;
             let current_offset = self.current_offset;
             self.prev_value = self.current_value;
-            let skipped_count = self.skipped_item_count;
+            let skipped_count = self.read_count;
 
             self.current_key +=
                 self.building_block_snapshot.keys.as_ref().unwrap()[self.current_cursor] as u64;
@@ -152,7 +159,7 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
                     .values
                     .as_ref()
                     .map_or(0, |values1| values1[self.current_cursor]) as u64;
-            self.skipped_item_count += 1;
+            self.read_count += 1;
             self.current_cursor += 1;
 
             if self.current_key >= key {
@@ -173,8 +180,12 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
             self.current_key,
             self.current_offset,
             self.current_offset,
-            self.skipped_item_count,
+            self.read_count,
         ))
+    }
+
+    fn current_key(&self) -> u64 {
+        self.current_key
     }
 
     fn prev_value(&self) -> u64 {

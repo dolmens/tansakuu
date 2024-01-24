@@ -17,9 +17,9 @@ pub mod schema;
 pub mod table;
 pub mod util;
 
-pub type DocId = u32;
 pub type VersionId = u64;
 
+pub type DocId = u32;
 pub const END_DOCID: DocId = DocId::MAX - 1;
 pub const INVALID_DOCID: DocId = DocId::MAX;
 

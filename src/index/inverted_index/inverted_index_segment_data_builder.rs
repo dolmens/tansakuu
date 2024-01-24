@@ -29,11 +29,11 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
         let dict_data = FileSlice::new(Arc::new(WrapFile::new(dict_file).unwrap()));
         let term_dict = TermDict::open(dict_data).unwrap();
 
-        let skip_path = path.join(index_name.to_string() + ".skiplist");
-        let skip_file = File::open(skip_path).unwrap();
-        let skip_data = FileSlice::new(Arc::new(WrapFile::new(skip_file).unwrap()));
-        let skip_data = if skip_data.len() > 0 {
-            skip_data.read_bytes().unwrap()
+        let skip_list_path = path.join(index_name.to_string() + ".skiplist");
+        let skip_list_file = File::open(skip_list_path).unwrap();
+        let skip_list_slice = FileSlice::new(Arc::new(WrapFile::new(skip_list_file).unwrap()));
+        let skip_list_data = if skip_list_slice.len() > 0 {
+            skip_list_slice.read_bytes().unwrap()
         } else {
             OwnedBytes::empty()
         };
@@ -43,10 +43,28 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
         let posting_data = FileSlice::new(Arc::new(WrapFile::new(posting_file).unwrap()));
         let posting_data = posting_data.read_bytes().unwrap();
 
+        let position_skip_list_path = path.join(index_name.to_string() + ".skiplist");
+        let position_skip_list_file = File::open(position_skip_list_path).unwrap();
+        let position_skip_list_slice =
+            FileSlice::new(Arc::new(WrapFile::new(position_skip_list_file).unwrap()));
+        let position_skip_list_data = if position_skip_list_slice.len() > 0 {
+            position_skip_list_slice.read_bytes().unwrap()
+        } else {
+            OwnedBytes::empty()
+        };
+
+        let position_list_path = path.join(index_name.to_string() + ".positions");
+        let position_list_file = File::open(position_list_path).unwrap();
+        let position_list_slice =
+            FileSlice::new(Arc::new(WrapFile::new(position_list_file).unwrap()));
+        let position_list_data = position_list_slice.read_bytes().unwrap();
+
         Box::new(InvertedIndexPersistentSegmentData::new(
             term_dict,
-            skip_data,
+            skip_list_data,
             posting_data,
+            position_skip_list_data,
+            position_list_data,
         ))
     }
 }

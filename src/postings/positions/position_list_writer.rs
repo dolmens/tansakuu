@@ -6,7 +6,7 @@ use std::{
 use tantivy_common::CountingWriter;
 
 use crate::{
-    postings::{skip_list::SkipListWrite, PostingEncoder, SkipListWriter},
+    postings::{skip_list::SkipListWrite, PostingEncoder},
     util::{AcqRelU64, RelaxedU32},
     POSITION_BLOCK_LEN,
 };
@@ -17,9 +17,12 @@ pub trait PositionListWrite {
     fn add_pos(&mut self, pos: u32) -> io::Result<()>;
     fn end_doc(&mut self);
     fn flush(&mut self) -> io::Result<()>;
+    fn item_count(&self) -> (usize, usize);
+    fn written_bytes(&self) -> (usize, usize);
 }
 
 pub struct PositionListWriter<W: Write, S: SkipListWrite> {
+    item_count: usize,
     last_pos: u32,
     buffer_len: usize,
     item_count_flushed: usize,
@@ -58,6 +61,12 @@ impl PositionListWrite for EmptyPositionListWriter {
     fn end_doc(&mut self) {}
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+    fn item_count(&self) -> (usize, usize) {
+        (0, 0)
+    }
+    fn written_bytes(&self) -> (usize, usize) {
+        (0, 0)
     }
 }
 
@@ -159,6 +168,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
     pub fn new(writer: W, skip_list_writer: S) -> Self {
         let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
+            item_count: 0,
             last_pos: 0,
             buffer_len: 0,
             item_count_flushed: 0,
@@ -207,6 +217,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
 
 impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
+        self.item_count += 1;
         self.building_block.positions[self.buffer_len].store(pos - self.last_pos);
         self.buffer_len += 1;
         let flush_info =
@@ -231,6 +242,17 @@ impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> 
         self.skip_list_writer.flush()?;
 
         Ok(())
+    }
+
+    fn item_count(&self) -> (usize, usize) {
+        (self.item_count, self.skip_list_writer.item_count())
+    }
+
+    fn written_bytes(&self) -> (usize, usize) {
+        (
+            self.writer.written_bytes() as usize,
+            self.skip_list_writer.written_bytes(),
+        )
     }
 }
 

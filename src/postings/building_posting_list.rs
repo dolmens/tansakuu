@@ -5,10 +5,7 @@ use allocator_api2::alloc::{Allocator, Global};
 use crate::DocId;
 
 use super::{
-    positions::{
-        none_position_list_reader, BuildingPositionList, BuildingPositionListReader,
-        BuildingPositionListWriter, PositionListWriter,
-    },
+    positions::{BuildingPositionList, BuildingPositionListReader, BuildingPositionListWriter},
     posting_writer::{BuildingPostingBlock, FlushInfo, PostingWriter},
     skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
     ByteSliceList, ByteSliceReader, ByteSliceWriter, PostingBlock, PostingBlockSnapshot,
@@ -27,19 +24,18 @@ pub struct BuildingPostingList<A: Allocator = Global> {
 
 pub struct BuildingPostingWriter<A: Allocator = Global> {
     posting_writer:
-        PostingWriter<ByteSliceWriter<A>, BuildingPositionListWriter<A>, BuildingSkipListWriter<A>>,
+        PostingWriter<ByteSliceWriter<A>, BuildingSkipListWriter<A>, BuildingPositionListWriter<A>>,
     building_posting_list: BuildingPostingList<A>,
 }
 
 pub struct BuildingPostingReader<'a> {
-    flushed_read_finished: bool,
     read_count: usize,
-    doc_count: usize,
+    flushed_count: usize,
     building_block_snapshot: PostingBlockSnapshot,
     posting_reader: PostingReader<
         ByteSliceReader<'a>,
-        BuildingPositionListReader<'a>,
         BuildingSkipListReader<'a>,
+        BuildingPositionListReader<'a>,
     >,
 }
 
@@ -58,6 +54,12 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
         let byte_slice_writer =
             ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
+        let skip_list_format = posting_format.skip_list_format().clone();
+        let skip_list_writer = BuildingSkipListWriter::new_in(
+            skip_list_format,
+            initial_slice_capacity,
+            allocator.clone(),
+        );
         let (position_list_writer, building_position_list) = if posting_format.has_position_list() {
             let position_list_writer = BuildingPositionListWriter::new_in(allocator.clone());
             let building_position_list = position_list_writer.building_position_list().clone();
@@ -65,18 +67,12 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
         } else {
             (None, None)
         };
-        let skip_list_format = posting_format.skip_list_format().clone();
-        let skip_list_writer = BuildingSkipListWriter::new_in(
-            skip_list_format,
-            initial_slice_capacity,
-            allocator.clone(),
-        );
         let building_skip_list = skip_list_writer.building_skip_list().clone();
         let posting_writer = PostingWriter::new(
             posting_format.clone(),
             byte_slice_writer,
-            position_list_writer,
             skip_list_writer,
+            position_list_writer,
         );
         let flush_info = posting_writer.flush_info().clone();
         let building_block = posting_writer.building_block().clone();
@@ -119,74 +115,51 @@ impl<'a> BuildingPostingReader<'a> {
         let byte_slice_list = building_posting_list.byte_slice_list.as_ref();
         let building_block = building_posting_list.building_block.as_ref();
         let posting_format = building_posting_list.posting_format.clone();
-        let mut doc_count = flush_info.flushed_count();
-        let mut byte_slice_reader = if doc_count == 0 {
+        let mut flushed_count = flush_info.flushed_count();
+        let mut byte_slice_reader = if flushed_count == 0 {
             ByteSliceReader::empty()
         } else {
             ByteSliceReader::open(byte_slice_list)
         };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
-        let doc_count_updated = building_posting_list.flush_info.load().flushed_count();
-        if doc_count < doc_count_updated {
+        let flushed_count_updated = building_posting_list.flush_info.load().flushed_count();
+        if flushed_count < flushed_count_updated {
             building_block_snapshot.clear();
-            doc_count = doc_count_updated;
+            flushed_count = flushed_count_updated;
             byte_slice_reader = ByteSliceReader::open(byte_slice_list);
         }
+
+        let skip_list_reader =
+            BuildingSkipListReader::open(&building_posting_list.building_skip_list);
 
         let position_list_reader = building_posting_list
             .building_position_list
             .as_ref()
             .map(|building_position_list| BuildingPositionListReader::open(building_position_list));
 
-        let skip_list_reader =
-            BuildingSkipListReader::open(&building_posting_list.building_skip_list);
-
         let posting_reader = PostingReader::open(
             posting_format,
-            doc_count,
+            flushed_count,
             byte_slice_reader,
-            position_list_reader,
             skip_list_reader,
+            position_list_reader,
         );
 
-        doc_count += building_block_snapshot.len();
-
         Self {
-            flushed_read_finished: false,
             read_count: 0,
-            doc_count,
+            flushed_count,
             building_block_snapshot,
             posting_reader,
         }
     }
 
     pub fn eof(&self) -> bool {
-        self.read_count == self.doc_count
+        self.read_count == self.flushed_count + self.building_block_snapshot.len()
     }
 
     pub fn doc_count(&self) -> usize {
-        self.doc_count
+        self.flushed_count + self.building_block_snapshot.len()
     }
-
-    // pub fn seek(&mut self, docid: DocId, posting_block: &mut PostingBlock) -> io::Result<bool> {
-    //     if self.eof() {
-    //         return Ok(false);
-    //     }
-
-    //     if !self.posting_reader.eof() {
-    //         let ok = self.posting_reader.seek(docid, posting_block)?;
-    //         self.last_docid = self.posting_reader.last_docid();
-    //         self.read_count = self.posting_reader.read_count();
-    //         if ok {
-    //             return Ok(true);
-    //         }
-    //         debug_assert!(self.posting_reader.eof());
-    //     }
-
-    //     self.decode_one_block(posting_block)?;
-
-    //     Ok(posting_block.len > 0 && posting_block.last_docid() >= docid)
-    // }
 }
 
 impl<'a> PostingRead for BuildingPostingReader<'a> {
@@ -199,28 +172,34 @@ impl<'a> PostingRead for BuildingPostingReader<'a> {
             return Ok(false);
         }
 
-        if !self.flushed_read_finished {
+        if self.read_count < self.flushed_count {
             if self.posting_reader.decode_one_block(docid, posting_block)? {
+                self.read_count += posting_block.len;
                 return Ok(true);
             }
-            self.flushed_read_finished = true;
         }
 
-        self.read_count = self.doc_count;
+        self.read_count = self.flushed_count;
 
         if self.building_block_snapshot.len() == 0 {
             return Ok(false);
         }
 
-        let mut block_last_docid = posting_block.prev_docid;
+        self.read_count += self.building_block_snapshot.len();
+
+        let mut last_docid = self.posting_reader.last_docid();
+        let base_docid = last_docid;
         self.building_block_snapshot.copy_to(posting_block);
         for i in 0..posting_block.len {
-            block_last_docid += posting_block.docids[i];
+            last_docid += posting_block.docids[i];
         }
-        posting_block.last_docid = block_last_docid;
-        if block_last_docid < docid {
+        if last_docid < docid {
             return Ok(false);
         }
+
+        posting_block.base_docid = base_docid;
+        posting_block.last_docid = last_docid;
+        posting_block.base_ttf = self.posting_reader.last_ttf();
 
         Ok(true)
     }
@@ -257,11 +236,11 @@ mod tests {
         let mut posting_block = PostingBlock::new(&posting_format);
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 0);
+        assert_eq!(posting_reader.doc_count(), 0);
         assert_eq!(posting_reader.read_count, 0);
         assert!(!posting_reader.decode_one_block(0, &mut posting_block)?);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 0);
+        assert_eq!(posting_reader.doc_count(), 0);
         assert_eq!(posting_reader.read_count, 0);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -288,17 +267,17 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 1);
+        assert_eq!(posting_reader.doc_count(), 1);
         assert_eq!(posting_reader.read_count, 0);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[0]);
         assert_eq!(posting_block.len, 1);
         assert_eq!(posting_block.docids[0], docids[0]);
         assert_eq!(posting_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
 
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 1);
+        assert_eq!(posting_reader.doc_count(), 1);
         assert_eq!(posting_reader.read_count, 1);
 
         assert!(!posting_reader.decode_one_block(docids[0], &mut posting_block)?);
@@ -310,7 +289,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[1]);
         assert_eq!(posting_block.len, 2);
         assert_eq!(posting_block.docids[0], docids_deltas[0]);
@@ -330,7 +309,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(posting_block.len, BLOCK_LEN);
         assert_eq!(posting_block.docids, &docids_deltas[0..BLOCK_LEN]);
@@ -352,7 +331,7 @@ mod tests {
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
 
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(posting_block.len, BLOCK_LEN);
         assert_eq!(posting_block.docids, &docids_deltas[0..BLOCK_LEN]);
@@ -363,7 +342,7 @@ mod tests {
 
         let block_last_docid = posting_block.last_docid;
         assert!(posting_reader.decode_one_block(block_last_docid + 1, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, docids[BLOCK_LEN - 1]);
+        assert_eq!(posting_block.base_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(posting_block.len, BLOCK_LEN);
         assert_eq!(
@@ -377,7 +356,7 @@ mod tests {
 
         let block_last_docid = posting_block.last_docid;
         assert!(posting_reader.decode_one_block(block_last_docid + 1, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(posting_block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN * 2 + 3 - 1]);
         assert_eq!(posting_block.len, 3);
         assert_eq!(
@@ -397,7 +376,7 @@ mod tests {
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
 
         assert!(posting_reader.decode_one_block(docids[BLOCK_LEN - 1] + 1, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, docids[BLOCK_LEN - 1]);
+        assert_eq!(posting_block.base_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(posting_block.len, BLOCK_LEN);
         assert_eq!(
@@ -411,7 +390,7 @@ mod tests {
 
         let block_last_docid = posting_block.last_docid;
         assert!(posting_reader.decode_one_block(block_last_docid + 1, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(posting_block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN * 2 + 3 - 1]);
         assert_eq!(posting_block.len, 3);
         assert_eq!(
@@ -431,7 +410,7 @@ mod tests {
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
 
         assert!(posting_reader.decode_one_block(docids[BLOCK_LEN * 2 - 1] + 1, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, docids[BLOCK_LEN * 2 - 1]);
+        assert_eq!(posting_block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN * 2 + 3 - 1]);
         assert_eq!(posting_block.len, 3);
         assert_eq!(
@@ -504,7 +483,7 @@ mod tests {
                     {
                         let block_len = posting_block.len;
                         let prev_docid = if offset > 0 { docids[offset - 1] } else { 0 };
-                        assert_eq!(posting_block.prev_docid, prev_docid);
+                        assert_eq!(posting_block.base_docid, prev_docid);
                         assert_eq!(posting_block.last_docid, docids[offset + block_len - 1]);
                         assert_eq!(
                             &posting_block.docids[0..block_len],
@@ -521,7 +500,7 @@ mod tests {
                         break;
                     }
                 }
-                if posting_reader.doc_count == BLOCK_LEN * 2 + 3 {
+                if posting_reader.doc_count() == BLOCK_LEN * 2 + 3 {
                     break;
                 }
                 thread::yield_now();
@@ -549,11 +528,11 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 0);
+        assert_eq!(posting_reader.doc_count(), 0);
         assert_eq!(posting_reader.read_count, 0);
         assert!(!posting_reader.decode_one_block(0, &mut posting_block)?);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 0);
+        assert_eq!(posting_reader.doc_count(), 0);
         assert_eq!(posting_reader.read_count, 0);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -592,10 +571,10 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 1);
+        assert_eq!(posting_reader.doc_count(), 1);
         assert_eq!(posting_reader.read_count, 0);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[0]);
         assert_eq!(posting_block.len, 1);
         assert_eq!(posting_block.docids[0], docids[0]);
@@ -617,10 +596,10 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, 2);
+        assert_eq!(posting_reader.doc_count(), 2);
         assert_eq!(posting_reader.read_count, 0);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[1]);
         assert_eq!(posting_block.len, 2);
         assert_eq!(posting_block.docids[0], docids[0]);
@@ -650,10 +629,10 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count, BLOCK_LEN);
+        assert_eq!(posting_reader.doc_count(), BLOCK_LEN);
         assert_eq!(posting_reader.read_count, 0);
         assert!(posting_reader.decode_one_block(0, &mut posting_block)?);
-        assert_eq!(posting_block.prev_docid, 0);
+        assert_eq!(posting_block.base_docid, 0);
         assert_eq!(posting_block.last_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(posting_block.len, BLOCK_LEN);
 

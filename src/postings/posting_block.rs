@@ -3,9 +3,9 @@ use crate::{DocId, POSTING_BLOCK_LEN};
 use super::PostingFormat;
 
 pub struct PostingBlock {
-    pub prev_docid: DocId,
+    pub base_docid: DocId,
     pub last_docid: DocId,
-    pub current_ttf: u64,
+    pub base_ttf: u64,
     pub len: usize,
     pub docids: [DocId; POSTING_BLOCK_LEN],
     pub termfreqs: Option<Box<[u32]>>,
@@ -36,9 +36,9 @@ impl PostingBlock {
         };
 
         Self {
-            prev_docid: 0,
+            base_docid: 0,
             last_docid: 0,
-            current_ttf: 0,
+            base_ttf: 0,
             len: 0,
             docids: [0; POSTING_BLOCK_LEN],
             termfreqs,

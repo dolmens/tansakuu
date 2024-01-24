@@ -6,7 +6,9 @@ use super::{SkipListBlock, SkipListFormat};
 
 pub trait SkipListRead {
     // found, prev_key, block_last_key, start_offset, end_offset, skipped_item_count
+    // If fail, all the values were set to the right most values
     fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)>;
+    fn current_key(&self) -> u64;
     fn prev_value(&self) -> u64;
     fn block_last_value(&self) -> u64;
 }
@@ -14,7 +16,6 @@ pub trait SkipListRead {
 pub struct SkipListReader<R: Read> {
     item_count: usize,
     read_count: usize,
-    skipped_item_count: usize,
     current_key: u64,
     current_offset: u64,
     prev_value: u64,
@@ -28,8 +29,12 @@ pub struct SkipListReader<R: Read> {
 pub struct EmptySkipListReader;
 
 impl SkipListRead for EmptySkipListReader {
-    fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
-        return Ok((false, 0, 0, 0, 0, 0))
+    fn seek(&mut self, _key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
+        return Ok((false, 0, 0, 0, 0, 0));
+    }
+
+    fn current_key(&self) -> u64 {
+        0
     }
 
     fn prev_value(&self) -> u64 {
@@ -50,7 +55,6 @@ impl<R: Read> SkipListReader<R> {
         Self {
             item_count,
             read_count: 0,
-            skipped_item_count: 0,
             current_key: 0,
             current_offset: 0,
             prev_value: 0,
@@ -63,7 +67,7 @@ impl<R: Read> SkipListReader<R> {
     }
 
     pub fn eof(&self) -> bool {
-        self.read_count == self.item_count && self.current_cursor >= self.skip_list_block.len
+        self.read_count == self.item_count
     }
 
     fn decode_one_block(&mut self) -> io::Result<bool> {
@@ -85,7 +89,6 @@ impl<R: Read> SkipListReader<R> {
             )?;
         }
         self.current_cursor = 0;
-        self.read_count += block_len;
 
         Ok(true)
     }
@@ -93,17 +96,6 @@ impl<R: Read> SkipListReader<R> {
 
 impl<R: Read> SkipListRead for SkipListReader<R> {
     fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
-        if self.eof() {
-            return Ok((
-                false,
-                self.current_key,
-                self.current_key,
-                self.current_offset,
-                self.current_offset,
-                self.skipped_item_count,
-            ));
-        }
-
         loop {
             if self.current_cursor == self.skip_list_block.len {
                 if !self.decode_one_block()? {
@@ -114,7 +106,7 @@ impl<R: Read> SkipListRead for SkipListReader<R> {
             let prev_key = self.current_key;
             let current_offset = self.current_offset;
             self.prev_value = self.current_value;
-            let skipped_item_count = self.skipped_item_count;
+            let skipped_item_count = self.read_count;
 
             self.current_key += self.skip_list_block.keys[self.current_cursor] as u64;
             self.current_offset += self.skip_list_block.offsets[self.current_cursor] as u64;
@@ -123,7 +115,7 @@ impl<R: Read> SkipListRead for SkipListReader<R> {
                 .values
                 .as_ref()
                 .map_or(0, |values| values[self.current_cursor] as u64);
-            self.skipped_item_count += 1;
+            self.read_count += 1;
             self.current_cursor += 1;
 
             if self.current_key >= key {
@@ -144,8 +136,12 @@ impl<R: Read> SkipListRead for SkipListReader<R> {
             self.current_key,
             self.current_offset,
             self.current_offset,
-            self.skipped_item_count,
+            self.read_count,
         ))
+    }
+
+    fn current_key(&self) -> u64 {
+        self.current_key
     }
 
     fn prev_value(&self) -> u64 {
@@ -247,6 +243,10 @@ mod tests {
                 self.current_offset,
                 self.current_cursor,
             ))
+        }
+
+        fn current_key(&self) -> u64 {
+            self.current_key
         }
 
         fn prev_value(&self) -> u64 {

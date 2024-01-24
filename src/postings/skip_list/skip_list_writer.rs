@@ -16,9 +16,12 @@ use super::SkipListFormat;
 pub trait SkipListWrite {
     fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()>;
     fn flush(&mut self) -> io::Result<()>;
+    fn item_count(&self) -> usize;
+    fn written_bytes(&self) -> usize;
 }
 
 pub struct SkipListWriter<W: Write> {
+    item_count: usize,
     last_key: u64,
     last_offset: u64,
     last_value: u64,
@@ -58,6 +61,7 @@ impl<W: Write> SkipListWriter<W> {
         let flush_info = Arc::new(SkipListFlushInfo::new());
 
         Self {
+            item_count: 0,
             last_key: 0,
             last_offset: 0,
             last_value: 0,
@@ -85,6 +89,7 @@ impl<W: Write> SkipListWriter<W> {
 
 impl<W: Write> SkipListWrite for SkipListWriter<W> {
     fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
+        self.item_count += 1;
         let building_block = self.building_block.as_ref();
         building_block.add_skip_item(
             self.buffer_len,
@@ -139,6 +144,14 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
         }
 
         Ok(())
+    }
+
+    fn item_count(&self) -> usize {
+        self.item_count
+    }
+
+    fn written_bytes(&self) -> usize {
+        self.writer.written_bytes() as usize
     }
 }
 
@@ -310,6 +323,14 @@ mod tests {
 
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
+        }
+
+        fn item_count(&self) -> usize {
+            0
+        }
+
+        fn written_bytes(&self) -> usize {
+            0
         }
     }
 
