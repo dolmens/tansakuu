@@ -29,7 +29,7 @@ pub struct SkipListWriter<W: Write> {
     item_count_flushed: usize,
     flush_info: Arc<SkipListFlushInfo>,
     building_block: Arc<BuildingSkipListBlock>,
-    writer: CountingWriter<W>,
+    output_writer: CountingWriter<W>,
     skip_list_format: SkipListFormat,
 }
 
@@ -56,7 +56,7 @@ pub struct SkipListFlushInfoSnapshot {
 }
 
 impl<W: Write> SkipListWriter<W> {
-    pub fn new(skip_list_format: SkipListFormat, writer: W) -> Self {
+    pub fn new(skip_list_format: SkipListFormat, output_writer: W) -> Self {
         let building_block = Arc::new(BuildingSkipListBlock::new(&skip_list_format));
         let flush_info = Arc::new(SkipListFlushInfo::new());
 
@@ -69,7 +69,7 @@ impl<W: Write> SkipListWriter<W> {
             item_count_flushed: 0,
             flush_info,
             building_block,
-            writer: CountingWriter::wrap(writer),
+            output_writer: CountingWriter::wrap(output_writer),
             skip_list_format,
         }
     }
@@ -121,19 +121,19 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&keys, &mut self.writer)?;
+            posting_encoder.encode_u32(&keys, &mut self.output_writer)?;
             let offsets = building_block.offsets[0..self.buffer_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&offsets, &mut self.writer)?;
+            posting_encoder.encode_u32(&offsets, &mut self.output_writer)?;
             if self.skip_list_format.has_value() {
                 if let Some(value_atomics) = &building_block.values {
                     let values = value_atomics[0..self.buffer_len]
                         .iter()
                         .map(|a| a.load())
                         .collect::<Vec<_>>();
-                    posting_encoder.encode_u32(&values, &mut self.writer)?;
+                    posting_encoder.encode_u32(&values, &mut self.output_writer)?;
                 }
             }
 
@@ -151,7 +151,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
     }
 
     fn written_bytes(&self) -> usize {
-        self.writer.written_bytes() as usize
+        self.output_writer.written_bytes() as usize
     }
 }
 

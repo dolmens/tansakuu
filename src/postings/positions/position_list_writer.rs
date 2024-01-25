@@ -6,7 +6,10 @@ use std::{
 use tantivy_common::CountingWriter;
 
 use crate::{
-    postings::{skip_list::SkipListWrite, PostingEncoder},
+    postings::{
+        skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
+        PostingEncoder,
+    },
     util::{AcqRelU64, RelaxedU32},
     POSITION_BLOCK_LEN,
 };
@@ -28,7 +31,12 @@ pub struct PositionListWriter<W: Write, S: SkipListWrite> {
     item_count_flushed: usize,
     flush_info: Arc<PositionListFlushInfo>,
     building_block: Arc<BuildingPositionListBlock>,
-    writer: CountingWriter<W>,
+    output_writer: CountingWriter<W>,
+    skip_list_writer: S,
+}
+
+pub struct PositionListWriterBuilder<W: Write, S: SkipListWrite> {
+    output_writer: W,
     skip_list_writer: S,
 }
 
@@ -164,8 +172,46 @@ impl PositionListBlockSnapshot {
     }
 }
 
+impl<W: Write> PositionListWriterBuilder<W, SkipListWriter<io::Sink>> {
+    pub fn new(output_writer: W) -> Self {
+        let skip_list_writer = SkipListWriter::new(SkipListFormat::default(), io::sink());
+        Self {
+            output_writer,
+            skip_list_writer,
+        }
+    }
+}
+
+impl<W: Write, S: SkipListWrite> PositionListWriterBuilder<W, S> {
+    pub fn with_skip_list_output_writer<SW: Write>(
+        self,
+        skip_list_output_writer: SW,
+    ) -> PositionListWriterBuilder<W, SkipListWriter<SW>> {
+        let skip_list_writer =
+            SkipListWriter::new(SkipListFormat::default(), skip_list_output_writer);
+        PositionListWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer,
+        }
+    }
+
+    pub fn with_skip_list_writer<SW: SkipListWrite>(
+        self,
+        skip_list_writer: SW,
+    ) -> PositionListWriterBuilder<W, SW> {
+        PositionListWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer,
+        }
+    }
+
+    pub fn build(self) -> PositionListWriter<W, S> {
+        PositionListWriter::new(self.output_writer, self.skip_list_writer)
+    }
+}
+
 impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
-    pub fn new(writer: W, skip_list_writer: S) -> Self {
+    pub fn new(output_writer: W, skip_list_writer: S) -> Self {
         let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
             item_count: 0,
@@ -174,7 +220,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
             item_count_flushed: 0,
             flush_info,
             building_block: Arc::new(BuildingPositionListBlock::new()),
-            writer: CountingWriter::wrap(writer),
+            output_writer: CountingWriter::wrap(output_writer),
             skip_list_writer,
         }
     }
@@ -195,7 +241,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&positions, &mut self.writer)?;
+            posting_encoder.encode_u32(&positions, &mut self.output_writer)?;
 
             self.item_count_flushed += self.buffer_len;
             self.buffer_len = 0;
@@ -203,7 +249,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
             // The skip item is the block's last key
             self.skip_list_writer.add_skip_item(
                 self.item_count_flushed as u64 - 1,
-                self.writer.written_bytes(),
+                self.output_writer.written_bytes(),
                 None,
             )?;
 
@@ -250,7 +296,7 @@ impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> 
 
     fn written_bytes(&self) -> (usize, usize) {
         (
-            self.writer.written_bytes() as usize,
+            self.output_writer.written_bytes() as usize,
             self.skip_list_writer.written_bytes(),
         )
     }

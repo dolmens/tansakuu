@@ -21,7 +21,9 @@ pub use match_data::MatchData;
 pub use posting_block::PostingBlock;
 pub use posting_format::{PostingFormat, PostingFormatBuilder};
 pub use posting_iterator::PostingIterator;
-pub use posting_reader::{PostingRead, PostingReader};
-pub use posting_writer::{BuildingPostingBlock, PostingBlockSnapshot, PostingWriter};
+pub use posting_reader::{PostingRead, PostingReader, PostingReaderBuilder};
+pub use posting_writer::{
+    BuildingPostingBlock, PostingBlockSnapshot, PostingWriter, PostingWriterBuilder,
+};
 pub use term_dict::{TermDict, TermDictBuilder};
 pub use term_info::TermInfo;

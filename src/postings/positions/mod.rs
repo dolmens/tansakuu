@@ -9,9 +9,10 @@ pub use building_position_list::{
 pub use position_list_block::PositionListBlock;
 pub use position_list_reader::{
     none_position_list_reader, EmptyPositionListReader, PositionListRead, PositionListReader,
+    PositionListReaderBuilder,
 };
 pub use position_list_writer::{
     none_position_list_writer, BuildingPositionListBlock, EmptyPositionListWriter,
     PositionListBlockSnapshot, PositionListFlushInfo, PositionListFlushInfoSnapshot,
-    PositionListWrite, PositionListWriter,
+    PositionListWrite, PositionListWriter, PositionListWriterBuilder,
 };

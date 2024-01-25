@@ -11,8 +11,12 @@ use crate::{
 };
 
 use super::{
-    positions::PositionListWrite, skip_list::SkipListWrite, PostingBlock, PostingEncoder,
-    PostingFormat,
+    positions::{
+        none_position_list_writer, EmptyPositionListWriter, PositionListWrite, PositionListWriter,
+        PositionListWriterBuilder,
+    },
+    skip_list::{SkipListWrite, SkipListWriter},
+    PostingBlock, PostingEncoder, PostingFormat,
 };
 
 pub struct PostingWriter<W: Write, S: SkipListWrite, P: PositionListWrite> {
@@ -25,7 +29,7 @@ pub struct PostingWriter<W: Write, S: SkipListWrite, P: PositionListWrite> {
     doc_count_flushed: usize,
     flush_info: Arc<FlushInfo>,
     building_block: Arc<BuildingPostingBlock>,
-    writer: CountingWriter<W>,
+    output_writer: CountingWriter<W>,
     skip_list_writer: S,
     position_list_writer: Option<P>,
     posting_format: PostingFormat,
@@ -53,16 +57,116 @@ pub struct FlushInfoSnapshot {
     value: u64,
 }
 
+pub struct PostingWriterBuilder<W: Write, S: SkipListWrite, P: PositionListWrite> {
+    output_writer: W,
+    skip_list_writer: S,
+    position_list_writer: Option<P>,
+    posting_format: PostingFormat,
+}
+
+impl PostingWriterBuilder<io::Sink, SkipListWriter<io::Sink>, EmptyPositionListWriter> {
+    pub fn new(posting_format: PostingFormat) -> Self {
+        let skip_list_format = posting_format.skip_list_format().clone();
+        let skip_list_output = io::sink();
+        let skip_list_writer = SkipListWriter::new(skip_list_format, skip_list_output);
+        Self {
+            output_writer: io::sink(),
+            skip_list_writer,
+            position_list_writer: none_position_list_writer(),
+            posting_format,
+        }
+    }
+}
+
+impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriterBuilder<W, S, P> {
+    pub fn with_output_writer<OW: Write>(
+        self,
+        output_writer: OW,
+    ) -> PostingWriterBuilder<OW, S, P> {
+        PostingWriterBuilder {
+            output_writer,
+            skip_list_writer: self.skip_list_writer,
+            position_list_writer: self.position_list_writer,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_skip_list_output_writer<SW: Write>(
+        self,
+        skip_list_output_writer: SW,
+    ) -> PostingWriterBuilder<W, SkipListWriter<SW>, P> {
+        let skip_list_format = self.posting_format.skip_list_format().clone();
+        let skip_list_writer = SkipListWriter::new(skip_list_format, skip_list_output_writer);
+        PostingWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer,
+            position_list_writer: self.position_list_writer,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_skip_list_writer<SW: SkipListWrite>(
+        self,
+        skip_list_writer: SW,
+    ) -> PostingWriterBuilder<W, SW, P> {
+        PostingWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer,
+            position_list_writer: self.position_list_writer,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_position_list_output_writer<PW: Write, PSW: Write>(
+        self,
+        writer: PW,
+        skip_list_writer: PSW,
+    ) -> PostingWriterBuilder<W, S, PositionListWriter<PW, SkipListWriter<PSW>>> {
+        let position_list_writer = Some(
+            PositionListWriterBuilder::new(writer)
+                .with_skip_list_output_writer(skip_list_writer)
+                .build(),
+        );
+
+        PostingWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer: self.skip_list_writer,
+            position_list_writer,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_position_list_writer<PW: PositionListWrite>(
+        self,
+        position_list_writer: Option<PW>,
+    ) -> PostingWriterBuilder<W, S, PW> {
+        PostingWriterBuilder {
+            output_writer: self.output_writer,
+            skip_list_writer: self.skip_list_writer,
+            position_list_writer,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn build(self) -> PostingWriter<W, S, P> {
+        PostingWriter::new(
+            self.posting_format,
+            self.output_writer,
+            self.skip_list_writer,
+            self.position_list_writer,
+        )
+    }
+}
+
 impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriter<W, S, P> {
     pub fn new(
         posting_format: PostingFormat,
-        writer: W,
+        output_writer: W,
         skip_list_writer: S,
         position_list_writer: Option<P>,
     ) -> Self {
         let building_block = Arc::new(BuildingPostingBlock::new(&posting_format));
         let flush_info = Arc::new(FlushInfo::new());
-
         Self {
             doc_count: 0,
             last_docid: 0,
@@ -73,7 +177,7 @@ impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriter<W, S, P> {
             doc_count_flushed: 0,
             flush_info,
             building_block,
-            writer: CountingWriter::wrap(writer),
+            output_writer: CountingWriter::wrap(output_writer),
             skip_list_writer,
             position_list_writer,
             posting_format,
@@ -136,14 +240,14 @@ impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriter<W, S, P> {
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&docids, &mut self.writer)?;
+            posting_encoder.encode_u32(&docids, &mut self.output_writer)?;
             if self.posting_format.has_tflist() {
                 if let Some(termfreqs_atomics) = &building_block.termfreqs {
                     let termfreqs = termfreqs_atomics[0..self.buffer_len]
                         .iter()
                         .map(|a| a.load())
                         .collect::<Vec<_>>();
-                    posting_encoder.encode_u32(&termfreqs, &mut self.writer)?;
+                    posting_encoder.encode_u32(&termfreqs, &mut self.output_writer)?;
                 }
             }
             if self.posting_format.has_fieldmask() {
@@ -152,13 +256,13 @@ impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriter<W, S, P> {
                         .iter()
                         .map(|a| a.load())
                         .collect::<Vec<_>>();
-                    posting_encoder.encode_u8(&fieldmaps, &mut self.writer)?;
+                    posting_encoder.encode_u8(&fieldmaps, &mut self.output_writer)?;
                 }
             }
 
             self.skip_list_writer.add_skip_item(
                 self.last_docid as u64,
-                self.writer.written_bytes(),
+                self.output_writer.written_bytes(),
                 Some(self.total_tf),
             )?;
 
@@ -191,7 +295,7 @@ impl<W: Write, S: SkipListWrite, P: PositionListWrite> PostingWriter<W, S, P> {
 
     pub fn written_bytes(&self) -> (usize, usize) {
         (
-            self.writer.written_bytes() as usize,
+            self.output_writer.written_bytes() as usize,
             self.skip_list_writer.written_bytes(),
         )
     }

@@ -3,18 +3,11 @@ use std::io::{self, Read, Seek, SeekFrom};
 use crate::{
     postings::{
         positions::PositionListBlock,
-        skip_list::{SkipListFormat, SkipListRead, SkipListReader},
+        skip_list::{EmptySkipListReader, SkipListFormat, SkipListRead, SkipListReader},
         PostingEncoder,
     },
     POSITION_BLOCK_LEN,
 };
-
-pub struct PositionListReader<R: Read + Seek, S: SkipListRead> {
-    read_count: usize,
-    item_count: usize,
-    reader: R,
-    skip_list_reader: S,
-}
 
 pub trait PositionListRead {
     fn decode_one_block(
@@ -22,6 +15,80 @@ pub trait PositionListRead {
         ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool>;
+}
+
+pub struct PositionListReader<R: Read + Seek, S: SkipListRead> {
+    read_count: usize,
+    item_count: usize,
+    input_reader: R,
+    skip_list_reader: S,
+}
+
+pub struct PositionListReaderBuilder<R: Read + Seek, S: SkipListRead> {
+    item_count: usize,
+    input_reader: R,
+    skip_list_reader: S,
+}
+
+impl PositionListReaderBuilder<io::Empty, EmptySkipListReader> {
+    pub fn new() -> Self {
+        Self {
+            item_count: 0,
+            input_reader: io::empty(),
+            skip_list_reader: EmptySkipListReader,
+        }
+    }
+}
+
+impl<R: Read + Seek, S: SkipListRead> PositionListReaderBuilder<R, S> {
+    pub fn with_input_reader<IR: Read + Seek>(
+        self,
+        item_count: usize,
+        input_reader: IR,
+    ) -> PositionListReaderBuilder<IR, S> {
+        PositionListReaderBuilder {
+            item_count,
+            input_reader,
+            skip_list_reader: self.skip_list_reader,
+        }
+    }
+
+    pub fn with_skip_list_input_reader<SR: Read>(
+        self,
+        skip_list_item_count: usize,
+        skip_list_input_reader: SR,
+    ) -> PositionListReaderBuilder<R, SkipListReader<SR>> {
+        let skip_list_reader = SkipListReader::open(
+            SkipListFormat::default(),
+            skip_list_item_count,
+            skip_list_input_reader,
+        );
+
+        PositionListReaderBuilder {
+            item_count: self.item_count,
+            input_reader: self.input_reader,
+            skip_list_reader,
+        }
+    }
+
+    pub fn with_skip_list_reader<SR: SkipListRead>(
+        self,
+        skip_list_reader: SR,
+    ) -> PositionListReaderBuilder<R, SR> {
+        PositionListReaderBuilder {
+            item_count: self.item_count,
+            input_reader: self.input_reader,
+            skip_list_reader,
+        }
+    }
+
+    pub fn build(self) -> PositionListReader<R, S> {
+        PositionListReader::open_with_skip_list_reader(
+            self.item_count,
+            self.input_reader,
+            self.skip_list_reader,
+        )
+    }
 }
 
 pub struct EmptyPositionListReader;
@@ -58,7 +125,7 @@ impl<R: Read + Seek, S: SkipListRead> PositionListReader<R, S> {
         Self {
             read_count: 0,
             item_count,
-            reader,
+            input_reader: reader,
             skip_list_reader,
         }
     }
@@ -80,14 +147,14 @@ impl<R: Read + Seek, S: SkipListRead> PositionListRead for PositionListReader<R,
             self.skip_list_reader.seek(ttf)?;
         self.read_count = skipped_count * POSITION_BLOCK_LEN;
 
-        self.reader.seek(SeekFrom::Start(start_offset))?;
+        self.input_reader.seek(SeekFrom::Start(start_offset))?;
 
         let block_len = std::cmp::min(self.item_count - self.read_count, POSITION_BLOCK_LEN);
         position_list_block.len = block_len;
         position_list_block.start_ttf = self.read_count as u64;
         let posting_encoder = PostingEncoder;
         posting_encoder.decode_u32(
-            &mut self.reader,
+            &mut self.input_reader,
             &mut position_list_block.positions[0..block_len],
         )?;
 

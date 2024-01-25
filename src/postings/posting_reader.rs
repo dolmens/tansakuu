@@ -3,8 +3,10 @@ use std::io::{self, Read, Seek, SeekFrom};
 use crate::{DocId, POSTING_BLOCK_LEN};
 
 use super::{
-    positions::{PositionListBlock, PositionListRead},
-    skip_list::SkipListRead,
+    positions::{
+        none_position_list_reader, EmptyPositionListReader, PositionListBlock, PositionListRead,
+    },
+    skip_list::{empty_skip_list_reader, EmptySkipListReader, SkipListRead, SkipListReader},
     PostingBlock, PostingEncoder, PostingFormat,
 };
 
@@ -25,24 +27,92 @@ pub trait PostingRead {
 pub struct PostingReader<R: Read + Seek, S: SkipListRead, P: PositionListRead> {
     read_count: usize,
     doc_count: usize,
-    reader: R,
+    input_reader: R,
     skip_list_reader: S,
     position_list_reader: Option<P>,
     posting_format: PostingFormat,
+}
+
+pub struct PostingReaderBuilder<R: Read + Seek, S: SkipListRead, P: PositionListRead> {
+    doc_count: usize,
+    input_reader: R,
+    skip_list_reader: S,
+    position_list_reader: Option<P>,
+    posting_format: PostingFormat,
+}
+
+impl<R: Read + Seek> PostingReaderBuilder<R, EmptySkipListReader, EmptyPositionListReader> {
+    pub fn new(posting_format: PostingFormat, doc_count: usize, input_reader: R) -> Self {
+        Self {
+            doc_count,
+            input_reader,
+            skip_list_reader: empty_skip_list_reader(),
+            position_list_reader: none_position_list_reader(),
+            posting_format,
+        }
+    }
+}
+
+impl<R: Read + Seek, S: SkipListRead, P: PositionListRead> PostingReaderBuilder<R, S, P> {
+    pub fn with_skip_list_input_reader<SR: Read>(
+        self,
+        skip_list_item_count: usize,
+        skip_list_input_reader: SR,
+    ) -> PostingReaderBuilder<R, SkipListReader<SR>, P> {
+        let skip_list_format = self.posting_format.skip_list_format().clone();
+        let skip_list_reader = SkipListReader::open(
+            skip_list_format,
+            skip_list_item_count,
+            skip_list_input_reader,
+        );
+        PostingReaderBuilder {
+            doc_count: self.doc_count,
+            input_reader: self.input_reader,
+            skip_list_reader,
+            position_list_reader: self.position_list_reader,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_skip_list_reader<SR: SkipListRead>(
+        self,
+        skip_list_reader: SR,
+    ) -> PostingReaderBuilder<R, SR, P> {
+        PostingReaderBuilder {
+            doc_count: self.doc_count,
+            input_reader: self.input_reader,
+            skip_list_reader,
+            position_list_reader: self.position_list_reader,
+            posting_format: self.posting_format,
+        }
+    }
+
+    pub fn with_position_list_reader<PR: PositionListRead>(
+        self,
+        position_list_reader: Option<PR>,
+    ) -> PostingReaderBuilder<R, S, PR> {
+        PostingReaderBuilder {
+            doc_count: self.doc_count,
+            input_reader: self.input_reader,
+            skip_list_reader: self.skip_list_reader,
+            position_list_reader,
+            posting_format: self.posting_format,
+        }
+    }
 }
 
 impl<R: Read + Seek, S: SkipListRead, P: PositionListRead> PostingReader<R, S, P> {
     pub fn open(
         posting_format: PostingFormat,
         doc_count: usize,
-        reader: R,
+        input_reader: R,
         skip_list_reader: S,
         position_list_reader: Option<P>,
     ) -> Self {
         Self {
             read_count: 0,
             doc_count,
-            reader,
+            input_reader,
             skip_list_reader,
             position_list_reader,
             posting_format,
@@ -95,27 +165,30 @@ impl<R: Read + Seek, S: SkipListRead, P: PositionListRead> PostingRead for Posti
             posting_block.base_ttf = self.skip_list_reader.prev_value();
         };
 
-        self.reader.seek(SeekFrom::Start(start_offset))?;
+        self.input_reader.seek(SeekFrom::Start(start_offset))?;
 
         let block_len = std::cmp::min(self.doc_count - self.read_count, POSTING_BLOCK_LEN);
         self.read_count += block_len;
         posting_block.len = block_len;
         let posting_encoder = PostingEncoder;
-        posting_encoder.decode_u32(&mut self.reader, &mut posting_block.docids[0..block_len])?;
+        posting_encoder.decode_u32(
+            &mut self.input_reader,
+            &mut posting_block.docids[0..block_len],
+        )?;
         if self.posting_format.has_tflist() {
             if let Some(termfreqs) = posting_block.termfreqs.as_deref_mut() {
-                posting_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
+                posting_encoder.decode_u32(&mut self.input_reader, &mut termfreqs[0..block_len])?;
             } else {
                 let mut termfreqs = [0; POSTING_BLOCK_LEN];
-                posting_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
+                posting_encoder.decode_u32(&mut self.input_reader, &mut termfreqs[0..block_len])?;
             }
         }
         if self.posting_format.has_fieldmask() {
             if let Some(fieldmasks) = posting_block.fieldmasks.as_deref_mut() {
-                posting_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..block_len])?;
+                posting_encoder.decode_u8(&mut self.input_reader, &mut fieldmasks[0..block_len])?;
             } else {
                 let mut fieldmasks = [0; POSTING_BLOCK_LEN];
-                posting_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..block_len])?;
+                posting_encoder.decode_u8(&mut self.input_reader, &mut fieldmasks[0..block_len])?;
             }
         }
 

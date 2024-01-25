@@ -22,7 +22,7 @@ pub struct SkipListReader<R: Read> {
     current_value: u64,
     current_cursor: usize,
     skip_list_block: SkipListBlock,
-    reader: R,
+    input_reader: R,
     skip_list_format: SkipListFormat,
 }
 
@@ -51,7 +51,7 @@ pub fn empty_skip_list_reader() -> EmptySkipListReader {
 }
 
 impl<R: Read> SkipListReader<R> {
-    pub fn open(skip_list_format: SkipListFormat, item_count: usize, reader: R) -> Self {
+    pub fn open(skip_list_format: SkipListFormat, item_count: usize, input_reader: R) -> Self {
         Self {
             item_count,
             read_count: 0,
@@ -61,7 +61,7 @@ impl<R: Read> SkipListReader<R> {
             current_value: 0,
             current_cursor: 0,
             skip_list_block: SkipListBlock::new(&skip_list_format),
-            reader,
+            input_reader,
             skip_list_format,
         }
     }
@@ -80,11 +80,11 @@ impl<R: Read> SkipListReader<R> {
         let block_len = std::cmp::min(self.item_count - self.read_count, SKIPLIST_BLOCK_LEN);
         skip_list_block.len = block_len;
         let posting_encoder = PostingEncoder;
-        posting_encoder.decode_u32(&mut self.reader, &mut skip_list_block.keys[0..block_len])?;
-        posting_encoder.decode_u32(&mut self.reader, &mut skip_list_block.offsets[0..block_len])?;
+        posting_encoder.decode_u32(&mut self.input_reader, &mut skip_list_block.keys[0..block_len])?;
+        posting_encoder.decode_u32(&mut self.input_reader, &mut skip_list_block.offsets[0..block_len])?;
         if self.skip_list_format.has_value() {
             posting_encoder.decode_u32(
-                &mut self.reader,
+                &mut self.input_reader,
                 &mut skip_list_block.values.as_deref_mut().unwrap()[0..block_len],
             )?;
         }
