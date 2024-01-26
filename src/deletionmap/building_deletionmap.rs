@@ -16,7 +16,7 @@ impl BuildingDeletionMap {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let d2 = LayeredHashMap::with_initial_capacity(1024, hasher_builder, capacity_policy);
+        let d2 = LayeredHashMap::with_capacity(1024, hasher_builder, capacity_policy);
 
         Self { deleted: d2 }
     }
@@ -31,8 +31,7 @@ impl BuildingDeletionMap {
         if self.deleted.get(&segment_id).is_none() {
             let hasher_builder = RandomState::new();
             let capacity_policy = FixedCapacityPolicy;
-            let docset =
-                LayeredHashMap::with_initial_capacity(1024, hasher_builder, capacity_policy);
+            let docset = LayeredHashMap::with_capacity(1024, hasher_builder, capacity_policy);
 
             self.deleted.insert(segment_id.clone(), docset);
         }

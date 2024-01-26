@@ -2,7 +2,6 @@ use std::{
     borrow::Borrow,
     collections::hash_map::RandomState,
     hash::{BuildHasher, Hash, Hasher},
-    marker::PhantomData,
     ptr::NonNull,
     sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
@@ -12,13 +11,12 @@ use super::{Bitset, CapacityPolicy, FixedCapacityPolicy, Raw};
 pub struct LayeredHashMap<
     K,
     V,
-    H: BuildHasher = RandomState,
+    S: BuildHasher = RandomState,
     C: CapacityPolicy = FixedCapacityPolicy,
 > {
     head: AtomicPtr<HashBucket<K, V>>,
-    hasher_builder: H,
+    hasher_builder: S,
     capacity_policy: C,
-    _marker: PhantomData<HashBucket<K, V>>,
 }
 
 pub struct Iter<'a, K, V> {
@@ -27,12 +25,12 @@ pub struct Iter<'a, K, V> {
     iter: BucketIter<'a, K, V>,
 }
 
-struct Entry<K, V> {
+struct Element<K, V> {
     key: K,
     value: V,
 }
 
-impl<K, V> Entry<K, V> {
+impl<K, V> Element<K, V> {
     fn new(key: K, value: V) -> Self {
         Self { key, value }
     }
@@ -42,36 +40,31 @@ struct HashBucket<K, V> {
     next: Option<NonNull<HashBucket<K, V>>>,
     bitset: Bitset,
     item_count: AtomicUsize,
-    elems: Box<[Raw<Entry<K, V>>]>,
+    elements: Box<[Raw<Element<K, V>>]>,
 }
 
 struct BucketIter<'a, K, V> {
     cursor: usize,
     bitset: &'a Bitset,
-    elems: &'a [Raw<Entry<K, V>>],
+    elements: &'a [Raw<Element<K, V>>],
 }
 
 unsafe impl<K: Send + Sync, V: Send + Sync> Send for HashBucket<K, V> {}
 unsafe impl<K: Send + Sync, V: Send + Sync> Sync for HashBucket<K, V> {}
 
-fn hash<Q: ?Sized + Hash, H: BuildHasher>(key: &Q, hasher_builder: &H) -> u64 {
+fn make_hash<Q: ?Sized + Hash, S: BuildHasher>(key: &Q, hasher_builder: &S) -> u64 {
     let mut hasher = hasher_builder.build_hasher();
     key.hash(&mut hasher);
     hasher.finish()
 }
 
-impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
-    pub fn with_initial_capacity(
-        initial_capacity: usize,
-        hasher_builder: H,
-        capacity_policy: C,
-    ) -> Self {
+impl<K, V, S: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, S, C> {
+    pub fn with_capacity(initial_capacity: usize, hasher_builder: S, capacity_policy: C) -> Self {
         let bucket = Self::allocate_bucket(initial_capacity);
         Self {
             head: AtomicPtr::new(Box::into_raw(bucket)),
             hasher_builder,
             capacity_policy,
-            _marker: PhantomData,
         }
     }
 
@@ -165,7 +158,7 @@ impl<K, V, H: BuildHasher, C: CapacityPolicy> LayeredHashMap<K, V, H, C> {
     }
 }
 
-impl<K, V, H: BuildHasher, C: CapacityPolicy> Drop for LayeredHashMap<K, V, H, C> {
+impl<K, V, S: BuildHasher, C: CapacityPolicy> Drop for LayeredHashMap<K, V, S, C> {
     fn drop(&mut self) {
         let mut head_ptr = self.head();
         loop {
@@ -204,12 +197,12 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
 
 impl<K, V> HashBucket<K, V> {
     fn with_capacity(capacity: usize) -> Self {
-        let elems: Vec<_> = (0..capacity).map(|_| Raw::new()).collect();
+        let elements: Vec<_> = (0..capacity).map(|_| Raw::new()).collect();
         Self {
             next: None,
             bitset: Bitset::with_capacity(capacity),
             item_count: AtomicUsize::new(0),
-            elems: elems.into_boxed_slice(),
+            elements: elements.into_boxed_slice(),
         }
     }
 
@@ -217,15 +210,15 @@ impl<K, V> HashBucket<K, V> {
         BucketIter {
             cursor: 0,
             bitset: &self.bitset,
-            elems: &self.elems,
+            elements: &self.elements,
         }
     }
 
-    fn insert<H: BuildHasher>(&self, key: K, value: V, hasher_builder: &H) -> Option<V>
+    fn insert<S: BuildHasher>(&self, key: K, value: V, hasher_builder: &S) -> Option<V>
     where
         K: Eq + Hash,
     {
-        let hash = hash(&key, hasher_builder) as usize;
+        let hash = make_hash(&key, hasher_builder) as usize;
         let mut index = hash % self.capacity();
         while self.bitset.contains(index) {
             let entry = self.entry(index);
@@ -249,12 +242,12 @@ impl<K, V> HashBucket<K, V> {
         self.bitset.is_empty()
     }
 
-    fn contains_key<Q: ?Sized, H: BuildHasher>(&self, key: &Q, hasher_builder: &H) -> bool
+    fn contains_key<Q: ?Sized, S: BuildHasher>(&self, key: &Q, hasher_builder: &S) -> bool
     where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let hash = hash(key, hasher_builder) as usize;
+        let hash = make_hash(key, hasher_builder) as usize;
         let mut index = hash % self.capacity();
         while self.bitset.contains(index) {
             let entry = self.entry(index);
@@ -269,12 +262,12 @@ impl<K, V> HashBucket<K, V> {
         false
     }
 
-    fn get<Q: ?Sized, H: BuildHasher>(&self, key: &Q, hasher_builder: &H) -> Option<&V>
+    fn get<Q: ?Sized, S: BuildHasher>(&self, key: &Q, hasher_builder: &S) -> Option<&V>
     where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let hash = hash(key, hasher_builder) as usize;
+        let hash = make_hash(key, hasher_builder) as usize;
         let mut index = hash % self.capacity();
         while self.bitset.contains(index) {
             let entry = self.entry(index);
@@ -291,16 +284,16 @@ impl<K, V> HashBucket<K, V> {
 
     fn write_entry(&self, index: usize, key: K, value: V) {
         unsafe {
-            self.elems[index].write(Entry::new(key, value));
+            self.elements[index].write(Element::new(key, value));
         }
     }
 
-    fn entry(&self, index: usize) -> &Entry<K, V> {
-        unsafe { self.elems[index].get() }
+    fn entry(&self, index: usize) -> &Element<K, V> {
+        unsafe { self.elements[index].get() }
     }
 
     fn capacity(&self) -> usize {
-        self.elems.len()
+        self.elements.len()
     }
 
     fn is_saturated(&self) -> bool {
@@ -321,9 +314,9 @@ impl<'a, K, V> Iterator for BucketIter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.cursor < self.elems.len() {
+        while self.cursor < self.elements.len() {
             if self.bitset.contains(self.cursor) {
-                let entry = unsafe { self.elems[self.cursor].get() };
+                let entry = unsafe { self.elements[self.cursor].get() };
                 self.cursor += 1;
                 return Some((&entry.key, &entry.value));
             }
@@ -356,7 +349,7 @@ mod tests {
     fn test_hashmap_simple() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let map = LayeredHashMap::with_initial_capacity(4, hasher_builder, capacity_policy);
+        let map = LayeredHashMap::with_capacity(4, hasher_builder, capacity_policy);
         assert!(map.get(&1).is_none());
         unsafe {
             assert!(map.insert(1, 10).is_none());
@@ -405,8 +398,7 @@ mod tests {
     fn test_hashmap_multithreads() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let map =
-            LayeredHashMap::<i32, i32>::with_initial_capacity(4, hasher_builder, capacity_policy);
+        let map = LayeredHashMap::<i32, i32>::with_capacity(4, hasher_builder, capacity_policy);
         let count = 16;
         thread::scope(|scope| {
             let t = scope.spawn(|| {
@@ -463,8 +455,7 @@ mod tests {
     fn test_iter() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let map =
-            LayeredHashMap::<i32, i32>::with_initial_capacity(4, hasher_builder, capacity_policy);
+        let map = LayeredHashMap::<i32, i32>::with_capacity(4, hasher_builder, capacity_policy);
         let mut expected = vec![];
         for i in 0..8 {
             expected.push((i, i * 10));

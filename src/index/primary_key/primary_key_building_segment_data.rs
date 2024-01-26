@@ -14,7 +14,7 @@ impl PrimaryKeyBuildingSegmentData {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let keys2 = LayeredHashMap::with_initial_capacity(1024, hasher_builder, capacity_policy);
+        let keys2 = LayeredHashMap::with_capacity(1024, hasher_builder, capacity_policy);
 
         Self { keys: keys2 }
     }

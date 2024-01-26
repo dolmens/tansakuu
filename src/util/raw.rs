@@ -130,12 +130,6 @@ impl<T> Raw<T> {
     }
 }
 
-impl<T: Copy> Raw<T> {
-    pub unsafe fn value(&self) -> T {
-        unsafe { *self.as_ptr() }
-    }
-}
-
 impl<T> Default for Raw<T> {
     fn default() -> Self {
         Self::new()
