@@ -1,32 +1,41 @@
+use std::sync::Arc;
+
 use super::AcqRelU64;
 
+pub struct BitsetWriter {
+    data: Arc<[AcqRelU64]>,
+}
+
+#[derive(Clone)]
 pub struct Bitset {
-    data: Box<[AcqRelU64]>,
+    data: Arc<[AcqRelU64]>,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
     (index / 64, index % 64)
 }
 
-impl Bitset {
+impl BitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
         let len = (capacity + 63) / 64;
         let vec: Vec<_> = (0..len).map(|_| AcqRelU64::new(0)).collect();
-        let data = vec.into_boxed_slice();
+        let data = Arc::from(vec.into_boxed_slice());
         Self { data }
     }
 
-    pub unsafe fn insert(&self, index: usize) {
+    pub fn bitset(&self) -> Bitset {
+        Bitset {
+            data: self.data.clone(),
+        }
+    }
+
+    pub fn insert(&mut self, index: usize) {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
             let mut slot = self.data[quot].load();
             slot |= 1 << rem;
             self.data[quot].store(slot);
         }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.data.iter().all(|a| a.load() == 0)
     }
 
     pub fn contains(&self, index: usize) -> bool {
@@ -44,16 +53,33 @@ impl Bitset {
     }
 }
 
+impl Bitset {
+    pub fn contains(&self, index: usize) -> bool {
+        if index < self.capacity() {
+            let (quot, rem) = quot_and_rem(index);
+            let slot = self.data[quot].load();
+            slot & (1 << rem) != 0
+        } else {
+            false
+        }
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.data.len() * 64
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, thread, time::Duration};
+    use std::{thread, time::Duration};
 
-    use super::Bitset;
+    use crate::util::bitset::BitsetWriter;
 
     #[test]
     fn test_simple() {
         let capacity = 129;
-        let bitset = Bitset::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
+        let bitset = writer.bitset();
 
         for i in 0..capacity {
             assert!(!bitset.contains(i));
@@ -62,9 +88,8 @@ mod tests {
         // Overflow
         assert!(!bitset.contains(capacity));
 
-        unsafe {
-            bitset.insert(2);
-        }
+        writer.insert(2);
+
         for i in 0..capacity {
             if i == 2 {
                 assert!(bitset.contains(i));
@@ -73,9 +98,7 @@ mod tests {
             }
         }
 
-        unsafe {
-            bitset.insert(0);
-        }
+        writer.insert(0);
         for i in 0..capacity {
             if i == 0 || i == 2 {
                 assert!(bitset.contains(i));
@@ -84,10 +107,8 @@ mod tests {
             }
         }
 
-        unsafe {
-            bitset.insert(64);
-            bitset.insert(capacity - 1);
-        }
+        writer.insert(64);
+        writer.insert(capacity - 1);
         for i in 0..capacity {
             if i == 0 || i == 2 || i == 64 || i == capacity - 1 {
                 assert!(bitset.contains(i));
@@ -100,18 +121,19 @@ mod tests {
     #[test]
     fn test_multithreads() {
         let capacity = 129;
-        let bitset = Arc::new(Bitset::with_capacity(capacity));
+        let mut writer = BitsetWriter::with_capacity(capacity);
+        let bitset = writer.bitset();
 
-        let bitset1 = bitset.clone();
+        let reader = bitset.clone();
         let t1 = thread::spawn(move || {
-            while !bitset1.contains(capacity - 1) {
+            while !reader.contains(capacity - 1) {
                 thread::sleep(Duration::from_millis(1));
             }
             for i in 0..capacity {
                 if i == 0 || i == 2 || i == 64 || i == capacity - 1 {
-                    assert!(bitset1.contains(i));
+                    assert!(reader.contains(i));
                 } else {
-                    assert!(!bitset1.contains(i));
+                    assert!(!reader.contains(i));
                 }
             }
         });
@@ -121,11 +143,9 @@ mod tests {
         }
 
         // Overflow
-        assert!(!bitset.contains(capacity));
+        assert!(!writer.contains(capacity));
 
-        unsafe {
-            bitset.insert(2);
-        }
+        writer.insert(2);
         for i in 0..capacity {
             if i == 2 {
                 assert!(bitset.contains(i));
@@ -134,9 +154,7 @@ mod tests {
             }
         }
 
-        unsafe {
-            bitset.insert(0);
-        }
+        writer.insert(0);
         for i in 0..capacity {
             if i == 0 || i == 2 {
                 assert!(bitset.contains(i));
@@ -145,10 +163,8 @@ mod tests {
             }
         }
 
-        unsafe {
-            bitset.insert(64);
-            bitset.insert(capacity - 1);
-        }
+        writer.insert(64);
+        writer.insert(capacity - 1);
         for i in 0..capacity {
             if i == 0 || i == 2 || i == 64 || i == capacity - 1 {
                 assert!(bitset.contains(i));

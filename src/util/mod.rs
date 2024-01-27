@@ -12,10 +12,10 @@ pub use atomic::{
     AcqRelAtomicPtr, AcqRelU64, AcqRelUsize, RelaxedAtomicPtr, RelaxedU32, RelaxedU64, RelaxedU8,
     RelaxedUsize, SeqCstU64,
 };
-pub use bitset::Bitset;
+pub use bitset::{Bitset, BitsetWriter};
 pub use capacity_policy::{CapacityPolicy, FixedCapacityPolicy};
 pub use chunked_vec::ChunkedVec;
 pub use exponential_tree::ExponentialTree;
 pub use fixed_capacity_vec::FixedCapacityVec;
-pub use layered_hashmap::LayeredHashMap;
+pub use layered_hashmap::{LayeredHashMap, LayeredHashMapWriter};
 pub use raw::Raw;

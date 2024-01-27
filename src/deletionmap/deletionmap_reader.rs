@@ -9,7 +9,7 @@ use super::{BuildingDeletionMap, DeletionMap};
 
 pub struct DeletionMapReader {
     segment_metas: Vec<SegmentMeta>,
-    building_segments: Vec<Arc<BuildingDeletionMap>>,
+    building_segments: Vec<BuildingDeletionMap>,
     persistent_segments: Vec<Arc<DeletionMap>>,
 }
 

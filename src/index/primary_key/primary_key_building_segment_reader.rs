@@ -1,22 +1,26 @@
 use std::sync::Arc;
 
-use crate::{table::SegmentMeta, DocId};
+use crate::{table::SegmentMeta, util::LayeredHashMap, DocId};
 
 use super::PrimaryKeyBuildingSegmentData;
 
 pub struct PrimaryKeyBuildingSegmentReader {
     meta: SegmentMeta,
-    index_data: Arc<PrimaryKeyBuildingSegmentData>,
+    keys: LayeredHashMap<String, DocId>,
 }
 
 impl PrimaryKeyBuildingSegmentReader {
     pub fn new(meta: SegmentMeta, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
-        Self { meta, index_data }
+        Self {
+            meta,
+            keys: index_data.keys.clone(),
+        }
     }
 
     pub fn lookup(&self, key: &str) -> Option<DocId> {
-        self.index_data
-            .lookup(key)
+        self.keys
+            .get(key)
+            .cloned()
             .map(|docid| docid + self.meta.base_docid())
     }
 }

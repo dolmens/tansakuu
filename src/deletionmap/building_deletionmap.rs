@@ -1,43 +1,23 @@
-use crate::{
-    table::SegmentId,
-    util::{FixedCapacityPolicy, LayeredHashMap},
-    DocId,
-};
+use crate::{table::SegmentId, util::LayeredHashMap, DocId};
 
-use std::{collections::hash_map::RandomState, fs::File, path::Path};
+use std::{fs::File, path::Path};
 
 use super::DeletionDictBuilder;
 
+#[derive(Clone)]
 pub struct BuildingDeletionMap {
     deleted: LayeredHashMap<SegmentId, LayeredHashMap<DocId, ()>>,
 }
 
 impl BuildingDeletionMap {
-    pub fn new() -> Self {
-        let hasher_builder = RandomState::new();
-        let capacity_policy = FixedCapacityPolicy;
-        let d2 = LayeredHashMap::with_capacity(1024, hasher_builder, capacity_policy);
-
-        Self { deleted: d2 }
+    pub fn new(deleted: LayeredHashMap<SegmentId, LayeredHashMap<DocId, ()>>) -> Self {
+        Self { deleted }
     }
 
     pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {
         self.deleted
             .get(segment_id)
             .map_or(false, |seg| seg.contains_key(&docid))
-    }
-
-    pub unsafe fn delete_doc(&self, segment_id: SegmentId, docid: DocId) {
-        if self.deleted.get(&segment_id).is_none() {
-            let hasher_builder = RandomState::new();
-            let capacity_policy = FixedCapacityPolicy;
-            let docset = LayeredHashMap::with_capacity(1024, hasher_builder, capacity_policy);
-
-            self.deleted.insert(segment_id.clone(), docset);
-        }
-
-        let docset = self.deleted.get(&segment_id).unwrap();
-        docset.insert(docid, ());
     }
 
     pub fn is_empty(&self) -> bool {

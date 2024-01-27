@@ -20,7 +20,12 @@ impl PrimaryKeySerializer {
 
 impl IndexSerializer for PrimaryKeySerializer {
     fn serialize(&self, directory: &std::path::Path) {
-        let mut keys: Vec<_> = self.index_data.keys().collect();
+        let mut keys: Vec<_> = self
+            .index_data
+            .keys
+            .iter()
+            .map(|(k, &v)| (k.as_str(), v))
+            .collect();
         keys.sort_by(|a, b| a.0.cmp(b.0));
         let index_path = directory.join(&self.index_name);
         let index_file = File::create(index_path).unwrap();
@@ -35,6 +40,5 @@ impl IndexSerializer for PrimaryKeySerializer {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_basic() {
-    }
+    fn test_basic() {}
 }

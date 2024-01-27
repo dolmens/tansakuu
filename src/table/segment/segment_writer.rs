@@ -20,7 +20,7 @@ impl SegmentWriter {
         let building_segment = Arc::new(BuildingSegmentData::new(
             column_writer.column_data(),
             index_writer.index_data(),
-            deletionmap_writer.deletionmap().clone(),
+            deletionmap_writer.deletionmap(),
         ));
 
         Self {
