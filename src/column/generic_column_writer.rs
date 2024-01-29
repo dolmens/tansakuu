@@ -1,17 +1,25 @@
 use std::sync::Arc;
 
-use crate::document::Value;
+use allocator_api2::alloc::Global;
+
+use crate::{document::Value, util::chunked_vec::ChunkedVecWriter};
 
 use super::{ColumnSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
 
 pub struct GenericColumnWriter<T> {
+    writer: ChunkedVecWriter<T, Global>,
     column_data: Arc<GenericColumnBuildingSegmentData<T>>,
 }
 
 impl<T> GenericColumnWriter<T> {
     pub fn new() -> Self {
+        let writer = ChunkedVecWriter::new(3, 2);
+        let reader = writer.reader();
+        let column_data = Arc::new(GenericColumnBuildingSegmentData::new(reader));
+
         Self {
-            column_data: Arc::new(GenericColumnBuildingSegmentData::new()),
+            writer,
+            column_data,
         }
     }
 }
@@ -21,7 +29,7 @@ where
     Value: TryInto<T>,
 {
     fn add_doc(&mut self, value: Value) {
-        self.column_data.push(value.try_into().ok().unwrap());
+        self.writer.push(value.try_into().ok().unwrap());
     }
 
     fn column_data(&self) -> Arc<dyn ColumnSegmentData> {

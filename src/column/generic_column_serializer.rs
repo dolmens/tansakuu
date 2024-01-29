@@ -25,8 +25,8 @@ impl<T: Clone + ToString> ColumnSerializer for GenericColumnSerializer<T> {
     fn serialize(&self, directory: &Path) {
         let path = directory.join(&self.field_name);
         let mut writer = GenericColumnSerializerWriter::<T>::new(path);
-        let values = self.column_data.values();
-        for value in &values {
+        let values = &self.column_data.values;
+        for value in values.iter() {
             writer.write(value.clone());
         }
     }

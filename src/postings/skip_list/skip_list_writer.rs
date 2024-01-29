@@ -7,7 +7,7 @@ use tantivy_common::CountingWriter;
 
 use crate::{
     postings::PostingEncoder,
-    util::{AcqRelU64, RelaxedU32},
+    util::atomic::{AcqRelU64, RelaxedU32},
     SKIPLIST_BLOCK_LEN,
 };
 

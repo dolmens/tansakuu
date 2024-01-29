@@ -1,4 +1,4 @@
-use crate::{index::IndexSegmentData, util::LayeredHashMap, DocId};
+use crate::{index::IndexSegmentData, util::layered_hashmap::LayeredHashMap, DocId};
 
 pub struct PrimaryKeyBuildingSegmentData {
     pub keys: LayeredHashMap<String, DocId>,

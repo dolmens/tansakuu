@@ -2,7 +2,10 @@ use std::collections::{hash_map::RandomState, HashMap};
 
 use crate::{
     table::SegmentId,
-    util::{FixedCapacityPolicy, LayeredHashMap, LayeredHashMapWriter},
+    util::{
+        capacity_policy::FixedCapacityPolicy,
+        layered_hashmap::{LayeredHashMap, LayeredHashMapWriter},
+    },
     DocId,
 };
 

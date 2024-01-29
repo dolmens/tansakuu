@@ -9,7 +9,7 @@ pub struct GenericColumnReader<T> {
     building_segments: Vec<GenericColumnBuildingSegmentReader<T>>,
 }
 
-impl<T: Send + Sync + 'static> GenericColumnReader<T> {
+impl<T: Clone + Send + Sync + 'static> GenericColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
@@ -53,7 +53,7 @@ impl<T: Clone + Send + Sync + 'static> GenericColumnReader<T> {
         }
         for segment in &self.building_segments {
             if docid < segment.doc_count() as DocId {
-                return segment.get(docid);
+                return segment.get(docid).cloned();
             }
             docid -= segment.doc_count() as DocId;
         }

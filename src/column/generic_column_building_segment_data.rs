@@ -1,22 +1,16 @@
-use crate::{util::ChunkedVec, DocId};
+use allocator_api2::alloc::Global;
+
+use crate::{DocId, util::chunked_vec::ChunkedVec};
 
 use super::ColumnSegmentData;
 
 pub struct GenericColumnBuildingSegmentData<T> {
-    pub values: ChunkedVec<T>,
+    pub values: ChunkedVec<T, Global>,
 }
 
 impl<T> GenericColumnBuildingSegmentData<T> {
-    pub fn new() -> Self {
-        Self {
-            values: ChunkedVec::new(4, 2),
-        }
-    }
-
-    pub fn push(&self, value: T) {
-        unsafe {
-            self.values.push(value);
-        }
+    pub fn new(values: ChunkedVec<T, Global>) -> Self {
+        Self { values }
     }
 
     pub fn get(&self, docid: DocId) -> Option<T>
@@ -24,13 +18,6 @@ impl<T> GenericColumnBuildingSegmentData<T> {
         T: Clone,
     {
         self.values.get(docid as usize).cloned()
-    }
-
-    pub fn values(&self) -> Vec<T>
-    where
-        T: Clone,
-    {
-        self.values.iter().cloned().collect()
     }
 
     pub fn doc_count(&self) -> usize {

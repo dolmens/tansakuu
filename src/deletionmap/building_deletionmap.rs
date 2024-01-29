@@ -1,4 +1,4 @@
-use crate::{table::SegmentId, util::LayeredHashMap, DocId};
+use crate::{table::SegmentId, util::layered_hashmap::LayeredHashMap, DocId};
 
 use std::{fs::File, path::Path};
 

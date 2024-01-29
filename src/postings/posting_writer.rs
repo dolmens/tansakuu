@@ -6,7 +6,7 @@ use std::{
 use tantivy_common::CountingWriter;
 
 use crate::{
-    util::{AcqRelU64, RelaxedU32, RelaxedU8},
+    util::atomic::{AcqRelU64, RelaxedU32, RelaxedU8},
     DocId, POSTING_BLOCK_LEN,
 };
 

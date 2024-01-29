@@ -7,8 +7,10 @@ use std::{
 };
 
 use super::{
-    bitset::BitsetWriter, AcqRelAtomicPtr, AcqRelUsize, Bitset, CapacityPolicy,
-    FixedCapacityPolicy, Raw,
+    atomic::{AcqRelAtomicPtr, AcqRelUsize},
+    bitset::{Bitset, BitsetWriter},
+    capacity_policy::{CapacityPolicy, FixedCapacityPolicy},
+    raw::Raw,
 };
 
 const SPARSITY: usize = 2;
@@ -477,11 +479,9 @@ mod tests {
     use std::{collections::hash_map::RandomState, thread};
 
     use crate::util::{
-        layered_hashmap::{make_hash, LayerWriter},
-        LayeredHashMapWriter,
+        capacity_policy::FixedCapacityPolicy,
+        layered_hashmap::{make_hash, LayerWriter, LayeredHashMapWriter},
     };
-
-    use super::FixedCapacityPolicy;
 
     #[test]
     fn test_layer_simple() {

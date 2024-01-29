@@ -1,26 +1,29 @@
 use std::sync::Arc;
 
-use crate::DocId;
+use allocator_api2::alloc::Global;
+
+use crate::{util::chunked_vec::ChunkedVec, DocId};
 
 use super::GenericColumnBuildingSegmentData;
 
 pub struct GenericColumnBuildingSegmentReader<T> {
-    column_data: Arc<GenericColumnBuildingSegmentData<T>>,
+    values: ChunkedVec<T, Global>,
 }
 
-impl<T> GenericColumnBuildingSegmentReader<T> {
+impl<T: Clone> GenericColumnBuildingSegmentReader<T> {
     pub fn new(column_data: Arc<GenericColumnBuildingSegmentData<T>>) -> Self {
-        Self { column_data }
+        let values = column_data.values.clone();
+        Self { values }
     }
 
-    pub fn get(&self, docid: DocId) -> Option<T>
+    pub fn get(&self, docid: DocId) -> Option<&T>
     where
         T: Clone,
     {
-        self.column_data.get(docid)
+        self.values.get(docid as usize)
     }
 
     pub fn doc_count(&self) -> usize {
-        self.column_data.doc_count()
+        self.values.len()
     }
 }

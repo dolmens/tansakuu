@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{table::SegmentMeta, util::LayeredHashMap, DocId};
+use crate::{table::SegmentMeta, util::layered_hashmap::LayeredHashMap, DocId};
 
 use super::PrimaryKeyBuildingSegmentData;
 

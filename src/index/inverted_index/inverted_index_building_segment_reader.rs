@@ -5,7 +5,7 @@ use crate::{
     postings::{
         BuildingPostingList, BuildingPostingReader, PostingBlock, PostingFormat, PostingRead,
     },
-    util::LayeredHashMap,
+    util::layered_hashmap::LayeredHashMap,
     DocId,
 };
 

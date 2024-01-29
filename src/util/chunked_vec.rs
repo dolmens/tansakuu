@@ -1,139 +1,123 @@
-use super::{AcqRelUsize, ExponentialTree, FixedCapacityVec};
+use allocator_api2::alloc::{Allocator, Global};
 
-pub struct ChunkedVec<T> {
-    len: AcqRelUsize,
-    chunk_exponent: usize,
-    chunk_tree: ExponentialTree<FixedCapacityVec<T>>,
+use super::radix_tree::{RadixTree, RadixTreeIter, RadixTreeWriter};
+
+pub struct ChunkedVecWriter<T, A: Allocator = Global> {
+    tree: RadixTreeWriter<T, A>,
 }
 
-pub struct Iter<'a, T> {
-    cursor: usize,
-    len: usize,
-    chunked_vec: &'a ChunkedVec<T>,
+#[derive(Clone)]
+pub struct ChunkedVec<T, A: Allocator = Global> {
+    tree: RadixTree<T, A>,
 }
 
-impl<T> ChunkedVec<T> {
-    pub fn new(chunk_exponent: usize, tree_exponent: usize) -> Self {
+pub struct ChunkedVecIter<'a, T, A: Allocator = Global> {
+    iter: RadixTreeIter<'a, T, A>,
+}
+
+impl<T, A: Allocator + Default> ChunkedVecWriter<T, A> {
+    pub fn new(chunk_exponent: usize, tree_exponent: u8) -> Self {
+        Self::new_in(chunk_exponent, tree_exponent, Default::default())
+    }
+}
+
+impl<T, A: Allocator> ChunkedVecWriter<T, A> {
+    pub fn new_in(chunk_exponent: usize, tree_exponent: u8, allocator: A) -> Self {
         Self {
-            len: AcqRelUsize::new(0),
-            chunk_exponent,
-            chunk_tree: ExponentialTree::new(tree_exponent),
+            tree: RadixTreeWriter::new_in(chunk_exponent, tree_exponent, allocator),
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, T> {
-        Iter::new(self)
+    pub fn reader(&self) -> ChunkedVec<T, A> {
+        ChunkedVec {
+            tree: self.tree.reader(),
+        }
     }
 
-    pub unsafe fn push(&self, value: T) {
-        let len = self.len();
-        if len % (1 << self.chunk_exponent) == 0 {
-            unsafe {
-                self.chunk_tree
-                    .insert(FixedCapacityVec::with_capacity(1 << self.chunk_exponent));
-            }
-        }
-        let chunk = self
-            .chunk_tree
-            .get(len / (1 << self.chunk_exponent))
-            .unwrap();
-        unsafe {
-            chunk.push(value);
-        }
-        self.len.store(len + 1);
+    pub fn push(&mut self, value: T) {
+        self.tree.push(value);
+    }
+}
+
+impl<T, A: Allocator> ChunkedVec<T, A> {
+    pub fn len(&self) -> usize {
+        self.tree.len()
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
-        let len = self.len();
-        if index < len {
-            let chunk = self
-                .chunk_tree
-                .get(index / (1 << self.chunk_exponent))
-                .unwrap();
-            chunk.get(index % (1 << self.chunk_exponent))
-        } else {
-            None
-        }
+        self.tree.get(index)
     }
 
-    pub fn len(&self) -> usize {
-        self.len.load()
-    }
-}
-
-impl<'a, T> Iter<'a, T> {
-    pub fn new(chunked_vec: &'a ChunkedVec<T>) -> Self {
-        Self {
-            cursor: 0,
-            len: chunked_vec.len(),
-            chunked_vec,
+    pub fn iter(&self) -> ChunkedVecIter<'_, T, A> {
+        ChunkedVecIter {
+            iter: self.tree.iter(),
         }
     }
 }
 
-impl<'a, T> Iterator for Iter<'a, T> {
+impl<'a, T, A: Allocator> Iterator for ChunkedVecIter<'a, T, A> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cursor < self.len {
-            let cursor = self.cursor;
-            self.cursor += 1;
-            self.chunked_vec.get(cursor)
-        } else {
-            None
-        }
+        self.iter.next()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::thread;
 
-    use super::ChunkedVec;
+    use crate::util::chunked_vec::ChunkedVecWriter;
 
     #[test]
-    fn test_simple() {
-        let vec = ChunkedVec::new(3, 2);
+    fn test_basic() {
+        let mut writer: ChunkedVecWriter<_> = ChunkedVecWriter::new(3, 2);
+        let vec = writer.reader();
         assert_eq!(vec.len(), 0);
         let count = 1024;
         for i in 0..count {
-            unsafe {
-                vec.push((i + 1) * 10);
-            }
-            assert_eq!(vec.len(), i + 1);
+            writer.push((i + 1) * 10);
         }
 
+        assert_eq!(vec.len(), count);
         for i in 0..count {
             assert_eq!(vec.get(i).unwrap().clone(), (i + 1) * 10);
+        }
+        assert!(vec.get(count).is_none());
+        for (i, &v) in vec.iter().enumerate() {
+            assert_eq!((i + 1) * 10, v);
         }
     }
 
     #[test]
     fn test_multithreads() {
-        let vec = ChunkedVec::<usize>::new(3, 2);
+        let mut writer = ChunkedVecWriter::<usize>::new(3, 2);
+        let vec = writer.reader();
         assert_eq!(vec.len(), 0);
         let count = 1024;
 
-        thread::scope(|scope| {
-            let t = scope.spawn(|| loop {
-                let len = vec.len();
-                for i in 0..len {
-                    assert_eq!(vec.get(i).unwrap().clone(), (i + 1) * 10);
-                }
-                if len == count {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(1));
-            });
-
-            for i in 0..count {
-                unsafe {
-                    vec.push((i + 1) * 10);
-                }
-                assert_eq!(vec.len(), i + 1);
+        let reader_thread = thread::spawn(move || loop {
+            let len = vec.len();
+            for i in 0..len {
+                assert_eq!(vec.get(i).cloned(), Some(i * 10));
             }
-
-            t.join().unwrap();
+            for (i, &v) in vec.iter().enumerate() {
+                assert_eq!(i * 10, v);
+            }
+            if len == count {
+                assert!(vec.get(count).is_none());
+                break;
+            }
+            thread::yield_now();
         });
+
+        let writer_thread = thread::spawn(move || {
+            for i in 0..count {
+                writer.push(i * 10);
+            }
+        });
+
+        reader_thread.join().unwrap();
+        writer_thread.join().unwrap();
     }
 }

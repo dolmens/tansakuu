@@ -10,7 +10,7 @@ use crate::{
         skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
         PostingEncoder,
     },
-    util::{AcqRelU64, RelaxedU32},
+    util::atomic::{AcqRelU64, RelaxedU32},
     POSITION_BLOCK_LEN,
 };
 

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::AcqRelU64;
+use super::atomic::AcqRelU64;
 
 pub struct BitsetWriter {
     data: Arc<[AcqRelU64]>,

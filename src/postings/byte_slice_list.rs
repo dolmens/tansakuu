@@ -10,7 +10,7 @@ use std::{
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::util::{AcqRelUsize, RelaxedAtomicPtr};
+use crate::util::atomic::{AcqRelUsize, RelaxedAtomicPtr};
 
 pub struct ByteSlice {
     // should acquire total_size first

@@ -7,7 +7,7 @@ use crate::{
     document::Value,
     index::IndexWriter,
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
-    util::{FixedCapacityPolicy, LayeredHashMapWriter},
+    util::{capacity_policy::FixedCapacityPolicy, layered_hashmap::LayeredHashMapWriter},
     DocId,
 };
 

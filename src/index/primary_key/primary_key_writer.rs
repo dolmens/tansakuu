@@ -3,7 +3,7 @@ use std::{collections::hash_map::RandomState, sync::Arc};
 use crate::{
     document::Value,
     index::IndexWriter,
-    util::{FixedCapacityPolicy, LayeredHashMapWriter},
+    util::{capacity_policy::FixedCapacityPolicy, layered_hashmap::LayeredHashMapWriter},
     DocId,
 };
 

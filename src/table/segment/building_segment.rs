@@ -1,6 +1,6 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use crate::{deletionmap::BuildingDeletionMap, util::AcqRelUsize};
+use crate::{deletionmap::BuildingDeletionMap, util::atomic::AcqRelUsize};
 
 use super::{BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta};
 
