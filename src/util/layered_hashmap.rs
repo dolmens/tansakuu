@@ -499,6 +499,8 @@ mod tests {
         let key2 = 2;
         let hash2 = make_hash(&key2, &hasher_builder);
         assert!(layer.insert(hash2, key2, 20).is_none());
+
+        let _ = unsafe { Box::from_raw(layer.layer.as_ptr()) };
     }
 
     #[test]
@@ -604,7 +606,9 @@ mod tests {
 
         let mut items: Vec<_> = layer.layer().iter().map(|(&k, &v)| (k, v)).collect();
         items.sort_by(|a, b| a.0.cmp(&b.0));
-        assert_eq!(items, vec![(1, 10), (3, 30), (5, 50)])
+        assert_eq!(items, vec![(1, 10), (3, 30), (5, 50)]);
+
+        let _ = unsafe { Box::from_raw(layer.layer.as_ptr()) };
     }
 
     #[test]

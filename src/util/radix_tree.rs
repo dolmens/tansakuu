@@ -6,7 +6,6 @@ use super::atomic::{AcqRelAtomicPtr, AcqRelUsize};
 
 pub struct RadixTreeWriter<T, A: Allocator = Global> {
     element_count: usize,
-    chunk_count: usize,
     chunk_exponent: usize,
     last_chunk: NonNull<T>,
     data: Arc<RadixTreeData<T, A>>,
@@ -65,7 +64,6 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
 
         Self {
             element_count: 0,
-            chunk_count: 0,
             chunk_exponent,
             last_chunk: NonNull::dangling(),
             data,
@@ -83,8 +81,8 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
         let chunk_index_mask = (1 << self.chunk_exponent) - 1;
         let index_in_chunk = index & chunk_index_mask;
         if index_in_chunk == 0 {
-            self.last_chunk = self.data.allocate_chunk(self.chunk_count);
-            self.chunk_count += 1;
+            let chunk_index = index >> self.chunk_exponent;
+            self.last_chunk = self.data.allocate_chunk(chunk_index);
         }
 
         unsafe {
@@ -94,6 +92,15 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
 
         self.element_count += 1;
         self.data.element_count.store(self.element_count);
+    }
+
+    pub fn len(&self) -> usize {
+        // Should be equal to data.element_count
+        self.element_count
+    }
+
+    pub fn get(&self, index: usize) -> Option<&T> {
+        self.data.get(index)
     }
 }
 
@@ -136,8 +143,8 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         loop {
             let node_ref = unsafe { node.as_ref() };
             let index_in_slot = self.index_in_slot(node_ref, index);
-            let slot_slice = self.slot_slice(node);
-            let slot = slot_slice[index_in_slot];
+            let slot_ptr = self.slot_ptr(node);
+            let slot = unsafe { *slot_ptr.as_ptr().add(index_in_slot) };
             if node_ref.height == 0 {
                 return unsafe { NonNull::new_unchecked(slot) }.cast();
             }
@@ -156,16 +163,6 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         }
     }
 
-    fn slot_slice<'a>(&self, node: NonNull<RadixTreeNode<T>>) -> &'a [*mut u8] {
-        let slot_size = 1 << self.node_exponent;
-        unsafe { std::slice::from_raw_parts(self.slot_ptr(node).as_ptr(), slot_size) }
-    }
-
-    fn slot_slice_mut<'a>(&self, node: NonNull<RadixTreeNode<T>>) -> &'a mut [*mut u8] {
-        let slot_size = 1 << self.node_exponent;
-        unsafe { std::slice::from_raw_parts_mut(self.slot_ptr(node).as_ptr(), slot_size) }
-    }
-
     fn allocate_chunk(&self, index: usize) -> NonNull<T> {
         let layout = self.chunk_layout();
         let chunk = self.allocator.allocate(layout).unwrap().cast();
@@ -182,21 +179,24 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         let mut parent = root;
         loop {
             let parent_ref = unsafe { parent.as_ref() };
-            let slot_slice = self.slot_slice_mut(parent);
+            let slot_ptr = self.slot_ptr(parent);
             let index_in_slot = self.index_in_slot(parent_ref, index);
-            let slot = &mut slot_slice[index_in_slot];
+            let slot_raw = unsafe { slot_ptr.as_ptr().add(index_in_slot) };
+            let slot = unsafe { *slot_raw };
             if parent_ref.height == 0 {
-                debug_assert!(slot.is_null());
-                *slot = chunk.as_ptr().cast();
+                unsafe {
+                    debug_assert!(slot.is_null());
+                    *slot_raw = chunk.as_ptr().cast();
+                }
                 break;
             }
             if slot.is_null() {
                 let child = self.new_node(parent_ref.height - 1);
-                *slot = child.as_ptr().cast();
-                parent = child;
-            } else {
-                parent = unsafe { NonNull::new_unchecked((*slot).cast()) };
+                unsafe {
+                    *slot_raw = child.as_ptr().cast();
+                }
             }
+            parent = unsafe { NonNull::new_unchecked((*slot_raw).cast()) };
         }
     }
 
@@ -225,8 +225,10 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
             root
         } else {
             let new_root = self.new_node(root_ref.height + 1);
-            let new_root_slots = self.slot_slice_mut(new_root);
-            new_root_slots[0] = root.as_ptr().cast();
+            let new_root_slot_ptr = self.slot_ptr(new_root);
+            unsafe {
+                *new_root_slot_ptr.as_ptr() = root.as_ptr().cast();
+            }
             self.root.store(new_root.as_ptr());
             new_root
         }
@@ -239,10 +241,10 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
             .allocate(layout)
             .unwrap()
             .cast::<RadixTreeNode<T>>();
-        let slot_slice = self.slot_slice_mut(node_ptr);
-        for slot in slot_slice {
+        let slot_ptr = self.slot_ptr(node_ptr);
+        for i in 0..(1 << self.node_exponent) {
             unsafe {
-                std::ptr::write(slot, std::ptr::null_mut());
+                std::ptr::write(slot_ptr.as_ptr().add(i), std::ptr::null_mut());
             }
         }
         let node_ref = unsafe { &mut *node_ptr.as_ptr() };
@@ -258,8 +260,9 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         let node_ref = unsafe { node.as_ref() };
         let layout = self.node_layout();
         let chunk_layout = self.chunk_layout();
-        let slot_slice = self.slot_slice(node);
-        for &slot in slot_slice {
+        let slot_ptr = self.slot_ptr(node);
+        for i in 0..(1 << self.node_exponent) {
+            let slot = unsafe { *slot_ptr.as_ptr().add(i) };
             if slot.is_null() {
                 break;
             }
