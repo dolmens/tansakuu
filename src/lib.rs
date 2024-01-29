@@ -42,6 +42,8 @@ pub const BUILDING_COLUMN_VEC_CHUNK_SIZE: usize = 8;
 #[cfg(test)]
 pub const BUILDING_COLUMN_VEC_NODE_SIZE: usize = 4;
 
+pub const HASHMAP_INITIAL_CAPACITY: usize = 1024;
+
 mod future_result;
 
 pub use crate::error::TansakuuError;

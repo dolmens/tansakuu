@@ -7,14 +7,17 @@ use crate::{
     document::Value,
     index::IndexWriter,
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
-    util::{capacity_policy::FixedCapacityPolicy, layered_hashmap::LayeredHashMapWriter},
-    DocId,
+    util::{ha3_capacity_policy::Ha3CapacityPolicy, layered_hashmap::LayeredHashMapWriter},
+    DocId, HASHMAP_INITIAL_CAPACITY,
 };
 
 use super::InvertedIndexBuildingSegmentData;
 
+pub type PostingTable =
+    LayeredHashMapWriter<String, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+
 pub struct InvertedIndexWriter {
-    posting_table: LayeredHashMapWriter<String, BuildingPostingList>,
+    posting_table: PostingTable,
     posting_writers: Vec<BuildingPostingWriter>,
     posting_indexes: HashMap<String, usize>,
     modified_postings: BTreeSet<usize>,
@@ -24,9 +27,12 @@ pub struct InvertedIndexWriter {
 impl InvertedIndexWriter {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
-        let capacity_policy = FixedCapacityPolicy;
-        let posting_table =
-            LayeredHashMapWriter::with_initial_capacity(1024, hasher_builder, capacity_policy);
+        let capacity_policy = Ha3CapacityPolicy;
+        let posting_table = PostingTable::with_initial_capacity(
+            HASHMAP_INITIAL_CAPACITY,
+            hasher_builder,
+            capacity_policy,
+        );
         let postings = posting_table.hashmap();
 
         Self {
