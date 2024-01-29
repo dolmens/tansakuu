@@ -49,7 +49,7 @@ struct RadixTreeNode<T> {
 fn calculate_exponent(num: usize) -> u8 {
     let mut expoent: u8 = 0;
     let mut value: usize = 1;
-    while  value < num {
+    while value < num {
         expoent += 1;
         value = value << 1;
     }
@@ -352,9 +352,27 @@ impl<'a, T, A: Allocator> Iterator for RadixTreeIter<'a, T, A> {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
+    use std::{alloc::Layout, thread};
 
     use crate::util::radix_tree::RadixTreeWriter;
+
+    use super::RadixTreeNode;
+
+    #[test]
+    fn test_layout() {
+        let node_layout = Layout::new::<RadixTreeNode<i8>>();
+        let ptr_layout = Layout::new::<*mut u8>();
+        assert!(
+            node_layout.align() % ptr_layout.align() == 0,
+            "RadixTreeNodeLayout error: {:?}",
+            node_layout
+        );
+        assert!(
+            (node_layout.align() + node_layout.size()) % ptr_layout.align() == 0,
+            "RadixTreeNodeLayout error: {:?}",
+            node_layout
+        );
+    }
 
     #[test]
     fn test_basic() {
