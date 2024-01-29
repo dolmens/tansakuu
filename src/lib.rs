@@ -32,6 +32,16 @@ pub const POSITION_BLOCK_LEN: usize = 128;
 
 pub const INVALID_VERSION_ID: VersionId = 0;
 
+#[cfg(not(test))]
+pub const BUILDING_COLUMN_VEC_CHUNK_SIZE: usize = 1024 * 1024;
+#[cfg(not(test))]
+pub const BUILDING_COLUMN_VEC_NODE_SIZE: usize = 64;
+
+#[cfg(test)]
+pub const BUILDING_COLUMN_VEC_CHUNK_SIZE: usize = 8;
+#[cfg(test)]
+pub const BUILDING_COLUMN_VEC_NODE_SIZE: usize = 4;
+
 mod future_result;
 
 pub use crate::error::TansakuuError;

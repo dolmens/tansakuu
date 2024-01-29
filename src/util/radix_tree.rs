@@ -6,7 +6,7 @@ use super::atomic::{AcqRelAtomicPtr, AcqRelUsize};
 
 pub struct RadixTreeWriter<T, A: Allocator = Global> {
     element_count: usize,
-    chunk_exponent: usize,
+    chunk_exponent: u8,
     last_chunk: NonNull<T>,
     data: Arc<RadixTreeData<T, A>>,
 }
@@ -31,7 +31,7 @@ pub struct RadixTreeIter<'a, T, A: Allocator = Global> {
 
 struct RadixTreeData<T, A: Allocator = Global> {
     element_count: AcqRelUsize,
-    chunk_exponent: usize,
+    chunk_exponent: u8,
     node_exponent: u8,
     root: AcqRelAtomicPtr<RadixTreeNode<T>>,
     allocator: A,
@@ -46,14 +46,26 @@ struct RadixTreeNode<T> {
     _marker: PhantomData<T>,
 }
 
+fn calculate_exponent(num: usize) -> u8 {
+    let mut expoent: u8 = 0;
+    let mut value: usize = 1;
+    while  value < num {
+        expoent += 1;
+        value = value << 1;
+    }
+    expoent
+}
+
 impl<T, A: Allocator + Default> RadixTreeWriter<T, A> {
-    pub fn new(chunk_exponent: usize, node_exponent: u8) -> Self {
-        Self::new_in(chunk_exponent, node_exponent, Default::default())
+    pub fn new(chunk_size: usize, node_size: usize) -> Self {
+        Self::new_in(chunk_size, node_size, Default::default())
     }
 }
 
 impl<T, A: Allocator> RadixTreeWriter<T, A> {
-    pub fn new_in(chunk_exponent: usize, node_exponent: u8, allocator: A) -> Self {
+    pub fn new_in(chunk_size: usize, node_size: usize, allocator: A) -> Self {
+        let chunk_exponent = calculate_exponent(chunk_size);
+        let node_exponent = calculate_exponent(node_size);
         let data = Arc::new(RadixTreeData {
             element_count: AcqRelUsize::new(0),
             chunk_exponent,
@@ -346,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let mut writer: RadixTreeWriter<_> = RadixTreeWriter::new(3, 2);
+        let mut writer: RadixTreeWriter<_> = RadixTreeWriter::new(8, 4);
         let tree = writer.reader();
         let count = 1024;
         for i in 0..count {
@@ -363,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_multithreads() {
-        let mut writer: RadixTreeWriter<_> = RadixTreeWriter::new(3, 2);
+        let mut writer: RadixTreeWriter<_> = RadixTreeWriter::new(8, 4);
         let tree = writer.reader();
 
         let count = 1024;

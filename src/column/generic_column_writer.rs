@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use allocator_api2::alloc::Global;
 
-use crate::{document::Value, util::chunked_vec::ChunkedVecWriter};
+use crate::{
+    document::Value, util::chunked_vec::ChunkedVecWriter, BUILDING_COLUMN_VEC_CHUNK_SIZE,
+    BUILDING_COLUMN_VEC_NODE_SIZE,
+};
 
 use super::{ColumnSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
 
@@ -13,7 +16,10 @@ pub struct GenericColumnWriter<T> {
 
 impl<T> GenericColumnWriter<T> {
     pub fn new() -> Self {
-        let writer = ChunkedVecWriter::new(3, 2);
+        let writer = ChunkedVecWriter::new(
+            BUILDING_COLUMN_VEC_CHUNK_SIZE,
+            BUILDING_COLUMN_VEC_NODE_SIZE,
+        );
         let reader = writer.reader();
         let column_data = Arc::new(GenericColumnBuildingSegmentData::new(reader));
 

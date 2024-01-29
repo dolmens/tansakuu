@@ -16,15 +16,15 @@ pub struct ChunkedVecIter<'a, T, A: Allocator = Global> {
 }
 
 impl<T, A: Allocator + Default> ChunkedVecWriter<T, A> {
-    pub fn new(chunk_exponent: usize, tree_exponent: u8) -> Self {
-        Self::new_in(chunk_exponent, tree_exponent, Default::default())
+    pub fn new(chunk_size: usize, node_size: usize) -> Self {
+        Self::new_in(chunk_size, node_size, Default::default())
     }
 }
 
 impl<T, A: Allocator> ChunkedVecWriter<T, A> {
-    pub fn new_in(chunk_exponent: usize, tree_exponent: u8, allocator: A) -> Self {
+    pub fn new_in(chunk_size: usize, node_size: usize, allocator: A) -> Self {
         Self {
-            tree: RadixTreeWriter::new_in(chunk_exponent, tree_exponent, allocator),
+            tree: RadixTreeWriter::new_in(chunk_size, node_size, allocator),
         }
     }
 
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        let mut writer: ChunkedVecWriter<_> = ChunkedVecWriter::new(3, 2);
+        let mut writer: ChunkedVecWriter<_> = ChunkedVecWriter::new(8, 4);
         let vec = writer.reader();
         assert_eq!(vec.len(), 0);
         let count = 1024;
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_multithreads() {
-        let mut writer = ChunkedVecWriter::<usize>::new(3, 2);
+        let mut writer = ChunkedVecWriter::<usize>::new(8, 4);
         let vec = writer.reader();
         assert_eq!(vec.len(), 0);
         let count = 1024;
