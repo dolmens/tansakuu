@@ -8,8 +8,8 @@ use crate::postings::{
 };
 
 use super::{
-    BuildingPositionListBlock, PositionListBlock, PositionListBlockSnapshot, PositionListFlushInfo,
-    PositionListRead, PositionListReader, PositionListWrite, PositionListWriter,
+    BuildingPositionListBlock, PositionListBlock, PositionListBlockSnapshot, PositionListDecode,
+    PositionListDecoder, PositionListEncode, PositionListEncoder, PositionListFlushInfo,
 };
 
 #[derive(Clone)]
@@ -20,36 +20,40 @@ pub struct BuildingPositionList<A: Allocator = Global> {
     pub building_skip_list: BuildingSkipList<A>,
 }
 
-pub struct BuildingPositionListWriter<A: Allocator = Global> {
-    position_list_writer: PositionListWriter<ByteSliceWriter<A>, BuildingSkipListWriter<A>>,
+pub struct BuildingPositionListEncoder<A: Allocator = Global> {
+    position_list_encoder: PositionListEncoder<ByteSliceWriter<A>, BuildingSkipListWriter<A>>,
     building_position_list: BuildingPositionList<A>,
 }
 
-pub struct BuildingPositionListReader<'a> {
+pub struct BuildingPositionListDecoder<'a> {
     read_count: usize,
     flushed_count: usize,
     buffer_len: usize,
     building_block_snapshot: PositionListBlockSnapshot,
-    position_list_reader: PositionListReader<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
+    position_list_decoder: PositionListDecoder<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
 }
 
-impl<A: Allocator + Clone + Default> BuildingPositionListWriter<A> {
-    pub fn new() -> Self {
-        Self::new_in(Default::default())
+impl<A: Allocator + Clone + Default> BuildingPositionListEncoder<A> {
+    pub fn new(initial_slice_capacity: usize) -> Self {
+        Self::new_in(initial_slice_capacity, Default::default())
     }
 }
 
-impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
-    pub fn new_in(allocator: A) -> Self {
-        let byte_slice_writer = ByteSliceWriter::with_initial_capacity_in(1024, allocator.clone());
+impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
+    pub fn new_in(initial_slice_capacity: usize, allocator: A) -> Self {
+        let byte_slice_writer =
+            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = SkipListFormat::builder().build();
-        let skip_list_writer =
-            BuildingSkipListWriter::new_in(skip_list_format, 1024, allocator.clone());
+        let skip_list_writer = BuildingSkipListWriter::new_in(
+            skip_list_format,
+            initial_slice_capacity,
+            allocator.clone(),
+        );
         let building_skip_list = skip_list_writer.building_skip_list().clone();
-        let position_list_writer = PositionListWriter::new(byte_slice_writer, skip_list_writer);
-        let flush_info = position_list_writer.flush_info().clone();
-        let building_block = position_list_writer.building_block().clone();
+        let position_list_encoder = PositionListEncoder::new(byte_slice_writer, skip_list_writer);
+        let flush_info = position_list_encoder.flush_info().clone();
+        let building_block = position_list_encoder.building_block().clone();
         let building_position_list = BuildingPositionList {
             flush_info,
             building_block,
@@ -58,7 +62,7 @@ impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
         };
 
         Self {
-            position_list_writer,
+            position_list_encoder,
             building_position_list,
         }
     }
@@ -68,29 +72,29 @@ impl<A: Allocator + Clone> BuildingPositionListWriter<A> {
     }
 }
 
-impl<A: Allocator> PositionListWrite for BuildingPositionListWriter<A> {
+impl<A: Allocator> PositionListEncode for BuildingPositionListEncoder<A> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
-        self.position_list_writer.add_pos(pos)
+        self.position_list_encoder.add_pos(pos)
     }
 
     fn end_doc(&mut self) {
-        self.position_list_writer.end_doc();
+        self.position_list_encoder.end_doc();
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.position_list_writer.flush()
+        self.position_list_encoder.flush()
     }
 
     fn item_count(&self) -> (usize, usize) {
-        self.position_list_writer.item_count()
+        self.position_list_encoder.item_count()
     }
 
     fn written_bytes(&self) -> (usize, usize) {
-        self.position_list_writer.written_bytes()
+        self.position_list_encoder.written_bytes()
     }
 }
 
-impl<'a> BuildingPositionListReader<'a> {
+impl<'a> BuildingPositionListDecoder<'a> {
     pub fn open<A: Allocator>(building_position_list: &'a BuildingPositionList<A>) -> Self {
         let byte_slice_list = building_position_list.byte_slice_list.as_ref();
         let building_block = building_position_list.building_block.as_ref();
@@ -114,7 +118,7 @@ impl<'a> BuildingPositionListReader<'a> {
         let skip_list_reader =
             BuildingSkipListReader::open(&building_position_list.building_skip_list);
 
-        let position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             flushed_count,
             byte_slice_reader,
             skip_list_reader,
@@ -125,12 +129,12 @@ impl<'a> BuildingPositionListReader<'a> {
             flushed_count,
             buffer_len,
             building_block_snapshot,
-            position_list_reader,
+            position_list_decoder,
         }
     }
 }
 
-impl<'a> PositionListRead for BuildingPositionListReader<'a> {
+impl<'a> PositionListDecode for BuildingPositionListDecoder<'a> {
     fn decode_one_block(
         &mut self,
         ttf: u64,
@@ -143,7 +147,7 @@ impl<'a> PositionListRead for BuildingPositionListReader<'a> {
         }
         if (ttf as usize) < self.flushed_count {
             if self
-                .position_list_reader
+                .position_list_decoder
                 .decode_one_block(ttf, position_list_block)?
             {
                 self.read_count += position_list_block.len;
@@ -166,8 +170,8 @@ mod tests {
 
     use crate::{
         postings::positions::{
-            building_position_list::BuildingPositionListReader, BuildingPositionListWriter,
-            PositionListBlock, PositionListRead, PositionListWrite,
+            building_position_list::BuildingPositionListDecoder, BuildingPositionListEncoder,
+            PositionListBlock, PositionListDecode, PositionListEncode,
         },
         POSITION_BLOCK_LEN,
     };
@@ -175,13 +179,13 @@ mod tests {
     #[test]
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
-        let mut position_list_writer: BuildingPositionListWriter =
-            BuildingPositionListWriter::new();
-        let building_position_list = position_list_writer.building_position_list().clone();
+        let mut position_list_encoder: BuildingPositionListEncoder =
+            BuildingPositionListEncoder::new(1024);
+        let building_position_list = position_list_encoder.building_position_list().clone();
         let mut position_list_block = PositionListBlock::new();
-        let position_list_reader = BuildingPositionListReader::open(&building_position_list);
-        assert_eq!(position_list_reader.flushed_count, 0);
-        assert_eq!(position_list_reader.buffer_len, 0);
+        let position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
+        assert_eq!(position_list_decoder.flushed_count, 0);
+        assert_eq!(position_list_decoder.buffer_len, 0);
 
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();
         // the positions 0 and 1 are one doc, BLOCK_LEN and BLOCK_LEN + 1 are one doc.
@@ -200,47 +204,49 @@ mod tests {
                 .map(|pair| pair[1] - pair[0]),
         );
 
-        position_list_writer.add_pos(positions[0])?;
-        position_list_writer.add_pos(positions[1])?;
-        position_list_writer.end_doc();
+        position_list_encoder.add_pos(positions[0])?;
+        position_list_encoder.add_pos(positions[1])?;
+        position_list_encoder.end_doc();
 
-        let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
-        assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
+        let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
+        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 2);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..2],
             &positions_deltas[0..2]
         );
-        assert!(!position_list_reader.decode_one_block(2, &mut position_list_block)?);
+        assert!(!position_list_decoder.decode_one_block(2, &mut position_list_block)?);
 
         for i in 2..BLOCK_LEN {
-            position_list_writer.add_pos(positions[i])?;
+            position_list_encoder.add_pos(positions[i])?;
         }
-        position_list_writer.end_doc();
+        position_list_encoder.end_doc();
 
-        let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
-        assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
+        let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
+        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[0..BLOCK_LEN]
         );
-        assert!(!position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(
+            !position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?
+        );
 
-        position_list_writer.add_pos(positions[BLOCK_LEN])?;
-        position_list_writer.add_pos(positions[BLOCK_LEN + 1])?;
-        position_list_writer.end_doc();
+        position_list_encoder.add_pos(positions[BLOCK_LEN])?;
+        position_list_encoder.add_pos(positions[BLOCK_LEN + 1])?;
+        position_list_encoder.end_doc();
 
         for i in BLOCK_LEN + 2..BLOCK_LEN * 2 + 3 {
-            position_list_writer.add_pos(positions[i])?;
+            position_list_encoder.add_pos(positions[i])?;
         }
-        position_list_writer.end_doc();
+        position_list_encoder.end_doc();
 
-        let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
+        let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
-        assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
@@ -248,7 +254,7 @@ mod tests {
             &positions_deltas[0..BLOCK_LEN]
         );
 
-        assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
@@ -256,7 +262,7 @@ mod tests {
             &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -264,14 +270,14 @@ mod tests {
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
-        assert!(!position_list_reader
+        assert!(!position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         // skip one block
 
-        let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
+        let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
-        assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
@@ -279,7 +285,7 @@ mod tests {
             &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -287,14 +293,14 @@ mod tests {
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
-        assert!(!position_list_reader
+        assert!(!position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         // skip two block
 
-        let mut position_list_reader = BuildingPositionListReader::open(&building_position_list);
+        let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -302,7 +308,7 @@ mod tests {
             &position_list_block.positions[0..3],
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
-        assert!(!position_list_reader
+        assert!(!position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         Ok(())
@@ -311,9 +317,9 @@ mod tests {
     #[test]
     fn test_multi_thread() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
-        let mut position_list_writer: BuildingPositionListWriter =
-            BuildingPositionListWriter::new();
-        let building_position_list = position_list_writer.building_position_list().clone();
+        let mut position_list_encoder: BuildingPositionListEncoder =
+            BuildingPositionListEncoder::new(1024);
+        let building_position_list = position_list_encoder.building_position_list().clone();
 
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();
         // the positions 0 and 1 are one doc, BLOCK_LEN and BLOCK_LEN + 1 are one doc.
@@ -334,23 +340,23 @@ mod tests {
 
         thread::scope(|scope| {
             let writer = scope.spawn(move || -> io::Result<()> {
-                position_list_writer.add_pos(positions[0])?;
-                position_list_writer.add_pos(positions[1])?;
-                position_list_writer.end_doc();
+                position_list_encoder.add_pos(positions[0])?;
+                position_list_encoder.add_pos(positions[1])?;
+                position_list_encoder.end_doc();
 
                 for i in 2..BLOCK_LEN {
-                    position_list_writer.add_pos(positions[i])?;
+                    position_list_encoder.add_pos(positions[i])?;
                 }
-                position_list_writer.end_doc();
+                position_list_encoder.end_doc();
 
-                position_list_writer.add_pos(positions[BLOCK_LEN])?;
-                position_list_writer.add_pos(positions[BLOCK_LEN + 1])?;
-                position_list_writer.end_doc();
+                position_list_encoder.add_pos(positions[BLOCK_LEN])?;
+                position_list_encoder.add_pos(positions[BLOCK_LEN + 1])?;
+                position_list_encoder.end_doc();
 
                 for i in BLOCK_LEN + 2..BLOCK_LEN * 2 + 3 {
-                    position_list_writer.add_pos(positions[i])?;
+                    position_list_encoder.add_pos(positions[i])?;
                 }
-                position_list_writer.end_doc();
+                position_list_encoder.end_doc();
 
                 Ok(())
             });
@@ -358,10 +364,10 @@ mod tests {
             let reader = scope.spawn(|| -> io::Result<()> {
                 let mut position_list_block = PositionListBlock::new();
                 loop {
-                    let mut position_list_reader =
-                        BuildingPositionListReader::open(&building_position_list);
+                    let mut position_list_decoder =
+                        BuildingPositionListDecoder::open(&building_position_list);
                     let mut ttf = 0_usize;
-                    while position_list_reader
+                    while position_list_decoder
                         .decode_one_block(ttf as u64, &mut position_list_block)?
                     {
                         let len = position_list_block.len;

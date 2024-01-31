@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use crate::{postings::PostingEncoder, SKIPLIST_BLOCK_LEN};
+use crate::{postings::compression::BlockEncoder, SKIPLIST_BLOCK_LEN};
 
 use super::{SkipListBlock, SkipListFormat};
 
@@ -24,30 +24,6 @@ pub struct SkipListReader<R: Read> {
     skip_list_block: SkipListBlock,
     input_reader: R,
     skip_list_format: SkipListFormat,
-}
-
-pub struct EmptySkipListReader;
-
-impl SkipListRead for EmptySkipListReader {
-    fn seek(&mut self, _key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
-        return Ok((false, 0, 0, 0, 0, 0));
-    }
-
-    fn current_key(&self) -> u64 {
-        0
-    }
-
-    fn prev_value(&self) -> u64 {
-        0
-    }
-
-    fn block_last_value(&self) -> u64 {
-        0
-    }
-}
-
-pub fn empty_skip_list_reader() -> EmptySkipListReader {
-    EmptySkipListReader
 }
 
 impl<R: Read> SkipListReader<R> {
@@ -79,11 +55,17 @@ impl<R: Read> SkipListReader<R> {
         let skip_list_block = &mut self.skip_list_block;
         let block_len = std::cmp::min(self.item_count - self.read_count, SKIPLIST_BLOCK_LEN);
         skip_list_block.len = block_len;
-        let posting_encoder = PostingEncoder;
-        posting_encoder.decode_u32(&mut self.input_reader, &mut skip_list_block.keys[0..block_len])?;
-        posting_encoder.decode_u32(&mut self.input_reader, &mut skip_list_block.offsets[0..block_len])?;
+        let block_encoder = BlockEncoder;
+        block_encoder.decode_u32(
+            &mut self.input_reader,
+            &mut skip_list_block.keys[0..block_len],
+        )?;
+        block_encoder.decode_u32(
+            &mut self.input_reader,
+            &mut skip_list_block.offsets[0..block_len],
+        )?;
         if self.skip_list_format.has_value() {
-            posting_encoder.decode_u32(
+            block_encoder.decode_u32(
                 &mut self.input_reader,
                 &mut skip_list_block.values.as_deref_mut().unwrap()[0..block_len],
             )?;
@@ -153,8 +135,93 @@ impl<R: Read> SkipListRead for SkipListReader<R> {
     }
 }
 
-#[cfg(test)]
-pub use tests::MockSkipListReader;
+pub struct BasicSkipListReader {
+    current_key: u64,
+    current_offset: u64,
+    prev_value: u64,
+    current_value: u64,
+    current_cursor: usize,
+    keys: Vec<u64>,
+    offsets: Vec<u64>,
+    values: Option<Vec<u64>>,
+}
+
+impl BasicSkipListReader {
+    pub fn new(keys: Vec<u64>, offsets: Vec<u64>, values: Option<Vec<u64>>) -> Self {
+        assert_eq!(keys.len(), offsets.len());
+        if let Some(svalues) = &values {
+            assert_eq!(keys.len(), svalues.len());
+        }
+
+        Self {
+            current_key: 0,
+            current_offset: 0,
+            prev_value: 0,
+            current_value: 0,
+            current_cursor: 0,
+            keys,
+            offsets,
+            values,
+        }
+    }
+}
+
+impl SkipListRead for BasicSkipListReader {
+    fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
+        if self.keys.is_empty() {
+            return Ok((false, 0, 0, 0, 0, 0));
+        }
+
+        loop {
+            if self.current_cursor == self.keys.len() {
+                break;
+            }
+            let prev_key = self.current_key;
+            let current_offset = self.current_offset;
+            self.prev_value = self.current_value;
+
+            self.current_key = self.keys[self.current_cursor];
+            self.current_offset = self.offsets[self.current_cursor];
+            self.current_value = self
+                .values
+                .as_ref()
+                .map_or(0, |values| values[self.current_cursor]);
+            self.current_cursor += 1;
+
+            if self.current_key >= key {
+                return Ok((
+                    true,
+                    prev_key,
+                    self.current_key,
+                    current_offset,
+                    self.current_offset,
+                    self.current_cursor - 1,
+                ));
+            }
+        }
+
+        Ok((
+            false,
+            self.current_key,
+            self.current_key,
+            self.current_offset,
+            self.current_offset,
+            self.current_cursor,
+        ))
+    }
+
+    fn current_key(&self) -> u64 {
+        self.current_key
+    }
+
+    fn prev_value(&self) -> u64 {
+        self.prev_value
+    }
+
+    fn block_last_value(&self) -> u64 {
+        self.current_key
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -162,101 +229,13 @@ mod tests {
 
     use crate::{
         postings::{
+            compression::BlockEncoder,
             skip_list::{
                 skip_list_reader::SkipListRead, skip_list_reader::SkipListReader, SkipListFormat,
             },
-            PostingEncoder,
         },
         SKIPLIST_BLOCK_LEN,
     };
-
-    pub struct MockSkipListReader {
-        current_key: u64,
-        current_offset: u64,
-        prev_value: u64,
-        current_value: u64,
-        current_cursor: usize,
-        keys: Vec<u64>,
-        offsets: Vec<u64>,
-        values: Option<Vec<u64>>,
-    }
-
-    impl MockSkipListReader {
-        pub fn new(keys: Vec<u64>, offsets: Vec<u64>, values: Option<Vec<u64>>) -> Self {
-            assert_eq!(keys.len(), offsets.len());
-            if let Some(svalues) = &values {
-                assert_eq!(keys.len(), svalues.len());
-            }
-
-            Self {
-                current_key: 0,
-                current_offset: 0,
-                prev_value: 0,
-                current_value: 0,
-                current_cursor: 0,
-                keys,
-                offsets,
-                values,
-            }
-        }
-    }
-
-    impl SkipListRead for MockSkipListReader {
-        fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)> {
-            if self.keys.is_empty() {
-                return Ok((false, 0, 0, 0, 0, 0));
-            }
-
-            loop {
-                if self.current_cursor == self.keys.len() {
-                    break;
-                }
-                let prev_key = self.current_key;
-                let current_offset = self.current_offset;
-                self.prev_value = self.current_value;
-
-                self.current_key = self.keys[self.current_cursor];
-                self.current_offset = self.offsets[self.current_cursor];
-                self.current_value = self
-                    .values
-                    .as_ref()
-                    .map_or(0, |values| values[self.current_cursor]);
-                self.current_cursor += 1;
-
-                if self.current_key >= key {
-                    return Ok((
-                        true,
-                        prev_key,
-                        self.current_key,
-                        current_offset,
-                        self.current_offset,
-                        self.current_cursor - 1,
-                    ));
-                }
-            }
-
-            Ok((
-                false,
-                self.current_key,
-                self.current_key,
-                self.current_offset,
-                self.current_offset,
-                self.current_cursor,
-            ))
-        }
-
-        fn current_key(&self) -> u64 {
-            self.current_key
-        }
-
-        fn prev_value(&self) -> u64 {
-            self.prev_value
-        }
-
-        fn block_last_value(&self) -> u64 {
-            self.current_key
-        }
-    }
 
     #[test]
     fn test_basic() -> io::Result<()> {
@@ -286,26 +265,26 @@ mod tests {
 
         let mut buf = vec![];
 
-        let posting_encoder = PostingEncoder;
+        let block_encoder = BlockEncoder;
 
-        posting_encoder
+        block_encoder
             .encode_u32(&keys_encoded[0..BLOCK_LEN], &mut buf)
             .unwrap();
-        posting_encoder
+        block_encoder
             .encode_u32(&offsets[0..BLOCK_LEN], &mut buf)
             .unwrap();
 
-        posting_encoder
+        block_encoder
             .encode_u32(&keys_encoded[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
             .unwrap();
-        posting_encoder
+        block_encoder
             .encode_u32(&offsets[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
             .unwrap();
 
-        posting_encoder
+        block_encoder
             .encode_u32(&keys_encoded[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
-        posting_encoder
+        block_encoder
             .encode_u32(&offsets[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
 

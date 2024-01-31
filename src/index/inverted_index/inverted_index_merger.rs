@@ -3,9 +3,9 @@ use std::{collections::BTreeSet, fs::File, sync::Arc};
 use crate::{
     index::IndexMerger,
     postings::{
-        positions::PositionListWriter,
-        skip_list::{SkipListFormat, SkipListWriter},
-        PostingFormat, PostingWriter, TermDictBuilder, TermInfo,
+        doc_list_encoder_builder,
+        positions::{position_list_encoder_builder, PositionListEncode},
+        DocListEncode, PostingFormat, PostingWriter, TermDictBuilder, TermInfo,
     },
     DocId,
 };
@@ -38,7 +38,7 @@ impl IndexMerger for InvertedIndexMerger {
             .with_tflist()
             .with_position_list()
             .build();
-        let skip_list_format = posting_format.skip_list_format().clone();
+        let doc_list_format = posting_format.doc_list_format().clone();
 
         let dict_path = directory.join(index.name().to_string() + ".dict");
         let dict_output_writer = File::create(dict_path).unwrap();
@@ -56,26 +56,25 @@ impl IndexMerger for InvertedIndexMerger {
         let position_list_output_writer = File::create(position_list_path).unwrap();
 
         let mut skip_list_start = 0;
-        let mut posting_start = 0;
+        let mut doc_list_start = 0;
         let mut position_list_start = 0;
         let mut position_skip_list_start = 0;
 
         for term in &terms {
-            let skip_list_writer =
-                SkipListWriter::new(skip_list_format.clone(), &skip_list_output_writer);
+            let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
+                .with_writer(&posting_output_writer)
+                .with_skip_list_output_writer(&skip_list_output_writer)
+                .build();
 
-            let position_skip_list_writer =
-                SkipListWriter::new(SkipListFormat::default(), &position_skip_list_output_writer);
-            let position_list_writer = Some(PositionListWriter::new(
-                &position_list_output_writer,
-                position_skip_list_writer,
-            ));
+            let position_list_encoder = position_list_encoder_builder()
+                .with_writer(&position_list_output_writer)
+                .with_skip_list_output_writer(&position_skip_list_output_writer)
+                .build();
 
             let mut posting_writer = PostingWriter::new(
                 posting_format.clone(),
-                &posting_output_writer,
-                skip_list_writer,
-                position_list_writer,
+                doc_list_encoder,
+                Some(position_list_encoder),
             );
 
             let tok = unsafe { std::str::from_utf8_unchecked(term) };
@@ -102,28 +101,31 @@ impl IndexMerger for InvertedIndexMerger {
 
             posting_writer.flush().unwrap();
 
-            let (posting_written_bytes, skip_list_written_bytes) = posting_writer.written_bytes();
+            let (doc_list_written_bytes, skip_list_written_bytes) =
+                posting_writer.doc_list_encoder().written_bytes();
 
-            let (position_list_written_bytes, position_skip_list_written_bytes) =
-                posting_writer.position_list_written_bytes().unwrap();
+            let (position_list_written_bytes, position_skip_list_written_bytes) = posting_writer
+                .position_list_encoder()
+                .unwrap()
+                .written_bytes();
 
             let skip_list_end = skip_list_start + skip_list_written_bytes;
-            let posting_end = posting_start + posting_written_bytes;
+            let doc_list_end = doc_list_start + doc_list_written_bytes;
             let position_list_end = position_list_start + position_list_written_bytes;
             let position_skip_list_end =
                 position_skip_list_start + position_skip_list_written_bytes;
 
-            let (posting_item_count, skip_list_item_count) = posting_writer.item_count();
+            let (doc_count, skip_list_item_count) = posting_writer.doc_list_encoder().item_count();
             let (position_list_item_count, position_skip_list_item_count) =
-                posting_writer.position_list_item_count().unwrap();
+                posting_writer.position_list_encoder().unwrap().item_count();
 
             let term_info = TermInfo {
                 skip_list_item_count,
                 skip_list_start,
                 skip_list_end,
-                posting_item_count,
-                posting_start,
-                posting_end,
+                doc_count,
+                doc_list_start,
+                doc_list_end,
                 position_skip_list_item_count,
                 position_skip_list_start,
                 position_skip_list_end,
@@ -133,7 +135,7 @@ impl IndexMerger for InvertedIndexMerger {
             };
 
             skip_list_start = skip_list_end;
-            posting_start = posting_end;
+            doc_list_start = doc_list_end;
             position_skip_list_start = position_skip_list_end;
             position_list_start = position_list_end;
 

@@ -2,10 +2,7 @@ use std::{io::Cursor, sync::Arc};
 
 use crate::{
     index::SegmentPosting,
-    postings::{
-        positions::PositionListReader, skip_list::SkipListReader, PostingFormat, PostingIterator,
-        PostingReader,
-    },
+    postings::{positions::PositionListDecoder, DocListDecoder, PostingFormat, PostingIterator},
     DocId, END_DOCID,
 };
 
@@ -31,21 +28,25 @@ impl InvertedIndexPersistentSegmentReader {
                 .with_tflist()
                 .with_position_list()
                 .build();
-            let skip_list_format = posting_format.skip_list_format().clone();
-            let posting_data = self
+            let doc_list_format = posting_format.doc_list_format().clone();
+            let doc_list_data = self
                 .index_data
                 .posting_data
-                .slice(term_info.posting_range());
-            let posting_data = posting_data.as_slice();
-            let posting_data = Cursor::new(posting_data);
+                .slice(term_info.doc_list_range());
+            let doc_list_data = doc_list_data.as_slice();
+            let doc_list_data = Cursor::new(doc_list_data);
 
             let skip_list_data = self
                 .index_data
                 .skip_list_data
                 .slice(term_info.skip_list_range());
             let skip_list_data = skip_list_data.as_slice();
-            let skip_list_reader = SkipListReader::open(
-                skip_list_format,
+            let skip_list_data = Cursor::new(skip_list_data);
+
+            let doc_list_decoder = DocListDecoder::open(
+                doc_list_format,
+                term_info.doc_count,
+                doc_list_data,
                 term_info.skip_list_item_count,
                 skip_list_data,
             );
@@ -63,22 +64,16 @@ impl InvertedIndexPersistentSegmentReader {
             let position_list_data = position_list_data.as_slice();
             let position_list_data = Cursor::new(position_list_data);
 
-            let position_list_reader = PositionListReader::open(
+            let position_list_decoder = Some(PositionListDecoder::open(
                 term_info.position_list_item_count,
                 position_list_data,
                 term_info.position_skip_list_item_count,
                 position_skip_list_data,
-            );
+            ));
 
-            let mut posting_reader = PostingReader::open(
-                posting_format.clone(),
-                term_info.posting_item_count,
-                posting_data,
-                skip_list_reader,
-                Some(position_list_reader),
-            );
+            let mut posting_iterator =
+                PostingIterator::new(posting_format, doc_list_decoder, position_list_decoder);
 
-            let mut posting_iterator = PostingIterator::new(&mut posting_reader, &posting_format);
             let mut docid = 0;
             loop {
                 docid = posting_iterator.seek(docid).unwrap();

@@ -7,8 +7,8 @@ use tantivy_common::CountingWriter;
 
 use crate::{
     postings::{
-        skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
-        PostingEncoder,
+        compression::BlockEncoder,
+        skip_list::{BasicSkipListWriter, SkipListFormat, SkipListWrite, SkipListWriter},
     },
     util::atomic::{AcqRelU64, RelaxedU32},
     POSITION_BLOCK_LEN,
@@ -16,7 +16,7 @@ use crate::{
 
 use super::PositionListBlock;
 
-pub trait PositionListWrite {
+pub trait PositionListEncode {
     fn add_pos(&mut self, pos: u32) -> io::Result<()>;
     fn end_doc(&mut self);
     fn flush(&mut self) -> io::Result<()>;
@@ -24,19 +24,19 @@ pub trait PositionListWrite {
     fn written_bytes(&self) -> (usize, usize);
 }
 
-pub struct PositionListWriter<W: Write, S: SkipListWrite> {
+pub struct PositionListEncoder<W: Write, S: SkipListWrite> {
     item_count: usize,
     last_pos: u32,
     buffer_len: usize,
     item_count_flushed: usize,
     flush_info: Arc<PositionListFlushInfo>,
     building_block: Arc<BuildingPositionListBlock>,
-    output_writer: CountingWriter<W>,
+    writer: CountingWriter<W>,
     skip_list_writer: S,
 }
 
-pub struct PositionListWriterBuilder<W: Write, S: SkipListWrite> {
-    output_writer: W,
+pub struct PositionListEncoderBuilder<W: Write, S: SkipListWrite> {
+    writer: W,
     skip_list_writer: S,
 }
 
@@ -60,9 +60,9 @@ pub struct PositionListBlockSnapshot {
     positions: Option<Box<[u32]>>,
 }
 
-pub struct EmptyPositionListWriter;
+pub struct EmptyPositionListEncoder;
 
-impl PositionListWrite for EmptyPositionListWriter {
+impl PositionListEncode for EmptyPositionListEncoder {
     fn add_pos(&mut self, _pos: u32) -> io::Result<()> {
         Ok(())
     }
@@ -78,7 +78,7 @@ impl PositionListWrite for EmptyPositionListWriter {
     }
 }
 
-pub fn none_position_list_writer() -> Option<EmptyPositionListWriter> {
+pub fn none_position_list_encoder() -> Option<EmptyPositionListEncoder> {
     None
 }
 
@@ -172,25 +172,30 @@ impl PositionListBlockSnapshot {
     }
 }
 
-impl<W: Write> PositionListWriterBuilder<W, SkipListWriter<io::Sink>> {
-    pub fn new(output_writer: W) -> Self {
-        let skip_list_writer = SkipListWriter::new(SkipListFormat::default(), io::sink());
-        Self {
-            output_writer,
-            skip_list_writer,
-        }
+pub fn position_list_encoder_builder() -> PositionListEncoderBuilder<io::Sink, BasicSkipListWriter>
+{
+    PositionListEncoderBuilder {
+        writer: io::sink(),
+        skip_list_writer: BasicSkipListWriter::default(),
     }
 }
 
-impl<W: Write, S: SkipListWrite> PositionListWriterBuilder<W, S> {
+impl<W: Write, S: SkipListWrite> PositionListEncoderBuilder<W, S> {
+    pub fn with_writer<OW: Write>(self, writer: OW) -> PositionListEncoderBuilder<OW, S> {
+        PositionListEncoderBuilder {
+            writer,
+            skip_list_writer: self.skip_list_writer,
+        }
+    }
+
     pub fn with_skip_list_output_writer<SW: Write>(
         self,
         skip_list_output_writer: SW,
-    ) -> PositionListWriterBuilder<W, SkipListWriter<SW>> {
+    ) -> PositionListEncoderBuilder<W, SkipListWriter<SW>> {
         let skip_list_writer =
             SkipListWriter::new(SkipListFormat::default(), skip_list_output_writer);
-        PositionListWriterBuilder {
-            output_writer: self.output_writer,
+        PositionListEncoderBuilder {
+            writer: self.writer,
             skip_list_writer,
         }
     }
@@ -198,20 +203,20 @@ impl<W: Write, S: SkipListWrite> PositionListWriterBuilder<W, S> {
     pub fn with_skip_list_writer<SW: SkipListWrite>(
         self,
         skip_list_writer: SW,
-    ) -> PositionListWriterBuilder<W, SW> {
-        PositionListWriterBuilder {
-            output_writer: self.output_writer,
+    ) -> PositionListEncoderBuilder<W, SW> {
+        PositionListEncoderBuilder {
+            writer: self.writer,
             skip_list_writer,
         }
     }
 
-    pub fn build(self) -> PositionListWriter<W, S> {
-        PositionListWriter::new(self.output_writer, self.skip_list_writer)
+    pub fn build(self) -> PositionListEncoder<W, S> {
+        PositionListEncoder::new(self.writer, self.skip_list_writer)
     }
 }
 
-impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
-    pub fn new(output_writer: W, skip_list_writer: S) -> Self {
+impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
+    pub fn new(writer: W, skip_list_writer: S) -> Self {
         let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
             item_count: 0,
@@ -220,9 +225,13 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
             item_count_flushed: 0,
             flush_info,
             building_block: Arc::new(BuildingPositionListBlock::new()),
-            output_writer: CountingWriter::wrap(output_writer),
+            writer: CountingWriter::wrap(writer),
             skip_list_writer,
         }
+    }
+
+    pub fn skip_list_writer(&self) -> &S {
+        &self.skip_list_writer
     }
 
     pub fn flush_info(&self) -> &Arc<PositionListFlushInfo> {
@@ -236,12 +245,12 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
     fn flush_buffer(&mut self) -> io::Result<()> {
         if self.buffer_len > 0 {
             let building_block = self.building_block.as_ref();
-            let posting_encoder = PostingEncoder;
+            let block_encoder = BlockEncoder;
             let positions = building_block.positions[0..self.buffer_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&positions, &mut self.output_writer)?;
+            block_encoder.encode_u32(&positions, &mut self.writer)?;
 
             self.item_count_flushed += self.buffer_len;
             self.buffer_len = 0;
@@ -249,7 +258,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
             // The skip item is the block's last key
             self.skip_list_writer.add_skip_item(
                 self.item_count_flushed as u64 - 1,
-                self.output_writer.written_bytes(),
+                self.writer.written_bytes(),
                 None,
             )?;
 
@@ -261,7 +270,7 @@ impl<W: Write, S: SkipListWrite> PositionListWriter<W, S> {
     }
 }
 
-impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> {
+impl<W: Write, S: SkipListWrite> PositionListEncode for PositionListEncoder<W, S> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
         self.item_count += 1;
         self.building_block.positions[self.buffer_len].store(pos - self.last_pos);
@@ -296,7 +305,7 @@ impl<W: Write, S: SkipListWrite> PositionListWrite for PositionListWriter<W, S> 
 
     fn written_bytes(&self) -> (usize, usize) {
         (
-            self.output_writer.written_bytes() as usize,
+            self.writer.written_bytes() as usize,
             self.skip_list_writer.written_bytes(),
         )
     }
@@ -308,8 +317,8 @@ mod tests {
 
     use crate::{
         postings::{
-            positions::PositionListWrite, positions::PositionListWriter,
-            skip_list::MockSkipListWriter, PostingEncoder,
+            compression::BlockEncoder, positions::PositionListEncode,
+            positions::PositionListEncoder, skip_list::BasicSkipListWriter,
         },
         POSITION_BLOCK_LEN,
     };
@@ -336,54 +345,50 @@ mod tests {
         );
 
         let mut output_buf = vec![];
-        let mut skip_list_keys = vec![];
-        let mut skip_list_offsets = vec![];
-        let mut skip_list_values = vec![];
-        let skip_list_writer = MockSkipListWriter::new(
-            &mut skip_list_keys,
-            &mut skip_list_offsets,
-            Some(&mut skip_list_values),
-        );
-        let mut position_list_writer = PositionListWriter::new(&mut output_buf, skip_list_writer);
-        position_list_writer.add_pos(positions[0])?;
-        position_list_writer.add_pos(positions[1])?;
-        position_list_writer.end_doc();
+        let skip_list_writer = BasicSkipListWriter::default();
+        let mut position_list_encoder = PositionListEncoder::new(&mut output_buf, skip_list_writer);
+        position_list_encoder.add_pos(positions[0])?;
+        position_list_encoder.add_pos(positions[1])?;
+        position_list_encoder.end_doc();
 
         for i in 2..BLOCK_LEN {
-            position_list_writer.add_pos(positions[i])?;
+            position_list_encoder.add_pos(positions[i])?;
         }
-        position_list_writer.end_doc();
+        position_list_encoder.end_doc();
 
-        position_list_writer.add_pos(positions[BLOCK_LEN])?;
-        position_list_writer.add_pos(positions[BLOCK_LEN + 1])?;
-        position_list_writer.end_doc();
+        position_list_encoder.add_pos(positions[BLOCK_LEN])?;
+        position_list_encoder.add_pos(positions[BLOCK_LEN + 1])?;
+        position_list_encoder.end_doc();
 
         for i in BLOCK_LEN + 2..BLOCK_LEN * 2 + 3 {
-            position_list_writer.add_pos(positions[i])?;
+            position_list_encoder.add_pos(positions[i])?;
         }
-        position_list_writer.end_doc();
+        position_list_encoder.end_doc();
 
-        position_list_writer.flush()?;
+        position_list_encoder.flush()?;
+
+        let skip_list_keys = position_list_encoder.skip_list_writer().keys.clone();
+        let skip_list_offsets = position_list_encoder.skip_list_writer().offsets.clone();
 
         assert_eq!(skip_list_keys.len(), 3);
         assert_eq!(skip_list_keys[0] as usize, BLOCK_LEN - 1);
         assert_eq!(skip_list_keys[1] as usize, BLOCK_LEN * 2 - 1);
         assert_eq!(skip_list_keys[2] as usize, BLOCK_LEN * 2 + 3 - 1);
 
-        let posting_encoder = PostingEncoder;
+        let block_encoder = BlockEncoder;
 
         let mut buf_reader = BufReader::new(output_buf.as_slice());
         let mut position_block = [0u32; POSITION_BLOCK_LEN];
         let mut num_read_bytes =
-            posting_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
+            block_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
         assert_eq!(num_read_bytes, skip_list_offsets[0] as usize);
         assert_eq!(position_block, &positions_deltas[0..BLOCK_LEN]);
 
-        num_read_bytes += posting_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
+        num_read_bytes += block_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
         assert_eq!(num_read_bytes, skip_list_offsets[1] as usize);
         assert_eq!(position_block, &positions_deltas[BLOCK_LEN..BLOCK_LEN * 2]);
 
-        num_read_bytes += posting_encoder.decode_u32(&mut buf_reader, &mut position_block[0..3])?;
+        num_read_bytes += block_encoder.decode_u32(&mut buf_reader, &mut position_block[0..3])?;
         assert_eq!(num_read_bytes, skip_list_offsets[2] as usize);
         assert_eq!(
             &position_block[0..3],

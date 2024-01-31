@@ -2,14 +2,14 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::{
     postings::{
+        compression::BlockEncoder,
         positions::PositionListBlock,
-        skip_list::{EmptySkipListReader, SkipListFormat, SkipListRead, SkipListReader},
-        PostingEncoder,
+        skip_list::{SkipListFormat, SkipListRead, SkipListReader},
     },
     POSITION_BLOCK_LEN,
 };
 
-pub trait PositionListRead {
+pub trait PositionListDecode {
     fn decode_one_block(
         &mut self,
         ttf: u64,
@@ -17,82 +17,15 @@ pub trait PositionListRead {
     ) -> io::Result<bool>;
 }
 
-pub struct PositionListReader<R: Read + Seek, S: SkipListRead> {
+pub struct PositionListDecoder<R: Read + Seek, S: SkipListRead> {
     read_count: usize,
     item_count: usize,
-    input_reader: R,
+    reader: R,
     skip_list_reader: S,
 }
 
-pub struct PositionListReaderBuilder<R: Read + Seek, S: SkipListRead> {
-    item_count: usize,
-    input_reader: R,
-    skip_list_reader: S,
-}
-
-impl PositionListReaderBuilder<io::Empty, EmptySkipListReader> {
-    pub fn new() -> Self {
-        Self {
-            item_count: 0,
-            input_reader: io::empty(),
-            skip_list_reader: EmptySkipListReader,
-        }
-    }
-}
-
-impl<R: Read + Seek, S: SkipListRead> PositionListReaderBuilder<R, S> {
-    pub fn with_input_reader<IR: Read + Seek>(
-        self,
-        item_count: usize,
-        input_reader: IR,
-    ) -> PositionListReaderBuilder<IR, S> {
-        PositionListReaderBuilder {
-            item_count,
-            input_reader,
-            skip_list_reader: self.skip_list_reader,
-        }
-    }
-
-    pub fn with_skip_list_input_reader<SR: Read>(
-        self,
-        skip_list_item_count: usize,
-        skip_list_input_reader: SR,
-    ) -> PositionListReaderBuilder<R, SkipListReader<SR>> {
-        let skip_list_reader = SkipListReader::open(
-            SkipListFormat::default(),
-            skip_list_item_count,
-            skip_list_input_reader,
-        );
-
-        PositionListReaderBuilder {
-            item_count: self.item_count,
-            input_reader: self.input_reader,
-            skip_list_reader,
-        }
-    }
-
-    pub fn with_skip_list_reader<SR: SkipListRead>(
-        self,
-        skip_list_reader: SR,
-    ) -> PositionListReaderBuilder<R, SR> {
-        PositionListReaderBuilder {
-            item_count: self.item_count,
-            input_reader: self.input_reader,
-            skip_list_reader,
-        }
-    }
-
-    pub fn build(self) -> PositionListReader<R, S> {
-        PositionListReader::open_with_skip_list_reader(
-            self.item_count,
-            self.input_reader,
-            self.skip_list_reader,
-        )
-    }
-}
-
-pub struct EmptyPositionListReader;
-impl PositionListRead for EmptyPositionListReader {
+pub struct EmptyPositionListDecoder;
+impl PositionListDecode for EmptyPositionListDecoder {
     fn decode_one_block(
         &mut self,
         _from_ttf: u64,
@@ -102,11 +35,11 @@ impl PositionListRead for EmptyPositionListReader {
     }
 }
 
-pub fn none_position_list_reader() -> Option<EmptyPositionListReader> {
+pub fn none_position_list_decoder() -> Option<EmptyPositionListDecoder> {
     None
 }
 
-impl<R: Read + Seek, SR: Read> PositionListReader<R, SkipListReader<SR>> {
+impl<R: Read + Seek, SR: Read> PositionListDecoder<R, SkipListReader<SR>> {
     pub fn open(
         item_count: usize,
         reader: R,
@@ -120,18 +53,18 @@ impl<R: Read + Seek, SR: Read> PositionListReader<R, SkipListReader<SR>> {
     }
 }
 
-impl<R: Read + Seek, S: SkipListRead> PositionListReader<R, S> {
+impl<R: Read + Seek, S: SkipListRead> PositionListDecoder<R, S> {
     pub fn open_with_skip_list_reader(item_count: usize, reader: R, skip_list_reader: S) -> Self {
         Self {
             read_count: 0,
             item_count,
-            input_reader: reader,
+            reader,
             skip_list_reader,
         }
     }
 }
 
-impl<R: Read + Seek, S: SkipListRead> PositionListRead for PositionListReader<R, S> {
+impl<R: Read + Seek, S: SkipListRead> PositionListDecode for PositionListDecoder<R, S> {
     fn decode_one_block(
         &mut self,
         ttf: u64,
@@ -147,14 +80,14 @@ impl<R: Read + Seek, S: SkipListRead> PositionListRead for PositionListReader<R,
             self.skip_list_reader.seek(ttf)?;
         self.read_count = skipped_count * POSITION_BLOCK_LEN;
 
-        self.input_reader.seek(SeekFrom::Start(start_offset))?;
+        self.reader.seek(SeekFrom::Start(start_offset))?;
 
         let block_len = std::cmp::min(self.item_count - self.read_count, POSITION_BLOCK_LEN);
         position_list_block.len = block_len;
         position_list_block.start_ttf = self.read_count as u64;
-        let posting_encoder = PostingEncoder;
-        posting_encoder.decode_u32(
-            &mut self.input_reader,
+        let block_encoder = BlockEncoder;
+        block_encoder.decode_u32(
+            &mut self.reader,
             &mut position_list_block.positions[0..block_len],
         )?;
 
@@ -170,9 +103,9 @@ mod tests {
 
     use crate::{
         postings::{
-            positions::{PositionListBlock, PositionListRead, PositionListReader},
-            skip_list::MockSkipListReader,
-            PostingEncoder,
+            compression::BlockEncoder,
+            positions::{PositionListBlock, PositionListDecode, PositionListDecoder},
+            skip_list::BasicSkipListReader,
         },
         POSITION_BLOCK_LEN,
     };
@@ -182,54 +115,54 @@ mod tests {
         const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
         let positions: Vec<_> = (0..(BLOCK_LEN - 1) as u32).collect();
         let mut buf = vec![];
-        let posting_encoder = PostingEncoder;
-        posting_encoder.encode_u32(&positions, &mut buf)?;
+        let block_encoder = BlockEncoder;
+        block_encoder.encode_u32(&positions, &mut buf)?;
 
         {
             let buf_reader = Cursor::new(buf.as_slice());
 
             let skipbuf = vec![];
-            let mut position_list_reader =
-                PositionListReader::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
+            let mut position_list_decoder =
+                PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
 
             let mut position_list_block = PositionListBlock::new();
-            assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
+            assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
             assert_eq!(position_list_block.len, BLOCK_LEN - 1);
             assert_eq!(position_list_block.start_ttf, 0);
             assert_eq!(
                 &position_list_block.positions[0..BLOCK_LEN - 1],
                 &positions[..]
             );
-            assert_eq!(position_list_reader.read_count, BLOCK_LEN - 1);
+            assert_eq!(position_list_decoder.read_count, BLOCK_LEN - 1);
         }
 
         {
             let buf_reader = Cursor::new(buf.as_slice());
 
             let skipbuf = vec![];
-            let mut position_list_reader =
-                PositionListReader::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
+            let mut position_list_decoder =
+                PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
 
             let mut position_list_block = PositionListBlock::new();
-            assert!(position_list_reader.decode_one_block(3, &mut position_list_block)?);
+            assert!(position_list_decoder.decode_one_block(3, &mut position_list_block)?);
             assert_eq!(position_list_block.len, BLOCK_LEN - 1);
             assert_eq!(position_list_block.start_ttf, 0);
             assert_eq!(
                 &position_list_block.positions[0..BLOCK_LEN - 1],
                 &positions[..]
             );
-            assert_eq!(position_list_reader.read_count, BLOCK_LEN - 1);
+            assert_eq!(position_list_decoder.read_count, BLOCK_LEN - 1);
         }
 
         {
             let buf_reader = Cursor::new(buf.as_slice());
 
             let skipbuf = vec![];
-            let mut position_list_reader =
-                PositionListReader::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
+            let mut position_list_decoder =
+                PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, 0, &skipbuf[..]);
 
             let mut position_list_block = PositionListBlock::new();
-            assert!(!position_list_reader
+            assert!(!position_list_decoder
                 .decode_one_block((BLOCK_LEN - 1) as u64, &mut position_list_block)?);
         }
 
@@ -246,24 +179,24 @@ mod tests {
         let mut offsets = Vec::<u64>::new();
         let mut offset = 0;
 
-        let posting_encoder = PostingEncoder;
-        offset += posting_encoder.encode_u32(&positions[0..BLOCK_LEN], &mut buf)?;
+        let block_encoder = BlockEncoder;
+        offset += block_encoder.encode_u32(&positions[0..BLOCK_LEN], &mut buf)?;
         offsets.push(offset as u64);
-        offset += posting_encoder.encode_u32(&positions[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)?;
+        offset += block_encoder.encode_u32(&positions[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)?;
         offsets.push(offset as u64);
-        posting_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
+        block_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
 
         let mut position_list_block = PositionListBlock::new();
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader.decode_one_block(0, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
@@ -271,15 +204,15 @@ mod tests {
             &positions[0..BLOCK_LEN]
         );
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
@@ -287,7 +220,7 @@ mod tests {
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -296,19 +229,19 @@ mod tests {
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
 
-        assert_eq!(position_list_reader.read_count, BLOCK_LEN * 2 + 3);
+        assert_eq!(position_list_decoder.read_count, BLOCK_LEN * 2 + 3);
 
         // read from middle
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader.decode_one_block(3, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_one_block(3, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
@@ -316,7 +249,7 @@ mod tests {
             &positions[0..BLOCK_LEN]
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN + 5) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
@@ -325,7 +258,7 @@ mod tests {
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 1) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -336,15 +269,15 @@ mod tests {
 
         // skip one block
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN + 3) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
@@ -352,9 +285,9 @@ mod tests {
             &position_list_block.positions[0..BLOCK_LEN],
             &positions[BLOCK_LEN..BLOCK_LEN * 2]
         );
-        assert_eq!(position_list_reader.read_count, BLOCK_LEN * 2);
+        assert_eq!(position_list_decoder.read_count, BLOCK_LEN * 2);
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -365,15 +298,15 @@ mod tests {
 
         // skip two block
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -382,7 +315,7 @@ mod tests {
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
 
-        assert!(!position_list_reader
+        assert!(!position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         Ok(())
@@ -402,26 +335,26 @@ mod tests {
         let mut offsets = Vec::<u64>::new();
         let mut offset = 0;
 
-        let posting_encoder = PostingEncoder;
-        offset += posting_encoder.encode_u32(&positions[0..BLOCK_LEN], &mut buf)?;
+        let block_encoder = BlockEncoder;
+        offset += block_encoder.encode_u32(&positions[0..BLOCK_LEN], &mut buf)?;
         offsets.push(offset as u64);
-        offset += posting_encoder.encode_u32(&positions[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)?;
+        offset += block_encoder.encode_u32(&positions[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)?;
         offsets.push(offset as u64);
         offset +=
-            posting_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
+            block_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
         offsets.push(offset as u64);
 
         let mut position_list_block = PositionListBlock::new();
 
-        let skip_list_reader = MockSkipListReader::new(keys.clone(), offsets.clone(), None);
+        let skip_list_reader = BasicSkipListReader::new(keys.clone(), offsets.clone(), None);
         let buf_reader = Cursor::new(buf.as_slice());
-        let mut position_list_reader = PositionListReader::open_with_skip_list_reader(
+        let mut position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
         );
 
-        assert!(position_list_reader
+        assert!(position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
@@ -430,7 +363,7 @@ mod tests {
             &positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
 
-        assert!(!position_list_reader
+        assert!(!position_list_decoder
             .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         Ok(())

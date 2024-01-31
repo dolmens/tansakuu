@@ -1,8 +1,8 @@
 use std::io::{self, Read, Write};
 
-pub struct PostingEncoder;
+pub struct BlockEncoder;
 
-impl PostingEncoder {
+impl BlockEncoder {
     pub fn encode_u32<W: Write>(&self, input: &[u32], writer: &mut W) -> io::Result<usize> {
         let mut bytes_written = 0;
         for &v in input {

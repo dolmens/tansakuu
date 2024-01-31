@@ -6,7 +6,7 @@ use std::{
 use tantivy_common::CountingWriter;
 
 use crate::{
-    postings::PostingEncoder,
+    postings::compression::BlockEncoder,
     util::atomic::{AcqRelU64, RelaxedU32},
     SKIPLIST_BLOCK_LEN,
 };
@@ -116,24 +116,24 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
     fn flush(&mut self) -> io::Result<()> {
         if self.buffer_len > 0 {
             let building_block = &self.building_block.as_ref();
-            let posting_encoder = PostingEncoder;
+            let block_encoder = BlockEncoder;
             let keys = building_block.keys[0..self.buffer_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&keys, &mut self.output_writer)?;
+            block_encoder.encode_u32(&keys, &mut self.output_writer)?;
             let offsets = building_block.offsets[0..self.buffer_len]
                 .iter()
                 .map(|a| a.load())
                 .collect::<Vec<_>>();
-            posting_encoder.encode_u32(&offsets, &mut self.output_writer)?;
+            block_encoder.encode_u32(&offsets, &mut self.output_writer)?;
             if self.skip_list_format.has_value() {
                 if let Some(value_atomics) = &building_block.values {
                     let values = value_atomics[0..self.buffer_len]
                         .iter()
                         .map(|a| a.load())
                         .collect::<Vec<_>>();
-                    posting_encoder.encode_u32(&values, &mut self.output_writer)?;
+                    block_encoder.encode_u32(&values, &mut self.output_writer)?;
                 }
             }
 
@@ -276,8 +276,33 @@ impl SkipListFlushInfoSnapshot {
     }
 }
 
-#[cfg(test)]
-pub use tests::MockSkipListWriter;
+#[derive(Default)]
+pub struct BasicSkipListWriter {
+    pub keys: Vec<u64>,
+    pub offsets: Vec<u64>,
+    pub values: Vec<u64>,
+}
+
+impl SkipListWrite for BasicSkipListWriter {
+    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
+        self.keys.push(key);
+        self.offsets.push(offset);
+        self.values.push(value.unwrap_or_default());
+        Ok(())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn item_count(&self) -> usize {
+        self.keys.len()
+    }
+
+    fn written_bytes(&self) -> usize {
+        0
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -285,54 +310,11 @@ mod tests {
 
     use crate::{
         postings::{
+            compression::BlockEncoder,
             skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
-            PostingEncoder,
         },
         DocId, SKIPLIST_BLOCK_LEN,
     };
-
-    pub struct MockSkipListWriter<'a> {
-        keys: &'a mut Vec<u64>,
-        offsets: &'a mut Vec<u64>,
-        values: Option<&'a mut Vec<u64>>,
-    }
-
-    impl<'a> MockSkipListWriter<'a> {
-        pub fn new(
-            keys: &'a mut Vec<u64>,
-            offsets: &'a mut Vec<u64>,
-            values: Option<&'a mut Vec<u64>>,
-        ) -> Self {
-            Self {
-                keys,
-                offsets,
-                values,
-            }
-        }
-    }
-
-    impl<'a> SkipListWrite for MockSkipListWriter<'a> {
-        fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
-            self.keys.push(key);
-            self.offsets.push(offset);
-            self.values
-                .as_mut()
-                .map(|values| values.push(value.unwrap_or_default()));
-            Ok(())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-
-        fn item_count(&self) -> usize {
-            0
-        }
-
-        fn written_bytes(&self) -> usize {
-            0
-        }
-    }
 
     #[test]
     fn test_basic() -> io::Result<()> {
@@ -381,28 +363,28 @@ mod tests {
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
 
-        let posting_encoder = PostingEncoder;
+        let block_encoder = BlockEncoder;
         let mut decoded_keys = [0; BLOCK_LEN];
         let mut decoded_offsets = [0; BLOCK_LEN];
 
         let mut reader = BufReader::new(buf.as_slice());
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
         assert_eq!(&docids_deltas[0..BLOCK_LEN], decoded_keys);
-        posting_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
         assert_eq!(&offsets_deltas[0..BLOCK_LEN], decoded_offsets);
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_keys)?;
         assert_eq!(&docids_deltas[BLOCK_LEN..BLOCK_LEN * 2], decoded_keys);
-        posting_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_offsets)?;
         assert_eq!(&offsets_deltas[BLOCK_LEN..BLOCK_LEN * 2], decoded_offsets);
 
-        posting_encoder.decode_u32(&mut reader, &mut decoded_keys[0..3])?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_keys[0..3])?;
         assert_eq!(
             &docids_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
             &decoded_keys[0..3]
         );
-        posting_encoder.decode_u32(&mut reader, &mut decoded_offsets[0..3])?;
+        block_encoder.decode_u32(&mut reader, &mut decoded_offsets[0..3])?;
         assert_eq!(
             &offsets_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
             &decoded_offsets[0..3]

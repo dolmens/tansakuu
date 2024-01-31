@@ -26,7 +26,7 @@ pub const INVALID_DOCID: DocId = DocId::MAX;
 pub const END_POSITION: u32 = u32::MAX - 1;
 pub const INVALID_POSITION: u32 = u32::MAX;
 
-pub const POSTING_BLOCK_LEN: usize = 128;
+pub const DOC_LIST_BLOCK_LEN: usize = 128;
 pub const SKIPLIST_BLOCK_LEN: usize = 32;
 pub const POSITION_BLOCK_LEN: usize = 128;
 

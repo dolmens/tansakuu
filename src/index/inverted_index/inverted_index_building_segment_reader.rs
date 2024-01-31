@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     index::SegmentPosting,
     postings::{
-        BuildingPostingList, BuildingPostingReader, PostingBlock, PostingFormat, PostingRead,
+        BuildingPostingList, BuildingPostingReader, DocListBlock, PostingFormat, PostingRead,
     },
     util::layered_hashmap::LayeredHashMap,
     DocId,
@@ -29,15 +29,16 @@ impl InvertedIndexBuildingSegmentReader {
             let mut docids = vec![];
             let mut posting_reader = BuildingPostingReader::open(building_posting_list);
             let posting_format = PostingFormat::default();
-            let mut posting_block = PostingBlock::new(&posting_format);
+            let doc_list_format = posting_format.doc_list_format().clone();
+            let mut doc_list_block = DocListBlock::new(&doc_list_format);
             loop {
                 if !posting_reader
-                    .decode_one_block(0, &mut posting_block)
+                    .decode_one_block(0, &mut doc_list_block)
                     .unwrap()
                 {
                     break;
                 }
-                for &docid in &posting_block.docids[0..posting_block.len] {
+                for &docid in &doc_list_block.docids[0..doc_list_block.len] {
                     docids.push(docid);
                 }
             }

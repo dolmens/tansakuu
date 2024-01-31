@@ -1,11 +1,9 @@
-use super::skip_list::SkipListFormat;
+use super::{skip_list::SkipListFormat, DocListFormat};
 
 #[derive(Default, Clone)]
 pub struct PostingFormat {
-    has_tflist: bool,
-    has_fieldmask: bool,
+    doc_list_format: DocListFormat,
     has_position_list: bool,
-    skip_list_format: SkipListFormat,
 }
 
 #[derive(Default)]
@@ -24,10 +22,26 @@ impl PostingFormatBuilder {
         }
     }
 
+    pub fn with_tflist_as(self, has_tflist: bool) -> Self {
+        Self {
+            has_tflist,
+            has_fieldmask: self.has_fieldmask,
+            has_position_list: self.has_position_list,
+        }
+    }
+
     pub fn with_fieldmask(self) -> Self {
         Self {
             has_tflist: self.has_tflist,
             has_fieldmask: true,
+            has_position_list: self.has_position_list,
+        }
+    }
+
+    pub fn with_fieldmask_as(self, has_fieldmask: bool) -> Self {
+        Self {
+            has_tflist: self.has_tflist,
+            has_fieldmask,
             has_position_list: self.has_position_list,
         }
     }
@@ -40,16 +54,23 @@ impl PostingFormatBuilder {
         }
     }
 
+    pub fn with_position_list_as(self, has_position_list: bool) -> Self {
+        Self {
+            has_tflist: true,
+            has_fieldmask: self.has_fieldmask,
+            has_position_list,
+        }
+    }
+
     pub fn build(self) -> PostingFormat {
-        let skip_list_format = SkipListFormat::builder()
-            .with_value(self.has_tflist)
+        let doc_list_format = DocListFormat::builder()
+            .with_tflist_as(self.has_tflist)
+            .with_fieldmask_as(self.has_fieldmask)
             .build();
 
         PostingFormat {
-            has_tflist: self.has_tflist,
-            has_fieldmask: self.has_fieldmask,
+            doc_list_format,
             has_position_list: self.has_position_list,
-            skip_list_format,
         }
     }
 }
@@ -60,18 +81,22 @@ impl PostingFormat {
     }
 
     pub fn has_tflist(&self) -> bool {
-        self.has_tflist
+        self.doc_list_format.has_tflist()
     }
 
     pub fn has_fieldmask(&self) -> bool {
-        self.has_fieldmask
+        self.doc_list_format.has_fieldmask()
     }
 
     pub fn has_position_list(&self) -> bool {
         self.has_position_list
     }
 
+    pub fn doc_list_format(&self) -> &DocListFormat {
+        &self.doc_list_format
+    }
+
     pub fn skip_list_format(&self) -> &SkipListFormat {
-        &self.skip_list_format
+        self.doc_list_format.skip_list_format()
     }
 }
