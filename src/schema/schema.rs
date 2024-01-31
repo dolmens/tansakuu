@@ -9,7 +9,7 @@ pub struct SchemaBuilder {
 pub struct Schema {
     fields: Vec<Field>,
     indexes: Vec<Index>,
-    primary_key: Option<(String, String)>,
+    primary_key: Option<(FieldEntry, IndexEntry)>,
     fields_map: HashMap<String, FieldEntry>,
     indexes_map: HashMap<String, IndexEntry>,
 }
@@ -33,7 +33,8 @@ pub struct Field {
     name: String,
     field_type: FieldType,
     column: bool,
-    indexes: Vec<IndexEntry>,
+    index_entries: Vec<IndexEntry>,
+    index_names: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,7 +47,8 @@ pub enum IndexType {
 pub struct Index {
     name: String,
     index_type: IndexType,
-    fields: Vec<FieldEntry>,
+    field_entries: Vec<FieldEntry>,
+    field_names: Vec<String>,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -110,7 +112,8 @@ impl SchemaBuilder {
             name: field_name.clone(),
             field_type,
             column: options.column,
-            indexes: vec![],
+            index_entries: vec![],
+            index_names: vec![],
         };
         self.schema
             .fields_map
@@ -130,11 +133,7 @@ impl SchemaBuilder {
 
     pub fn add_index(&mut self, index_name: String, index_type: IndexType, fields: &[String]) {
         assert!(!self.schema.indexes_map.contains_key(&index_name));
-        if index_type == IndexType::PrimaryKey {
-            assert!(self.schema.primary_key.is_none());
-            assert_eq!(fields.len(), 1);
-            self.schema.primary_key = Some((fields[0].clone(), index_name.clone()));
-        }
+        let field_names: Vec<_> = fields.iter().cloned().collect();
         let field_entries: Vec<_> = fields
             .iter()
             .map(|f| self.schema.fields_map.get(f).unwrap())
@@ -142,13 +141,23 @@ impl SchemaBuilder {
             .collect();
         for entry in &field_entries {
             self.schema.fields[entry.0]
-                .indexes
+                .index_entries
                 .push(IndexEntry(self.schema.indexes.len()));
+            self.schema.fields[entry.0]
+                .index_names
+                .push(index_name.clone());
+        }
+        if index_type == IndexType::PrimaryKey {
+            assert!(self.schema.primary_key.is_none());
+            assert_eq!(fields.len(), 1);
+            self.schema.primary_key =
+                Some((field_entries[0], IndexEntry(self.schema.indexes.len())));
         }
         let index = Index {
             name: index_name.clone(),
             index_type,
-            fields: field_entries,
+            field_entries,
+            field_names,
         };
         self.schema
             .indexes_map
@@ -166,28 +175,29 @@ impl Schema {
         SchemaBuilder::new()
     }
 
-    pub fn field(&self, field_name: &str) -> Option<&Field> {
+    pub fn field(&self, field_entry: FieldEntry) -> &Field {
+        &self.fields[field_entry.0]
+    }
+
+    pub fn field_by_name(&self, field_name: &str) -> Option<&Field> {
         self.fields_map
             .get(field_name)
             .map(|&entry| &self.fields[entry.0])
     }
 
-    pub fn index(&self, index_name: &str) -> Option<&Index> {
+    pub fn index(&self, index_entry: IndexEntry) -> &Index {
+        &self.indexes[index_entry.0]
+    }
+
+    pub fn index_by_name(&self, index_name: &str) -> Option<&Index> {
         self.indexes_map
             .get(index_name)
             .map(|&entry| &self.indexes[entry.0])
     }
 
-    pub fn primary_key(&self) -> Option<&(String, String)> {
-        self.primary_key.as_ref()
-    }
-
-    pub fn indexes_of_field<'a>(&'a self, field: &'a Field) -> impl Iterator<Item = &Index> + 'a {
-        field.indexes.iter().map(|&i| &self.indexes[i.0])
-    }
-
-    pub fn fields_of_index<'a>(&'a self, index: &'a Index) -> impl Iterator<Item = &Field> + 'a {
-        index.fields.iter().map(|&i| &self.fields[i.0])
+    pub fn primary_key(&self) -> Option<(&Field, &Index)> {
+        self.primary_key
+            .map(|(field_entry, index_entry)| (self.field(field_entry), self.index(index_entry)))
     }
 
     pub fn indexes(&self) -> &[Index] {
@@ -207,6 +217,22 @@ impl Index {
     pub fn index_type(&self) -> &IndexType {
         &self.index_type
     }
+
+    pub fn field_offset(&self, field: &str) -> usize {
+        if self.field_names.len() == 1 {
+            return 0;
+        }
+        for (i, f) in self.field_names.iter().enumerate() {
+            if f == field {
+                return i;
+            }
+        }
+        0
+    }
+
+    pub fn fields(&self) -> &[FieldEntry] {
+        &self.field_entries
+    }
 }
 
 impl Field {
@@ -221,19 +247,23 @@ impl Field {
     pub fn is_column(&self) -> bool {
         self.column
     }
+
+    pub fn indexes(&self) -> &[IndexEntry] {
+        &self.index_entries
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::schema::{
         schema::{FieldEntry, FieldOptions, IndexEntry, COLUMN, INDEXED},
-        Field, FieldType, Index, IndexType,
+        Field, FieldType, Index, IndexType, PRIMARY_KEY,
     };
 
     use super::SchemaBuilder;
 
     #[test]
-    fn field_options_bitor() {
+    fn test_field_options_bitor() {
         assert_eq!(
             COLUMN | INDEXED,
             FieldOptions {
@@ -245,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_builder() {
+    fn test_schema_builder() {
         let mut builder = SchemaBuilder::new();
         // column and indexed
         builder.add_text_field("f1".to_string(), COLUMN | INDEXED);
@@ -255,7 +285,8 @@ mod tests {
                 name: "f1".to_string(),
                 field_type: FieldType::Str,
                 column: true,
-                indexes: vec![IndexEntry(0)],
+                index_entries: vec![IndexEntry(0)],
+                index_names: vec!["f1".to_string()]
             }
         );
         assert_eq!(
@@ -263,7 +294,8 @@ mod tests {
             Index {
                 name: "f1".to_string(),
                 index_type: IndexType::InvertedIndex,
-                fields: vec![FieldEntry(0)],
+                field_entries: vec![FieldEntry(0)],
+                field_names: vec!["f1".to_string()]
             }
         );
         assert_eq!(builder.schema.fields_map.get("f1"), Some(&FieldEntry(0)));
@@ -277,7 +309,8 @@ mod tests {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
                 column: true,
-                indexes: vec![],
+                index_entries: vec![],
+                index_names: vec![]
             }
         );
         assert_eq!(builder.schema.fields_map.get("f2"), Some(&FieldEntry(1)));
@@ -295,7 +328,8 @@ mod tests {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
                 column: true,
-                indexes: vec![IndexEntry(1)],
+                index_entries: vec![IndexEntry(1)],
+                index_names: vec!["f2".to_string()]
             }
         );
         assert_eq!(
@@ -303,7 +337,8 @@ mod tests {
             Index {
                 name: "f2".to_string(),
                 index_type: IndexType::InvertedIndex,
-                fields: vec![FieldEntry(1)],
+                field_entries: vec![FieldEntry(1)],
+                field_names: vec!["f2".to_string()]
             }
         );
         assert_eq!(builder.schema.indexes_map.get("f2"), Some(&IndexEntry(1)));
@@ -320,7 +355,8 @@ mod tests {
                 name: "f1".to_string(),
                 field_type: FieldType::Str,
                 column: true,
-                indexes: vec![IndexEntry(0), IndexEntry(2)],
+                index_entries: vec![IndexEntry(0), IndexEntry(2)],
+                index_names: vec!["f1".to_string(), "f3".to_string()]
             }
         );
         assert_eq!(
@@ -329,7 +365,8 @@ mod tests {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
                 column: true,
-                indexes: vec![IndexEntry(1), IndexEntry(2)],
+                index_entries: vec![IndexEntry(1), IndexEntry(2)],
+                index_names: vec!["f2".to_string(), "f3".to_string()]
             }
         );
         assert_eq!(
@@ -337,8 +374,19 @@ mod tests {
             Index {
                 name: "f3".to_string(),
                 index_type: IndexType::InvertedIndex,
-                fields: vec![FieldEntry(0), FieldEntry(1)],
+                field_entries: vec![FieldEntry(0), FieldEntry(1)],
+                field_names: vec!["f1".to_string(), "f2".to_string()]
             }
+        );
+    }
+
+    #[test]
+    fn test_primary_key() {
+        let mut builder = SchemaBuilder::new();
+        builder.add_text_field("f1".to_string(), COLUMN | PRIMARY_KEY);
+        assert_eq!(
+            builder.schema.primary_key(),
+            Some((&builder.schema.fields[0], &builder.schema.indexes[0]))
         );
     }
 }

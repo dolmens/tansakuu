@@ -7,6 +7,7 @@ use crate::{
     document::Value,
     index::IndexWriter,
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
+    schema::Index,
     util::{ha3_capacity_policy::Ha3CapacityPolicy, layered_hashmap::LayeredHashMapWriter},
     DocId, HASHMAP_INITIAL_CAPACITY,
 };
@@ -17,6 +18,7 @@ pub type PostingTable =
     LayeredHashMapWriter<String, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
 
 pub struct InvertedIndexWriter {
+    index: Index,
     posting_table: PostingTable,
     posting_writers: Vec<BuildingPostingWriter>,
     posting_indexes: HashMap<String, usize>,
@@ -25,7 +27,7 @@ pub struct InvertedIndexWriter {
 }
 
 impl InvertedIndexWriter {
-    pub fn new() -> Self {
+    pub fn new(index: Index) -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = Ha3CapacityPolicy;
         let posting_table = PostingTable::with_initial_capacity(
@@ -36,6 +38,7 @@ impl InvertedIndexWriter {
         let postings = posting_table.hashmap();
 
         Self {
+            index,
             posting_table,
             posting_writers: Vec::new(),
             posting_indexes: HashMap::new(),
@@ -46,7 +49,7 @@ impl InvertedIndexWriter {
 }
 
 impl IndexWriter for InvertedIndexWriter {
-    fn add_field(&mut self, _field: &str, value: &Value) {
+    fn add_field(&mut self, field: &str, value: &Value) {
         for (pos, tok) in value.to_string().split_whitespace().enumerate() {
             let writer_index = self
                 .posting_indexes
@@ -65,7 +68,8 @@ impl IndexWriter for InvertedIndexWriter {
                 })
                 .clone();
             let posting_writer = &mut self.posting_writers[writer_index];
-            posting_writer.add_pos(0, pos as u32).unwrap();
+            let field_offset = self.index.field_offset(field);
+            posting_writer.add_pos(field_offset, pos as u32).unwrap();
             self.modified_postings.insert(writer_index);
         }
     }

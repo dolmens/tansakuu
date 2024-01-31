@@ -8,7 +8,7 @@ pub struct IndexWriterFactory {}
 impl IndexWriterFactory {
     pub fn create(&self, index: &Index) -> Box<dyn IndexWriter> {
         match index.index_type() {
-            IndexType::InvertedIndex => Box::new(InvertedIndexWriter::new()),
+            IndexType::InvertedIndex => Box::new(InvertedIndexWriter::new(index.clone())),
             IndexType::PrimaryKey => Box::new(PrimaryKeyWriter::new()),
         }
     }

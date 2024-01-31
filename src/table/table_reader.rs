@@ -22,13 +22,13 @@ impl TableReader {
             .primary_key()
             .and_then(|(primary_key, _)| {
                 column_reader
-                    .column_ref(&primary_key)
+                    .column_ref(primary_key.name())
                     .map(|r| PrimaryKeyReader::new(r))
             });
         let primary_key_index_reader = table_data
             .schema()
             .primary_key()
-            .and_then(|(_, primary_key)| index_reader.index_ref(&primary_key))
+            .and_then(|(_, primary_key)| index_reader.index_ref(primary_key.name()))
             .and_then(|reader| reader.downcast_arc().ok());
         let deletionmap_reader = table_data
             .schema()
