@@ -17,7 +17,7 @@ use super::{
 };
 
 pub trait DocListEncode {
-    fn add_pos(&mut self, _field: usize) -> io::Result<()>;
+    fn add_pos(&mut self, field: usize) -> io::Result<()>;
     fn end_doc(&mut self, docid: DocId) -> io::Result<()>;
     fn flush(&mut self) -> io::Result<()>;
     fn item_count(&self) -> (usize, usize);
@@ -188,9 +188,11 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
 }
 
 impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
-    fn add_pos(&mut self, _field: usize) -> io::Result<()> {
+    fn add_pos(&mut self, field: usize) -> io::Result<()> {
         self.current_tf += 1;
         self.total_tf += 1;
+        debug_assert!(field < 8);
+        self.fieldmask |= 1 << field;
 
         Ok(())
     }
@@ -206,6 +208,7 @@ impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
 
         self.last_docid = docid;
         self.current_tf = 0;
+        self.fieldmask = 0;
 
         self.buffer_len += 1;
         let flush_info = DocListFlushInfoSnapshot::new(self.doc_count_flushed, self.buffer_len);
@@ -522,6 +525,139 @@ mod tests {
         assert_eq!(
             &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
             &decoded_termfreqs[0..3]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_fieldmask() -> io::Result<()> {
+        const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
+        let doc_list_format = DocListFormat::builder().with_fieldmask().build();
+        let skip_list_format = doc_list_format.skip_list_format().clone();
+        let mut buf = vec![];
+        let mut skip_list_buf = vec![];
+        let skip_list_writer = SkipListWriter::new(skip_list_format, &mut skip_list_buf);
+        let mut doc_list_encoder = DocListEncoder::new(doc_list_format, &mut buf, skip_list_writer);
+        let building_block = doc_list_encoder.building_block().clone();
+        let flush_info = doc_list_encoder.flush_info().clone();
+
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas = &docids_deltas[..];
+        let docids: Vec<_> = docids_deltas
+            .iter()
+            .scan(0, |acc, &x| {
+                *acc += x;
+                Some(*acc)
+            })
+            .collect();
+        let docids = &docids[..];
+
+        let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
+            .enumerate()
+            .map(|(i, _)| (i % 3 + 1) as u32)
+            .collect();
+        let termfreqs = &termfreqs[..];
+
+        let mut fields = vec![];
+        for &tf in termfreqs {
+            let mut one_fields = vec![];
+            for t in 0..tf {
+                one_fields.push((t % 8) as usize);
+            }
+            fields.push(one_fields);
+        }
+        let fieldmasks: Vec<_> = fields
+            .iter()
+            .map(|fields| fields.iter().fold(0 as u8, |acc, &f| acc | (1 << f)))
+            .collect();
+
+        for t in 0..termfreqs[0] {
+            doc_list_encoder.add_pos(fields[0][t as usize])?;
+        }
+        doc_list_encoder.end_doc(docids[0])?;
+
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), 0);
+        assert_eq!(flush_info_snapshot.buffer_len(), 1);
+        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(
+            building_block.fieldmasks.as_ref().unwrap()[0].load(),
+            fieldmasks[0]
+        );
+
+        for t in 0..termfreqs[1] {
+            doc_list_encoder.add_pos(fields[1][t as usize])?;
+        }
+        doc_list_encoder.end_doc(docids[1])?;
+
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), 0);
+        assert_eq!(flush_info_snapshot.buffer_len(), 2);
+        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(
+            building_block.fieldmasks.as_ref().unwrap()[0].load(),
+            fieldmasks[0]
+        );
+        assert_eq!(building_block.docids[1].load(), docids[1]);
+        assert_eq!(
+            building_block.fieldmasks.as_ref().unwrap()[1].load(),
+            fieldmasks[1]
+        );
+
+        for i in 2..BLOCK_LEN {
+            for t in 0..termfreqs[i] {
+                doc_list_encoder.add_pos(fields[i][t as usize])?;
+            }
+            doc_list_encoder.end_doc(docids[i])?;
+        }
+
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN);
+        assert_eq!(flush_info_snapshot.buffer_len(), 0);
+
+        for i in 0..BLOCK_LEN + 3 {
+            for t in 0..termfreqs[i + BLOCK_LEN] {
+                doc_list_encoder.add_pos(fields[i + BLOCK_LEN][t as usize])?;
+            }
+            doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
+        }
+
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
+        assert_eq!(flush_info_snapshot.buffer_len(), 3);
+
+        doc_list_encoder.flush()?;
+
+        let flush_info_snapshot = flush_info.load();
+        assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
+        assert_eq!(flush_info_snapshot.buffer_len(), 0);
+
+        let block_encoder = BlockEncoder;
+
+        let mut decoded_docids = [0; BLOCK_LEN];
+        let mut decoded_fieldmasks = [0; BLOCK_LEN];
+
+        let mut reader = BufReader::new(buf.as_slice());
+        block_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
+        assert_eq!(&docids_deltas[0..BLOCK_LEN], decoded_docids);
+        block_encoder.decode_u8(&mut reader, &mut decoded_fieldmasks)?;
+        assert_eq!(&fieldmasks[0..BLOCK_LEN], decoded_fieldmasks);
+
+        block_encoder.decode_u32(&mut reader, &mut decoded_docids)?;
+        assert_eq!(&docids_deltas[BLOCK_LEN..BLOCK_LEN * 2], decoded_docids);
+        block_encoder.decode_u8(&mut reader, &mut decoded_fieldmasks)?;
+        assert_eq!(&fieldmasks[BLOCK_LEN..BLOCK_LEN * 2], decoded_fieldmasks);
+
+        block_encoder.decode_u32(&mut reader, &mut decoded_docids[0..3])?;
+        assert_eq!(
+            &docids_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
+            &decoded_docids[0..3]
+        );
+        block_encoder.decode_u8(&mut reader, &mut decoded_fieldmasks[0..3])?;
+        assert_eq!(
+            &fieldmasks[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3],
+            &decoded_fieldmasks[0..3]
         );
 
         Ok(())
