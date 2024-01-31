@@ -204,7 +204,11 @@ impl Schema {
         &self.indexes
     }
 
-    pub fn columns(&self) -> &[Field] {
+    pub fn columns(&self) -> impl Iterator<Item = &Field> {
+        self.fields.iter().filter(|f| f.column)
+    }
+
+    pub fn fields(&self) -> &[Field] {
         &self.fields
     }
 }
@@ -388,5 +392,17 @@ mod tests {
             builder.schema.primary_key(),
             Some((&builder.schema.fields[0], &builder.schema.indexes[0]))
         );
+    }
+
+    #[test]
+    fn test_columns() {
+        let mut builder = SchemaBuilder::new();
+        builder.add_text_field("f1".to_string(), COLUMN | INDEXED);
+        builder.add_i64_field("f2".to_string(), INDEXED);
+        builder.add_i64_field("f3".to_string(), COLUMN);
+        let fields: Vec<_> = builder.schema.fields().iter().map(|f| f.name()).collect();
+        assert_eq!(fields, vec!["f1", "f2", "f3"]);
+        let columns: Vec<_> = builder.schema.columns().map(|f| f.name()).collect();
+        assert_eq!(columns, vec!["f1", "f3"]);
     }
 }
