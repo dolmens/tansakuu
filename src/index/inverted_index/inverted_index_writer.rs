@@ -63,7 +63,8 @@ impl IndexWriter for InvertedIndexWriter {
                         .with_tflist()
                         .with_position_list()
                         .build();
-                    let posting_writer = BuildingPostingWriter::new(posting_format, 1024);
+                    let posting_writer =
+                        BuildingPostingWriter::new(posting_format, HASHMAP_INITIAL_CAPACITY);
                     let building_posting_list = posting_writer.building_posting_list().clone();
                     self.posting_table.insert(hashkey, building_posting_list);
                     self.posting_writers.push(posting_writer);

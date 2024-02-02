@@ -7,7 +7,7 @@ use crate::{
         capacity_policy::FixedCapacityPolicy, hash::hash_string_64,
         layered_hashmap::LayeredHashMapWriter,
     },
-    DocId,
+    DocId, HASHMAP_INITIAL_CAPACITY,
 };
 
 use super::PrimaryKeyBuildingSegmentData;
@@ -22,8 +22,11 @@ impl PrimaryKeyWriter {
     pub fn new() -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let keys =
-            LayeredHashMapWriter::with_initial_capacity(1024, hasher_builder, capacity_policy);
+        let keys = LayeredHashMapWriter::with_initial_capacity(
+            HASHMAP_INITIAL_CAPACITY,
+            hasher_builder,
+            capacity_policy,
+        );
         let keymap = keys.hashmap();
 
         Self {
