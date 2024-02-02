@@ -13,7 +13,7 @@ use super::InvertedIndexBuildingSegmentData;
 
 pub struct InvertedIndexBuildingSegmentReader {
     base_docid: DocId,
-    postings: LayeredHashMap<String, BuildingPostingList>,
+    postings: LayeredHashMap<u64, BuildingPostingList>,
 }
 
 impl InvertedIndexBuildingSegmentReader {
@@ -24,8 +24,8 @@ impl InvertedIndexBuildingSegmentReader {
         }
     }
 
-    pub fn segment_posting(&self, tok: &str) -> crate::index::SegmentPosting {
-        let docids = if let Some(building_posting_list) = self.postings.get(tok) {
+    pub fn segment_posting(&self, hashkey: u64) -> crate::index::SegmentPosting {
+        let docids = if let Some(building_posting_list) = self.postings.get(&hashkey) {
             let mut docids = vec![];
             let mut posting_reader = BuildingPostingReader::open(building_posting_list);
             let posting_format = PostingFormat::default();

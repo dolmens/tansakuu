@@ -55,10 +55,15 @@ impl IndexSerializer for InvertedIndexSerializer {
         let mut position_list_start = 0;
         let mut position_skip_list_start = 0;
 
-        let mut postings: Vec<_> = self.index_data.postings.iter().collect();
-        postings.sort_by(|a, b| a.0.cmp(b.0));
+        let mut postings: Vec<_> = self
+            .index_data
+            .postings
+            .iter()
+            .map(|(k, v)| (k.clone(), v))
+            .collect();
+        postings.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
 
-        for (tok, posting) in postings {
+        for (hashkey, posting) in postings {
             let mut posting_iterator = PostingIterator::open(posting);
 
             let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
@@ -143,7 +148,9 @@ impl IndexSerializer for InvertedIndexSerializer {
             position_skip_list_start = position_skip_list_end;
             position_list_start = position_list_end;
 
-            term_dict_writer.insert(tok.as_bytes(), &term_info).unwrap();
+            term_dict_writer
+                .insert(hashkey.to_be_bytes(), &term_info)
+                .unwrap();
         }
 
         term_dict_writer.finish().unwrap();

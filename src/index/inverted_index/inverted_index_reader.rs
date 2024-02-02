@@ -6,8 +6,10 @@ use crate::{
         },
         IndexReader,
     },
+    query::Term,
     schema::Index,
     table::TableData,
+    util::hash::hash_string_64,
 };
 
 pub struct InvertedIndexReader {
@@ -47,16 +49,17 @@ impl InvertedIndexReader {
 }
 
 impl IndexReader for InvertedIndexReader {
-    fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
+    fn lookup(&self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator>> {
         let mut segment_postings = vec![];
+        let hashkey = hash_string_64(term.keyword());
         for segment_reader in &self.persistent_segments {
-            let segment_posting = segment_reader.segment_posting(key);
+            let segment_posting = segment_reader.segment_posting(hashkey);
             if !segment_posting.is_empty() {
                 segment_postings.push(segment_posting);
             }
         }
         for segment_reader in &self.building_segments {
-            let segment_posting = segment_reader.segment_posting(key);
+            let segment_posting = segment_reader.segment_posting(hashkey);
             if !segment_posting.is_empty() {
                 segment_postings.push(segment_posting);
             }

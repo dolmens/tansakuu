@@ -3,11 +3,11 @@ use crate::{
 };
 
 pub struct InvertedIndexBuildingSegmentData {
-    pub postings: LayeredHashMap<String, BuildingPostingList>,
+    pub postings: LayeredHashMap<u64, BuildingPostingList>,
 }
 
 impl InvertedIndexBuildingSegmentData {
-    pub fn new(postings: LayeredHashMap<String, BuildingPostingList>) -> Self {
+    pub fn new(postings: LayeredHashMap<u64, BuildingPostingList>) -> Self {
         Self { postings }
     }
 }

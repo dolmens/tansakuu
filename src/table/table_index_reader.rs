@@ -28,7 +28,7 @@ impl TableIndexReader {
     }
 
     pub fn lookup(&self, term: &Term) -> Option<Box<dyn PostingIterator>> {
-        self.index(term.index_name())?.lookup(term.keyword())
+        self.index(term.index_name())?.lookup(term)
     }
 
     pub(crate) fn index_ref(&self, name: &str) -> Option<Arc<dyn IndexReader>> {

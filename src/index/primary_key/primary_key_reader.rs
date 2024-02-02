@@ -1,4 +1,7 @@
-use crate::{index::IndexReader, schema::Index, table::TableData, DocId};
+use crate::{
+    index::IndexReader, query::Term, schema::Index, table::TableData, util::hash::hash_string_64,
+    DocId,
+};
 
 use super::{
     PrimaryKeyBuildingSegmentReader, PrimaryKeyPersistentSegmentReader, PrimaryKeyPostingIterator,
@@ -39,15 +42,15 @@ impl PrimaryKeyReader {
         }
     }
 
-    pub fn get(&self, primary_key: &str) -> Option<DocId> {
+    pub fn get_by_hashkey(&self, hashkey: u64) -> Option<DocId> {
         for segment in self.building_segments.iter().rev() {
-            if let Some(docid) = segment.lookup(primary_key) {
+            if let Some(docid) = segment.get_by_hashkey(hashkey) {
                 return Some(docid);
             }
         }
 
         for segment in self.persistent_segments.iter().rev() {
-            if let Some(docid) = segment.lookup(primary_key) {
+            if let Some(docid) = segment.get_by_hashkey(hashkey) {
                 return Some(docid);
             }
         }
@@ -57,8 +60,9 @@ impl PrimaryKeyReader {
 }
 
 impl IndexReader for PrimaryKeyReader {
-    fn lookup(&self, key: &str) -> Option<Box<dyn crate::index::PostingIterator>> {
-        self.get(key).map(|docid| {
+    fn lookup(&self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator>> {
+        let hashkey = hash_string_64(term.keyword());
+        self.get_by_hashkey(hashkey).map(|docid| {
             Box::new(PrimaryKeyPostingIterator::new(docid))
                 as Box<dyn crate::index::PostingIterator>
         })

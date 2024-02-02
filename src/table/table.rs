@@ -78,7 +78,7 @@ impl Table {
 #[cfg(test)]
 mod tests {
     use crate::{
-        document::Document,
+        document::InputDocument,
         index::PostingIterator,
         query::Term,
         schema::{SchemaBuilder, COLUMN, INDEXED, PRIMARY_KEY},
@@ -112,11 +112,11 @@ mod tests {
 
         let mut writer = table.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
 
@@ -155,12 +155,12 @@ mod tests {
 
         let mut writer = table.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("item_id".to_string(), 100 as i64);
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("item_id".to_string(), 200 as i64);
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
@@ -215,12 +215,12 @@ mod tests {
 
         let mut writer = table.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("item_id".to_string(), 100 as i64);
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("item_id".to_string(), 200 as i64);
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
@@ -231,19 +231,20 @@ mod tests {
         assert!(!deletionmap_reader.is_deleted(0));
         assert!(!deletionmap_reader.is_deleted(1));
 
-        writer.delete_doc("200");
+        let delete_term = Term::new("".to_string(), "200".to_string());
+        writer.delete_doc(&delete_term);
 
         assert!(!deletionmap_reader.is_deleted(0));
         assert!(deletionmap_reader.is_deleted(1));
 
         writer.new_segment();
 
-        let mut doc3 = Document::new();
+        let mut doc3 = InputDocument::new();
         doc3.add_field("item_id".to_string(), 300 as i64);
         doc3.add_field("title".to_string(), "hello world 3");
         writer.add_doc(&doc3);
 
-        let mut doc4 = Document::new();
+        let mut doc4 = InputDocument::new();
         doc4.add_field("item_id".to_string(), 400 as i64);
         doc4.add_field("title".to_string(), "world peace 4");
         writer.add_doc(&doc4);
@@ -256,7 +257,8 @@ mod tests {
         assert!(!deletionmap_reader.is_deleted(2));
         assert!(!deletionmap_reader.is_deleted(3));
 
-        writer.delete_doc("300");
+        let delete_term = Term::new("".to_string(), "300".to_string());
+        writer.delete_doc(&delete_term);
 
         assert!(!deletionmap_reader.is_deleted(0));
         assert!(deletionmap_reader.is_deleted(1));
@@ -284,12 +286,12 @@ mod tests {
 
         let mut writer = table.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("item_id".to_string(), 100 as i64);
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("item_id".to_string(), 200 as i64);
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
@@ -329,7 +331,7 @@ mod tests {
 
         writer.new_segment();
 
-        let mut doc3 = Document::new();
+        let mut doc3 = InputDocument::new();
         doc3.add_field("item_id".to_string(), 300 as i64);
         doc3.add_field("title".to_string(), "hello");
         writer.add_doc(&doc3);
@@ -380,12 +382,12 @@ mod tests {
 
         let mut writer = table.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("item_id".to_string(), 100 as i64);
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("item_id".to_string(), 200 as i64);
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
@@ -425,7 +427,7 @@ mod tests {
 
         writer.new_segment();
 
-        let mut doc3 = Document::new();
+        let mut doc3 = InputDocument::new();
         doc3.add_field("item_id".to_string(), 300 as i64);
         doc3.add_field("title".to_string(), "hello");
         writer.add_doc(&doc3);

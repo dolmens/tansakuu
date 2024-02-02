@@ -3,7 +3,7 @@ use std::sync::Arc;
 use allocator_api2::alloc::Global;
 
 use crate::{
-    document::Value, util::chunked_vec::ChunkedVecWriter, BUILDING_COLUMN_VEC_CHUNK_SIZE,
+    document::OwnedValue, util::chunked_vec::ChunkedVecWriter, BUILDING_COLUMN_VEC_CHUNK_SIZE,
     BUILDING_COLUMN_VEC_NODE_SIZE,
 };
 
@@ -32,9 +32,9 @@ impl<T> GenericColumnWriter<T> {
 
 impl<T: Send + Sync + 'static> ColumnWriter for GenericColumnWriter<T>
 where
-    Value: TryInto<T>,
+    OwnedValue: TryInto<T>,
 {
-    fn add_doc(&mut self, value: Value) {
+    fn add_doc(&mut self, value: OwnedValue) {
         self.writer.push(value.try_into().ok().unwrap());
     }
 

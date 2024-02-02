@@ -11,8 +11,8 @@ impl PrimaryKeyPersistentSegmentData {
         Self { keys }
     }
 
-    pub fn lookup(&self, key: &str) -> Option<DocId> {
-        self.keys.get(key).ok().unwrap()
+    pub fn get_by_hashkey(&self, hashkey: u64) -> Option<DocId> {
+        self.keys.get(hashkey.to_be_bytes()).ok().unwrap()
     }
 }
 

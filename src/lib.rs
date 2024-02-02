@@ -15,6 +15,7 @@ pub mod postings;
 pub mod query;
 pub mod schema;
 pub mod table;
+pub mod tokenizer;
 pub mod util;
 
 pub type VersionId = u64;

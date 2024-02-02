@@ -61,6 +61,13 @@ impl IndexMerger for InvertedIndexMerger {
         let mut position_skip_list_start = 0;
 
         for term in &terms {
+            let hashkey = term
+                .as_slice()
+                .try_into()
+                .map_or(0, |b| u64::from_be_bytes(b));
+            if hashkey == 0 {
+                continue;
+            }
             let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
                 .with_writer(&posting_output_writer)
                 .with_skip_list_output_writer(&skip_list_output_writer)
@@ -77,8 +84,6 @@ impl IndexMerger for InvertedIndexMerger {
                 Some(position_list_encoder),
             );
 
-            let tok = unsafe { std::str::from_utf8_unchecked(term) };
-
             for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
                 let index_segment_data = segment
                     .clone()
@@ -87,7 +92,7 @@ impl IndexMerger for InvertedIndexMerger {
                     .unwrap();
                 let segment_reader =
                     InvertedIndexPersistentSegmentReader::new(0, index_segment_data);
-                let posting = segment_reader.segment_posting(tok);
+                let posting = segment_reader.segment_posting(hashkey);
                 let docids: Vec<_> = posting
                     .docids
                     .iter()
@@ -139,7 +144,7 @@ impl IndexMerger for InvertedIndexMerger {
             position_skip_list_start = position_skip_list_end;
             position_list_start = position_list_end;
 
-            term_dict_writer.insert(tok.as_bytes(), &term_info).unwrap();
+            term_dict_writer.insert(term, &term_info).unwrap();
         }
 
         term_dict_writer.finish().unwrap();

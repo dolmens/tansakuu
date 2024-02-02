@@ -29,14 +29,14 @@ impl SegmentIndexWriter {
         }
     }
 
-    pub fn add_doc(&mut self, doc: &Document, docid: DocId) {
+    pub fn add_doc<D: Document>(&mut self, doc: &D, docid: DocId) {
         let mut indexes = BTreeSet::new();
-        for (field, value) in doc.fields() {
+        for (field, value) in doc.iter_fields_and_values() {
             if let Some(field) = self.schema.field_by_name(field) {
                 for &index_entry in field.indexes() {
                     let index = self.schema.index(index_entry);
                     let index_writer = self.indexes.get_mut(index.name()).unwrap();
-                    index_writer.add_field(field.name(), value);
+                    index_writer.add_field(field.name(), value.clone().into());
                     indexes.insert(index.name());
                 }
             }

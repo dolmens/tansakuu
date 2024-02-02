@@ -6,7 +6,7 @@ use super::PrimaryKeyBuildingSegmentData;
 
 pub struct PrimaryKeyBuildingSegmentReader {
     meta: SegmentMeta,
-    keys: LayeredHashMap<String, DocId>,
+    keys: LayeredHashMap<u64, DocId>,
 }
 
 impl PrimaryKeyBuildingSegmentReader {
@@ -17,9 +17,9 @@ impl PrimaryKeyBuildingSegmentReader {
         }
     }
 
-    pub fn lookup(&self, key: &str) -> Option<DocId> {
+    pub fn get_by_hashkey(&self, hashkey: u64) -> Option<DocId> {
         self.keys
-            .get(key)
+            .get(&hashkey)
             .cloned()
             .map(|docid| docid + self.meta.base_docid())
     }

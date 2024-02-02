@@ -14,9 +14,9 @@ impl PrimaryKeyPersistentSegmentReader {
         Self { meta, index_data }
     }
 
-    pub fn lookup(&self, key: &str) -> Option<DocId> {
+    pub fn get_by_hashkey(&self, hashkey: u64) -> Option<DocId> {
         self.index_data
-            .lookup(key)
+            .get_by_hashkey(hashkey)
             .map(|docid| docid + self.meta.base_docid())
     }
 }

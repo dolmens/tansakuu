@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::{ColumnWriter, ColumnWriterFactory},
-    document::Document,
+    document::{InputDocument, Document},
     schema::SchemaRef,
     DocId,
 };
@@ -25,10 +25,10 @@ impl SegmentColumnWriter {
         Self { columns }
     }
 
-    pub fn add_doc(&mut self, doc: &Document, _docid: DocId) {
-        for (name, value) in doc.fields() {
+    pub fn add_doc<D: Document>(&mut self, doc: &D, _docid: DocId) {
+        for (name, value) in doc.iter_fields_and_values() {
             if let Some(writer) = self.columns.get_mut(name) {
-                writer.add_doc(value.clone());
+                writer.add_doc(value.into());
             }
         }
     }

@@ -1,9 +1,12 @@
 use std::{collections::hash_map::RandomState, sync::Arc};
 
 use crate::{
-    document::Value,
+    document::{OwnedValue, Value},
     index::IndexWriter,
-    util::{capacity_policy::FixedCapacityPolicy, layered_hashmap::LayeredHashMapWriter},
+    util::{
+        capacity_policy::FixedCapacityPolicy, hash::hash_string_64,
+        layered_hashmap::LayeredHashMapWriter,
+    },
     DocId,
 };
 
@@ -11,7 +14,7 @@ use super::PrimaryKeyBuildingSegmentData;
 
 pub struct PrimaryKeyWriter {
     current_key: Option<String>,
-    keys: LayeredHashMapWriter<String, DocId>,
+    keys: LayeredHashMapWriter<u64, DocId>,
     index_data: Arc<PrimaryKeyBuildingSegmentData>,
 }
 
@@ -32,14 +35,16 @@ impl PrimaryKeyWriter {
 }
 
 impl IndexWriter for PrimaryKeyWriter {
-    fn add_field(&mut self, _field: &str, value: &Value) {
+    fn add_field(&mut self, _field: &str, value: OwnedValue) {
         assert!(self.current_key.is_none());
-        self.current_key = Some(value.to_string());
+        let token: String = value.try_into().unwrap();
+        self.current_key = Some(token);
     }
 
     fn end_document(&mut self, docid: DocId) {
         assert!(self.current_key.is_some());
-        self.keys.insert(self.current_key.take().unwrap(), docid);
+        let hashkey = hash_string_64(self.current_key.take().unwrap().as_str());
+        self.keys.insert(hashkey, docid);
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {

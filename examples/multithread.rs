@@ -1,7 +1,7 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use tansakuu::{
-    document::Document,
+    document::InputDocument,
     index::PostingIterator,
     query::Term,
     schema::{SchemaBuilder, COLUMN, INDEXED},
@@ -36,11 +36,11 @@ pub fn main() {
     let writer = thread::spawn(move || {
         let mut writer = table_ref.writer();
 
-        let mut doc1 = Document::new();
+        let mut doc1 = InputDocument::new();
         doc1.add_field("title".to_string(), "hello world");
         writer.add_doc(&doc1);
 
-        let mut doc2 = Document::new();
+        let mut doc2 = InputDocument::new();
         doc2.add_field("title".to_string(), "world peace");
         writer.add_doc(&doc2);
     });

@@ -4,24 +4,27 @@ use std::{
 };
 
 use crate::{
-    document::Value,
+    document::{OwnedValue, Value},
     index::IndexWriter,
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
     schema::Index,
-    util::{ha3_capacity_policy::Ha3CapacityPolicy, layered_hashmap::LayeredHashMapWriter},
+    util::{
+        ha3_capacity_policy::Ha3CapacityPolicy, hash::hash_string_64,
+        layered_hashmap::LayeredHashMapWriter,
+    },
     DocId, HASHMAP_INITIAL_CAPACITY,
 };
 
 use super::InvertedIndexBuildingSegmentData;
 
 pub type PostingTable =
-    LayeredHashMapWriter<String, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+    LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
 
 pub struct InvertedIndexWriter {
     index: Index,
     posting_table: PostingTable,
     posting_writers: Vec<BuildingPostingWriter>,
-    posting_indexes: HashMap<String, usize>,
+    posting_indexes: HashMap<u64, usize>,
     modified_postings: BTreeSet<usize>,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
 }
@@ -49,11 +52,12 @@ impl InvertedIndexWriter {
 }
 
 impl IndexWriter for InvertedIndexWriter {
-    fn add_field(&mut self, field: &str, value: &Value) {
-        for (pos, tok) in value.to_string().split_whitespace().enumerate() {
+    fn add_field(&mut self, field: &str, value: OwnedValue) {
+        for (pos, tok) in (&value).as_str().unwrap().split_whitespace().enumerate() {
+            let hashkey = hash_string_64(tok);
             let writer_index = self
                 .posting_indexes
-                .entry(tok.to_string())
+                .entry(hashkey)
                 .or_insert_with(|| {
                     let posting_format = PostingFormat::builder()
                         .with_tflist()
@@ -61,8 +65,7 @@ impl IndexWriter for InvertedIndexWriter {
                         .build();
                     let posting_writer = BuildingPostingWriter::new(posting_format, 1024);
                     let building_posting_list = posting_writer.building_posting_list().clone();
-                    self.posting_table
-                        .insert(tok.to_string(), building_posting_list);
+                    self.posting_table.insert(hashkey, building_posting_list);
                     self.posting_writers.push(posting_writer);
                     self.posting_writers.len() - 1
                 })

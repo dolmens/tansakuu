@@ -21,9 +21,15 @@ impl InvertedIndexPersistentSegmentReader {
         }
     }
 
-    pub fn segment_posting(&self, tok: &str) -> crate::index::SegmentPosting {
+    pub fn segment_posting(&self, hashkey: u64) -> crate::index::SegmentPosting {
         let mut docids = vec![];
-        if let Some(term_info) = self.index_data.term_dict.get(tok).ok().unwrap() {
+        if let Some(term_info) = self
+            .index_data
+            .term_dict
+            .get(hashkey.to_be_bytes())
+            .ok()
+            .unwrap()
+        {
             let posting_format = PostingFormat::builder()
                 .with_tflist()
                 .with_position_list()

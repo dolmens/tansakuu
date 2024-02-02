@@ -24,14 +24,16 @@ impl IndexSerializer for PrimaryKeySerializer {
             .index_data
             .keys
             .iter()
-            .map(|(k, &v)| (k.as_str(), v))
+            .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
-        keys.sort_by(|a, b| a.0.cmp(b.0));
+        keys.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
         let index_path = directory.join(&self.index_name);
         let index_file = File::create(index_path).unwrap();
         let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_file);
         for (key, docid) in keys.iter() {
-            primary_key_dict_writer.insert(key, docid).unwrap();
+            primary_key_dict_writer
+                .insert(key.to_be_bytes(), docid)
+                .unwrap();
         }
         primary_key_dict_writer.finish().unwrap();
     }

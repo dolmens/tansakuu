@@ -32,7 +32,9 @@ pub struct IndexEntry(usize);
 pub struct Field {
     name: String,
     field_type: FieldType,
+    multi: bool,
     column: bool,
+    stored: bool,
     index_entries: Vec<IndexEntry>,
     index_names: Vec<String>,
 }
@@ -53,26 +55,50 @@ pub struct Index {
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
+    multi: bool,
     column: bool,
     indexed: bool,
+    stored: bool,
     primary_key: bool,
 }
 
+pub const DEFAULT: FieldOptions = FieldOptions {
+    multi: false,
+    column: false,
+    indexed: false,
+    stored: false,
+    primary_key: false,
+};
+
+pub const MULTI: FieldOptions = FieldOptions {
+    multi: true,
+    column: false,
+    indexed: false,
+    stored: false,
+    primary_key: false,
+};
+
 pub const COLUMN: FieldOptions = FieldOptions {
+    multi: false,
     column: true,
     indexed: false,
+    stored: false,
     primary_key: false,
 };
 
 pub const INDEXED: FieldOptions = FieldOptions {
+    multi: false,
     column: false,
     indexed: true,
+    stored: false,
     primary_key: false,
 };
 
 pub const PRIMARY_KEY: FieldOptions = FieldOptions {
+    multi: false,
     column: false,
     indexed: false,
+    stored: false,
     primary_key: true,
 };
 
@@ -81,8 +107,10 @@ impl BitOr for FieldOptions {
 
     fn bitor(self, rhs: Self) -> Self::Output {
         Self {
+            multi: self.multi || rhs.multi,
             column: self.column || rhs.column,
             indexed: self.indexed || rhs.indexed,
+            stored: false,
             primary_key: self.primary_key || rhs.primary_key,
         }
     }
@@ -111,7 +139,9 @@ impl SchemaBuilder {
         let field = Field {
             name: field_name.clone(),
             field_type,
+            multi: false,
             column: options.column,
+            stored: options.stored,
             index_entries: vec![],
             index_names: vec![],
         };
@@ -252,6 +282,10 @@ impl Field {
         self.column
     }
 
+    pub fn is_stored(&self) -> bool {
+        self.stored
+    }
+
     pub fn indexes(&self) -> &[IndexEntry] {
         &self.index_entries
     }
@@ -271,8 +305,10 @@ mod tests {
         assert_eq!(
             COLUMN | INDEXED,
             FieldOptions {
+                multi: false,
                 column: true,
                 indexed: true,
+                stored: false,
                 primary_key: false,
             }
         );
@@ -288,7 +324,9 @@ mod tests {
             Field {
                 name: "f1".to_string(),
                 field_type: FieldType::Str,
+                multi: false,
                 column: true,
+                stored: false,
                 index_entries: vec![IndexEntry(0)],
                 index_names: vec!["f1".to_string()]
             }
@@ -312,7 +350,9 @@ mod tests {
             Field {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
+                multi: false,
                 column: true,
+                stored: false,
                 index_entries: vec![],
                 index_names: vec![]
             }
@@ -331,7 +371,9 @@ mod tests {
             Field {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
+                multi: false,
                 column: true,
+                stored: false,
                 index_entries: vec![IndexEntry(1)],
                 index_names: vec!["f2".to_string()]
             }
@@ -358,7 +400,9 @@ mod tests {
             Field {
                 name: "f1".to_string(),
                 field_type: FieldType::Str,
+                multi: false,
                 column: true,
+                stored: false,
                 index_entries: vec![IndexEntry(0), IndexEntry(2)],
                 index_names: vec!["f1".to_string(), "f3".to_string()]
             }
@@ -368,7 +412,9 @@ mod tests {
             Field {
                 name: "f2".to_string(),
                 field_type: FieldType::Str,
+                multi: false,
                 column: true,
+                stored: false,
                 index_entries: vec![IndexEntry(1), IndexEntry(2)],
                 index_names: vec!["f2".to_string(), "f3".to_string()]
             }
