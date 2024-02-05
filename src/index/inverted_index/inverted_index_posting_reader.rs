@@ -5,18 +5,20 @@ use crate::{
     DocId, INVALID_DOCID,
 };
 
-use super::{buffered_segment_decoder::BufferedSegmentDecoder, SegmentPosting};
+use super::{
+    inverted_index_posting_segment_reader::InvertedIndexPostingSegmentReader, SegmentPosting,
+};
 
-pub struct BufferedIndexDecoder<'a> {
-    segment_decoder: Option<BufferedSegmentDecoder<'a>>,
+pub struct InvertedIndexPostingReader<'a> {
+    segment_reader: Option<InvertedIndexPostingSegmentReader<'a>>,
     cursor: usize,
     postings: Vec<SegmentPosting<'a>>,
 }
 
-impl<'a> BufferedIndexDecoder<'a> {
+impl<'a> InvertedIndexPostingReader<'a> {
     pub fn new(segment_postings: Vec<SegmentPosting<'a>>) -> Self {
         Self {
-            segment_decoder: None,
+            segment_reader: None,
             cursor: 0,
             postings: segment_postings,
         }
@@ -27,12 +29,12 @@ impl<'a> BufferedIndexDecoder<'a> {
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
-        if self.segment_decoder.is_none() {
+        if self.segment_reader.is_none() {
             self.move_to_segment(docid);
         }
         loop {
             if self
-                .segment_decoder
+                .segment_reader
                 .as_mut()
                 .unwrap()
                 .decode_one_block(docid, doc_list_block)?
@@ -50,7 +52,7 @@ impl<'a> BufferedIndexDecoder<'a> {
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if let Some(segment_decoder) = self.segment_decoder.as_mut() {
+        if let Some(segment_decoder) = self.segment_reader.as_mut() {
             segment_decoder.decode_one_position_block(from_ttf, position_list_block)
         } else {
             Ok(false)
@@ -62,7 +64,7 @@ impl<'a> BufferedIndexDecoder<'a> {
         if cursor >= self.postings.len() {
             return false;
         }
-        self.segment_decoder = Some(BufferedSegmentDecoder::open(unsafe {
+        self.segment_reader = Some(InvertedIndexPostingSegmentReader::open(unsafe {
             std::mem::transmute(&self.postings[cursor])
         }));
         self.cursor = cursor + 1;

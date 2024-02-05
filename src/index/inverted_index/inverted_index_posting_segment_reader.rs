@@ -11,29 +11,31 @@ use super::{
     SegmentPosting,
 };
 
-pub struct BufferedSegmentDecoder<'a> {
+pub struct InvertedIndexPostingSegmentReader<'a> {
     base_docid: DocId,
-    inner_decoder: SegmentDecoderInner<'a>,
+    inner_reader: SegmentReaderInner<'a>,
 }
 
-pub enum SegmentDecoderInner<'a> {
-    Persistent(PersistentSegmentDecoder<'a>),
-    Building(BuildingSegmentDecoder<'a>),
+enum SegmentReaderInner<'a> {
+    Persistent(PersistentSegmentReader<'a>),
+    Building(BuildingSegmentReader<'a>),
 }
 
-pub struct PersistentSegmentDecoder<'a> {
+struct PersistentSegmentReader<'a> {
     posting_reader: PersistentSegmentPostingReader<'a>,
 }
 
-pub struct BuildingSegmentDecoder<'a> {
+struct BuildingSegmentReader<'a> {
     building_posting_reader: BuildingPostingReader<'a>,
 }
 
-impl<'a> BufferedSegmentDecoder<'a> {
-    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> BufferedSegmentDecoder<'a> {
+impl<'a> InvertedIndexPostingSegmentReader<'a> {
+    pub fn open(
+        segment_posting: &'static SegmentPosting<'a>,
+    ) -> InvertedIndexPostingSegmentReader<'a> {
         Self {
             base_docid: segment_posting.base_docid(),
-            inner_decoder: SegmentDecoderInner::open(segment_posting),
+            inner_reader: SegmentReaderInner::open(segment_posting),
         }
     }
 
@@ -47,7 +49,7 @@ impl<'a> BufferedSegmentDecoder<'a> {
         } else {
             0
         };
-        if self.inner_decoder.decode_one_block(docid, doc_list_block)? {
+        if self.inner_reader.decode_one_block(docid, doc_list_block)? {
             doc_list_block.base_docid += self.base_docid;
             doc_list_block.last_docid += self.base_docid;
             Ok(true)
@@ -61,19 +63,19 @@ impl<'a> BufferedSegmentDecoder<'a> {
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        self.inner_decoder
+        self.inner_reader
             .decode_one_position_block(from_ttf, position_list_block)
     }
 }
 
-impl<'a> SegmentDecoderInner<'a> {
-    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> SegmentDecoderInner<'a> {
+impl<'a> SegmentReaderInner<'a> {
+    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> SegmentReaderInner<'a> {
         match segment_posting.posting_data() {
             SegmentPostingData::Persistent(persistent_segment_posting) => {
-                Self::Persistent(PersistentSegmentDecoder::open(persistent_segment_posting))
+                Self::Persistent(PersistentSegmentReader::open(persistent_segment_posting))
             }
             SegmentPostingData::Building(building_segment_posting) => {
-                Self::Building(BuildingSegmentDecoder::open(building_segment_posting))
+                Self::Building(BuildingSegmentReader::open(building_segment_posting))
             }
         }
     }
@@ -84,11 +86,11 @@ impl<'a> SegmentDecoderInner<'a> {
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
         match self {
-            Self::Persistent(persistent_segment_decoder) => {
-                persistent_segment_decoder.decode_one_block(docid, doc_list_block)
+            Self::Persistent(persistent_segment_reader) => {
+                persistent_segment_reader.decode_one_block(docid, doc_list_block)
             }
-            Self::Building(building_segment_decoder) => {
-                building_segment_decoder.decode_one_block(docid, doc_list_block)
+            Self::Building(building_segment_reader) => {
+                building_segment_reader.decode_one_block(docid, doc_list_block)
             }
         }
     }
@@ -99,20 +101,20 @@ impl<'a> SegmentDecoderInner<'a> {
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
         match self {
-            Self::Persistent(persistent_segment_decoder) => {
-                persistent_segment_decoder.decode_one_position_block(from_ttf, position_list_block)
+            Self::Persistent(persistent_segment_reader) => {
+                persistent_segment_reader.decode_one_position_block(from_ttf, position_list_block)
             }
-            Self::Building(building_segment_decoder) => {
-                building_segment_decoder.decode_one_position_block(from_ttf, position_list_block)
+            Self::Building(building_segment_reader) => {
+                building_segment_reader.decode_one_position_block(from_ttf, position_list_block)
             }
         }
     }
 }
 
-impl<'a> PersistentSegmentDecoder<'a> {
+impl<'a> PersistentSegmentReader<'a> {
     pub fn open(
         persistent_segment_posting: &'static PersistentSegmentPosting<'a>,
-    ) -> PersistentSegmentDecoder<'a> {
+    ) -> PersistentSegmentReader<'a> {
         let posting_reader = PersistentSegmentPostingReader::open(
             persistent_segment_posting.term_info.clone(),
             persistent_segment_posting.index_data,
@@ -139,10 +141,8 @@ impl<'a> PersistentSegmentDecoder<'a> {
     }
 }
 
-impl<'a> BuildingSegmentDecoder<'a> {
-    pub fn open(
-        segment_posting: &'static BuildingSegmentPosting<'a>,
-    ) -> BuildingSegmentDecoder<'a> {
+impl<'a> BuildingSegmentReader<'a> {
+    pub fn open(segment_posting: &'static BuildingSegmentPosting<'a>) -> BuildingSegmentReader<'a> {
         Self {
             building_posting_reader: BuildingPostingReader::open(
                 segment_posting.building_posting_list,

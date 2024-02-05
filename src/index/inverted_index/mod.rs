@@ -1,11 +1,11 @@
-mod buffered_index_decoder;
 mod buffered_posting_iterator;
-mod buffered_segment_decoder;
 mod inverted_index_building_segment_data;
 mod inverted_index_building_segment_reader;
 mod inverted_index_merger;
 mod inverted_index_persistent_segment_data;
 mod inverted_index_persistent_segment_reader;
+mod inverted_index_posting_reader;
+mod inverted_index_posting_segment_reader;
 mod inverted_index_reader;
 mod inverted_index_segment_data_builder;
 mod inverted_index_serializer;

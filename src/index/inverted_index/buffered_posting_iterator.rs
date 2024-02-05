@@ -6,7 +6,7 @@ use crate::{
     DocId, END_DOCID, END_POSITION, INVALID_DOCID,
 };
 
-use super::{buffered_index_decoder::BufferedIndexDecoder, SegmentPosting};
+use super::{inverted_index_posting_reader::InvertedIndexPostingReader, SegmentPosting};
 
 pub struct BufferedPostingIterator<'a> {
     current_docid: DocId,
@@ -20,14 +20,14 @@ pub struct BufferedPostingIterator<'a> {
     current_position_index: u32,
     position_block_cursor: usize,
     position_list_block: Option<Box<PositionListBlock>>,
-    index_decoder: BufferedIndexDecoder<'a>,
+    posting_reader: InvertedIndexPostingReader<'a>,
     posting_format: PostingFormat,
 }
 
 impl<'a> BufferedPostingIterator<'a> {
     pub fn new(posting_format: PostingFormat, segment_postings: Vec<SegmentPosting<'a>>) -> Self {
         let doc_list_block = DocListBlock::new(posting_format.doc_list_format());
-        let index_decoder = BufferedIndexDecoder::new(segment_postings);
+        let posting_reader = InvertedIndexPostingReader::new(segment_postings);
 
         Self {
             current_docid: 0,
@@ -41,7 +41,7 @@ impl<'a> BufferedPostingIterator<'a> {
             current_position_index: 0,
             position_block_cursor: 0,
             position_list_block: None,
-            index_decoder,
+            posting_reader,
             posting_format,
         }
     }
@@ -51,7 +51,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
     fn seek(&mut self, docid: crate::DocId) -> io::Result<crate::DocId> {
         if self.block_cursor == self.doc_list_block.len || self.doc_list_block.last_docid < docid {
             if !self
-                .index_decoder
+                .posting_reader
                 .decode_one_block(docid, &mut self.doc_list_block)?
             {
                 return Ok(END_DOCID);
@@ -97,7 +97,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
                     > position_list_block.start_ttf + (position_list_block.len as u64)
             {
                 if !self
-                    .index_decoder
+                    .posting_reader
                     .decode_one_position_block(self.current_ttf, position_list_block)?
                 {
                     return Ok(END_POSITION);
@@ -119,7 +119,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
             }
             if self.position_block_cursor == position_list_block.len {
                 if !self
-                    .index_decoder
+                    .posting_reader
                     .decode_one_position_block(self.current_ttf, position_list_block)?
                 {
                     return Ok(END_POSITION);
