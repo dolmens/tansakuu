@@ -1,15 +1,8 @@
 use std::sync::Arc;
 
-use crate::{
-    index::SegmentPosting,
-    postings::{
-        BuildingPostingList, BuildingPostingReader, DocListBlock, PostingFormat, PostingRead,
-    },
-    util::layered_hashmap::LayeredHashMap,
-    DocId,
-};
+use crate::{postings::BuildingPostingList, util::layered_hashmap::LayeredHashMap, DocId};
 
-use super::InvertedIndexBuildingSegmentData;
+use super::{InvertedIndexBuildingSegmentData, SegmentPosting};
 
 pub struct InvertedIndexBuildingSegmentReader {
     base_docid: DocId,
@@ -24,28 +17,14 @@ impl InvertedIndexBuildingSegmentReader {
         }
     }
 
-    pub fn segment_posting(&self, hashkey: u64) -> crate::index::SegmentPosting {
-        let docids = if let Some(building_posting_list) = self.postings.get(&hashkey) {
-            let mut docids = vec![];
-            let mut posting_reader = BuildingPostingReader::open(building_posting_list);
-            let posting_format = PostingFormat::default();
-            let doc_list_format = posting_format.doc_list_format().clone();
-            let mut doc_list_block = DocListBlock::new(&doc_list_format);
-            loop {
-                if !posting_reader
-                    .decode_one_block(0, &mut doc_list_block)
-                    .unwrap()
-                {
-                    break;
-                }
-                for &docid in &doc_list_block.docids[0..doc_list_block.len] {
-                    docids.push(docid);
-                }
-            }
-            docids
+    pub fn segment_posting(&self, hashkey: u64) -> Option<SegmentPosting<'_>> {
+        if let Some(building_posting_list) = self.postings.get(&hashkey) {
+            Some(SegmentPosting::new_building_segment(
+                self.base_docid,
+                building_posting_list,
+            ))
         } else {
-            vec![]
-        };
-        SegmentPosting::new(self.base_docid, docids)
+            None
+        }
     }
 }

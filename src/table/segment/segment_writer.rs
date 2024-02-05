@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::{deletionmap::DeletionMapWriter, document::{InputDocument, Document}, schema::SchemaRef, DocId};
+use crate::{deletionmap::DeletionMapWriter, document::Document, schema::SchemaRef, DocId};
 
-use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter, SegmentId};
+use super::{BuildingSegmentData, SegmentColumnWriter, SegmentId, SegmentIndexWriter};
 
 pub struct SegmentWriter {
     doc_count: usize,

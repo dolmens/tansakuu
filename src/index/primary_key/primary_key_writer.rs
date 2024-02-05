@@ -1,7 +1,7 @@
 use std::{collections::hash_map::RandomState, sync::Arc};
 
 use crate::{
-    document::{OwnedValue, Value},
+    document::OwnedValue,
     index::IndexWriter,
     util::{
         capacity_policy::FixedCapacityPolicy, hash::hash_string_64,

@@ -11,7 +11,6 @@ mod index_writer_factory;
 mod inverted_index;
 mod posting_iterator;
 mod primary_key;
-mod segment_posting;
 
 pub use index_merger::IndexMerger;
 pub use index_merger_factory::IndexMergerFactory;
@@ -26,4 +25,3 @@ pub use index_writer_factory::IndexWriterFactory;
 pub use inverted_index::InvertedIndexReader;
 pub use posting_iterator::PostingIterator;
 pub use primary_key::PrimaryKeyReader;
-pub use segment_posting::SegmentPosting;

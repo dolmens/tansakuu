@@ -1,3 +1,5 @@
+use crate::schema::TextIndexOptions;
+
 use super::{skip_list::SkipListFormat, DocListFormat};
 
 #[derive(Default, Clone)]
@@ -14,6 +16,14 @@ pub struct PostingFormatBuilder {
 }
 
 impl PostingFormatBuilder {
+    pub fn with_text_index_options(self, text_index_options: &TextIndexOptions) -> Self {
+        Self {
+            has_tflist: text_index_options.has_tflist,
+            has_fieldmask: text_index_options.has_fieldmask,
+            has_position_list: text_index_options.has_position_list,
+        }
+    }
+
     pub fn with_tflist(self) -> Self {
         Self {
             has_tflist: true,

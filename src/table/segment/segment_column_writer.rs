@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     column::{ColumnWriter, ColumnWriterFactory},
-    document::{InputDocument, Document},
+    document::Document,
     schema::SchemaRef,
     DocId,
 };

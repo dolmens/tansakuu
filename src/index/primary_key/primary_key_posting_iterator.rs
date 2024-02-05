@@ -1,4 +1,6 @@
-use crate::{index::PostingIterator, DocId};
+use std::io;
+
+use crate::{index::PostingIterator, DocId, END_DOCID};
 
 pub struct PrimaryKeyPostingIterator {
     docid: DocId,
@@ -11,11 +13,11 @@ impl PrimaryKeyPostingIterator {
 }
 
 impl PostingIterator for PrimaryKeyPostingIterator {
-    fn seek(&mut self, docid: crate::DocId) -> Option<crate::DocId> {
+    fn seek(&mut self, docid: crate::DocId) -> io::Result<crate::DocId> {
         if docid <= self.docid {
-            Some(self.docid)
+            Ok(self.docid)
         } else {
-            None
+            Ok(END_DOCID)
         }
     }
 }

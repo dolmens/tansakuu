@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 
 use crate::{
     column::ColumnSerializerFactory, index::IndexSerializerFactory, schema::SchemaRef,
-    table::segment::SegmentMetaData, DocId,
+    table::segment::SegmentMetaData, DocId, END_DOCID,
 };
 
 use super::{
@@ -104,7 +104,7 @@ impl TableData {
                 .last()
                 .map(|segment| segment.meta().end_docid()))
             .unwrap_or_default();
-        let doc_count = (DocId::MAX - base_docid) as usize;
+        let doc_count = (END_DOCID - base_docid) as usize;
         let meta = SegmentMeta::new(building_segment.segment_id().clone(), base_docid, doc_count);
         let building_segment = BuildingSegment::new(meta, building_segment);
         self.building_segments.push(building_segment);

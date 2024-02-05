@@ -5,9 +5,10 @@ use crate::{
     postings::{
         doc_list_encoder_builder,
         positions::{position_list_encoder_builder, PositionListEncode},
-        DocListEncode, PostingFormat, PostingWriter, TermDictBuilder, TermInfo,
+        DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
-    DocId,
+    schema::IndexType,
+    DocId, END_DOCID,
 };
 
 use super::{InvertedIndexPersistentSegmentData, InvertedIndexPersistentSegmentReader};
@@ -33,11 +34,13 @@ impl IndexMerger for InvertedIndexMerger {
                 terms.insert(term);
             }
         }
-
-        let posting_format = PostingFormat::builder()
-            .with_tflist()
-            .with_position_list()
-            .build();
+        let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
+            PostingFormat::builder()
+                .with_text_index_options(text_index_options)
+                .build()
+        } else {
+            PostingFormat::builder().build()
+        };
         let doc_list_format = posting_format.doc_list_format().clone();
 
         let dict_path = directory.join(index.name().to_string() + ".dict");
@@ -49,11 +52,19 @@ impl IndexMerger for InvertedIndexMerger {
         let posting_path = directory.join(index.name().to_string() + ".posting");
         let posting_output_writer = File::create(posting_path).unwrap();
 
-        let position_skip_list_path =
-            directory.join(index.name().to_string() + ".positions.skiplist");
-        let position_skip_list_output_writer = File::create(position_skip_list_path).unwrap();
-        let position_list_path = directory.join(index.name().to_string() + ".positions");
-        let position_list_output_writer = File::create(position_list_path).unwrap();
+        let position_skip_list_output_writer = if posting_format.has_position_list() {
+            let position_skip_list_path =
+                directory.join(index.name().to_string() + ".positions.skiplist");
+            Some(File::create(position_skip_list_path).unwrap())
+        } else {
+            None
+        };
+        let position_list_output_writer = if posting_format.has_position_list() {
+            let position_list_path = directory.join(index.name().to_string() + ".positions");
+            Some(File::create(position_list_path).unwrap())
+        } else {
+            None
+        };
 
         let mut skip_list_start = 0;
         let mut doc_list_start = 0;
@@ -73,15 +84,23 @@ impl IndexMerger for InvertedIndexMerger {
                 .with_skip_list_output_writer(&skip_list_output_writer)
                 .build();
 
-            let position_list_encoder = position_list_encoder_builder()
-                .with_writer(&position_list_output_writer)
-                .with_skip_list_output_writer(&position_skip_list_output_writer)
-                .build();
+            let position_list_encoder = if posting_format.has_position_list() {
+                Some(
+                    position_list_encoder_builder()
+                        .with_writer(position_list_output_writer.as_ref().unwrap())
+                        .with_skip_list_output_writer(
+                            position_skip_list_output_writer.as_ref().unwrap(),
+                        )
+                        .build(),
+                )
+            } else {
+                None
+            };
 
             let mut posting_writer = PostingWriter::new(
                 posting_format.clone(),
                 doc_list_encoder,
-                Some(position_list_encoder),
+                position_list_encoder,
             );
 
             for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
@@ -92,15 +111,21 @@ impl IndexMerger for InvertedIndexMerger {
                     .unwrap();
                 let segment_reader =
                     InvertedIndexPersistentSegmentReader::new(0, index_segment_data);
-                let posting = segment_reader.segment_posting(hashkey);
-                let docids: Vec<_> = posting
-                    .docids
-                    .iter()
-                    .flat_map(|&docid| segment_docid_mappings[docid as usize])
-                    .collect();
-                for docid in docids {
-                    posting_writer.add_pos(0, 0).unwrap();
-                    posting_writer.end_doc(docid).unwrap();
+                if let Some(posting_reader) = segment_reader.posting_reader(hashkey) {
+                    let mut posting_iterator =
+                        PostingIterator::new(posting_format.clone(), posting_reader);
+                    let mut docid = 0;
+                    loop {
+                        docid = posting_iterator.seek(docid).unwrap();
+                        if docid == END_DOCID {
+                            break;
+                        }
+                        if let Some(new_docid) = segment_docid_mappings[docid as usize] {
+                            posting_writer.add_pos(0, 0).unwrap();
+                            posting_writer.end_doc(new_docid).unwrap();
+                        }
+                        docid += 1;
+                    }
                 }
             }
 
@@ -111,8 +136,7 @@ impl IndexMerger for InvertedIndexMerger {
 
             let (position_list_written_bytes, position_skip_list_written_bytes) = posting_writer
                 .position_list_encoder()
-                .unwrap()
-                .written_bytes();
+                .map_or((0, 0), |encoder| encoder.written_bytes());
 
             let skip_list_end = skip_list_start + skip_list_written_bytes;
             let doc_list_end = doc_list_start + doc_list_written_bytes;
@@ -121,8 +145,9 @@ impl IndexMerger for InvertedIndexMerger {
                 position_skip_list_start + position_skip_list_written_bytes;
 
             let (doc_count, skip_list_item_count) = posting_writer.doc_list_encoder().item_count();
-            let (position_list_item_count, position_skip_list_item_count) =
-                posting_writer.position_list_encoder().unwrap().item_count();
+            let (position_list_item_count, position_skip_list_item_count) = posting_writer
+                .position_list_encoder()
+                .map_or((0, 0), |encoder| encoder.item_count());
 
             let term_info = TermInfo {
                 skip_list_item_count,

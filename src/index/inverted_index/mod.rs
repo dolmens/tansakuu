@@ -1,4 +1,6 @@
+mod buffered_index_decoder;
 mod buffered_posting_iterator;
+mod buffered_segment_decoder;
 mod inverted_index_building_segment_data;
 mod inverted_index_building_segment_reader;
 mod inverted_index_merger;
@@ -8,6 +10,8 @@ mod inverted_index_reader;
 mod inverted_index_segment_data_builder;
 mod inverted_index_serializer;
 mod inverted_index_writer;
+mod persistent_segment_posting_reader;
+mod segment_posting;
 
 pub use buffered_posting_iterator::BufferedPostingIterator;
 pub use inverted_index_building_segment_data::InvertedIndexBuildingSegmentData;
@@ -19,3 +23,4 @@ pub use inverted_index_reader::InvertedIndexReader;
 pub use inverted_index_segment_data_builder::InvertedIndexSegmentDataBuilder;
 pub use inverted_index_serializer::InvertedIndexSerializer;
 pub use inverted_index_writer::InvertedIndexWriter;
+pub use segment_posting::SegmentPosting;

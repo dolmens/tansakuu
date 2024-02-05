@@ -6,19 +6,29 @@ use crate::{
         },
         IndexReader,
     },
+    postings::PostingFormat,
     query::Term,
-    schema::Index,
+    schema::{Index, IndexType},
     table::TableData,
     util::hash::hash_string_64,
 };
 
 pub struct InvertedIndexReader {
+    posting_format: PostingFormat,
     persistent_segments: Vec<InvertedIndexPersistentSegmentReader>,
     building_segments: Vec<InvertedIndexBuildingSegmentReader>,
 }
 
 impl InvertedIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
+        let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
+            PostingFormat::builder()
+                .with_text_index_options(text_index_options)
+                .build()
+        } else {
+            PostingFormat::default()
+        };
+
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
@@ -42,6 +52,7 @@ impl InvertedIndexReader {
         }
 
         Self {
+            posting_format,
             persistent_segments,
             building_segments,
         }
@@ -49,23 +60,24 @@ impl InvertedIndexReader {
 }
 
 impl IndexReader for InvertedIndexReader {
-    fn lookup(&self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator>> {
-        let mut segment_postings = vec![];
+    fn lookup<'a>(&'a self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator + 'a>> {
         let hashkey = hash_string_64(term.keyword());
+        let mut segment_postings = vec![];
         for segment_reader in &self.persistent_segments {
-            let segment_posting = segment_reader.segment_posting(hashkey);
-            if !segment_posting.is_empty() {
+            if let Some(segment_posting) = segment_reader.segment_posting(hashkey) {
                 segment_postings.push(segment_posting);
             }
         }
         for segment_reader in &self.building_segments {
-            let segment_posting = segment_reader.segment_posting(hashkey);
-            if !segment_posting.is_empty() {
+            if let Some(segment_posting) = segment_reader.segment_posting(hashkey) {
                 segment_postings.push(segment_posting);
             }
         }
         if !segment_postings.is_empty() {
-            Some(Box::new(BufferedPostingIterator::new(segment_postings)))
+            Some(Box::new(BufferedPostingIterator::new(
+                &self.posting_format,
+                segment_postings,
+            )))
         } else {
             None
         }

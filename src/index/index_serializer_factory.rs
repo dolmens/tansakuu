@@ -18,12 +18,15 @@ impl IndexSerializerFactory {
         index_data: Arc<dyn IndexSegmentData>,
     ) -> Box<dyn IndexSerializer> {
         match index.index_type() {
-            IndexType::InvertedIndex => {
+            IndexType::Text(_) => {
                 let inverted_index_data = index_data
                     .downcast_arc::<InvertedIndexBuildingSegmentData>()
                     .ok()
                     .unwrap();
-                Box::new(InvertedIndexSerializer::new(index, inverted_index_data))
+                Box::new(InvertedIndexSerializer::new(
+                    index.clone(),
+                    inverted_index_data,
+                ))
             }
             IndexType::PrimaryKey => {
                 let primary_key_data = index_data.downcast_arc().ok().unwrap();

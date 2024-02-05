@@ -5,7 +5,7 @@ use crate::query::Term;
 use super::PostingIterator;
 
 pub trait IndexReader: Send + Sync + DowncastSync {
-    fn lookup(&self, key: &Term) -> Option<Box<dyn PostingIterator>>;
+    fn lookup<'a>(&'a self, key: &Term) -> Option<Box<dyn PostingIterator + 'a>>;
 }
 
 impl_downcast!(sync IndexReader);

@@ -6,8 +6,8 @@ use std::{
 use crate::{
     document::{OwnedValue, Value},
     index::IndexWriter,
-    postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
-    schema::Index,
+    postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat, PostingFormatBuilder},
+    schema::{Index, IndexType},
     util::{
         ha3_capacity_policy::Ha3CapacityPolicy, hash::hash_string_64,
         layered_hashmap::LayeredHashMapWriter,
@@ -21,16 +21,26 @@ pub type PostingTable =
     LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
 
 pub struct InvertedIndexWriter {
-    index: Index,
     posting_table: PostingTable,
     posting_writers: Vec<BuildingPostingWriter>,
     posting_indexes: HashMap<u64, usize>,
     modified_postings: BTreeSet<usize>,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
+    posting_format: PostingFormat,
+    index: Index,
 }
 
 impl InvertedIndexWriter {
     pub fn new(index: Index) -> Self {
+        let posting_format = match index.index_type() {
+            IndexType::Text(text_index_options) => {
+                PostingFormatBuilder::default().with_text_index_options(text_index_options)
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+        .build();
         let hasher_builder = RandomState::new();
         let capacity_policy = Ha3CapacityPolicy;
         let posting_table = PostingTable::with_initial_capacity(
@@ -41,12 +51,13 @@ impl InvertedIndexWriter {
         let postings = posting_table.hashmap();
 
         Self {
-            index,
             posting_table,
             posting_writers: Vec::new(),
             posting_indexes: HashMap::new(),
             modified_postings: BTreeSet::new(),
             index_data: Arc::new(InvertedIndexBuildingSegmentData::new(postings)),
+            posting_format,
+            index,
         }
     }
 }
@@ -59,12 +70,10 @@ impl IndexWriter for InvertedIndexWriter {
                 .posting_indexes
                 .entry(hashkey)
                 .or_insert_with(|| {
-                    let posting_format = PostingFormat::builder()
-                        .with_tflist()
-                        .with_position_list()
-                        .build();
-                    let posting_writer =
-                        BuildingPostingWriter::new(posting_format, HASHMAP_INITIAL_CAPACITY);
+                    let posting_writer = BuildingPostingWriter::new(
+                        self.posting_format.clone(),
+                        HASHMAP_INITIAL_CAPACITY,
+                    );
                     let building_posting_list = posting_writer.building_posting_list().clone();
                     self.posting_table.insert(hashkey, building_posting_list);
                     self.posting_writers.push(posting_writer);

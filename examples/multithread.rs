@@ -6,19 +6,19 @@ use tansakuu::{
     query::Term,
     schema::{SchemaBuilder, COLUMN, INDEXED},
     table::{Table, TableSettings},
-    DocId,
+    DocId, END_DOCID,
 };
 
 fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
     let mut docids = vec![];
     let mut docid = 0;
     loop {
-        match posting_iter.seek(docid) {
-            Some(seeked) => {
-                docids.push(seeked);
-                docid = seeked + 1;
-            }
-            None => break,
+        docid = posting_iter.seek(docid).unwrap();
+        if docid != END_DOCID {
+            docids.push(docid);
+            docid += 1;
+        } else {
+            break;
         }
     }
 

@@ -3,13 +3,11 @@ use std::io;
 use crate::{DocId, END_DOCID, END_POSITION, INVALID_DOCID};
 
 use super::{
-    building_doc_list::BuildingDocListDecoder,
-    doc_list_decoder::DocListDecode,
-    positions::{BuildingPositionListDecoder, PositionListBlock, PositionListDecode},
-    BuildingPostingList, DocListBlock, PostingFormat,
+    positions::PositionListBlock, BuildingPostingList, BuildingPostingReader, DocListBlock,
+    PostingFormat, PostingRead,
 };
 
-pub struct PostingIterator<D: DocListDecode, P: PositionListDecode> {
+pub struct PostingIterator<R: PostingRead> {
     current_docid: DocId,
     current_ttf: u64,
     current_tf: u32,
@@ -21,36 +19,22 @@ pub struct PostingIterator<D: DocListDecode, P: PositionListDecode> {
     current_position_index: u32,
     position_block_cursor: usize,
     position_list_block: Option<Box<PositionListBlock>>,
-    doc_list_decoder: D,
-    position_list_decoder: Option<P>,
+    posting_reader: R,
+    // doc_list_decoder: D,
+    // position_list_decoder: Option<P>,
     posting_format: PostingFormat,
 }
 
-impl<'a> PostingIterator<BuildingDocListDecoder<'a>, BuildingPositionListDecoder<'a>> {
-    pub fn open(building_posting_list: &'a BuildingPostingList) -> Self {
+impl<'a> PostingIterator<BuildingPostingReader<'a>> {
+    pub fn open_building_posting_list(building_posting_list: &'a BuildingPostingList) -> Self {
         let posting_format = building_posting_list.posting_format.clone();
-
-        let doc_list_decoder =
-            BuildingDocListDecoder::open(&building_posting_list.building_doc_list);
-
-        let position_list_decoder =
-            building_posting_list
-                .building_position_list
-                .as_ref()
-                .map(|building_position_list| {
-                    BuildingPositionListDecoder::open(building_position_list)
-                });
-
-        Self::new(posting_format, doc_list_decoder, position_list_decoder)
+        let posting_reader = BuildingPostingReader::open(building_posting_list);
+        Self::new(posting_format, posting_reader)
     }
 }
 
-impl<D: DocListDecode, P: PositionListDecode> PostingIterator<D, P> {
-    pub fn new(
-        posting_format: PostingFormat,
-        doc_list_decoder: D,
-        position_list_decoder: Option<P>,
-    ) -> Self {
+impl<R: PostingRead> PostingIterator<R> {
+    pub fn new(posting_format: PostingFormat, posting_reader: R) -> Self {
         let doc_list_block = DocListBlock::new(posting_format.doc_list_format());
         let position_list_block =
             if posting_format.has_tflist() && posting_format.has_position_list() {
@@ -71,9 +55,8 @@ impl<D: DocListDecode, P: PositionListDecode> PostingIterator<D, P> {
             current_position_index: 0,
             position_block_cursor: 0,
             position_list_block,
+            posting_reader,
             posting_format,
-            doc_list_decoder,
-            position_list_decoder,
         }
     }
 
@@ -82,7 +65,7 @@ impl<D: DocListDecode, P: PositionListDecode> PostingIterator<D, P> {
 
         if self.block_cursor == self.doc_list_block.len || docid > self.doc_list_block.last_docid {
             if !self
-                .doc_list_decoder
+                .posting_reader
                 .decode_one_block(docid, &mut self.doc_list_block)?
             {
                 self.current_docid = END_DOCID;
@@ -118,48 +101,48 @@ impl<D: DocListDecode, P: PositionListDecode> PostingIterator<D, P> {
         if !self.posting_format.has_tflist() || !self.posting_format.has_position_list() {
             return Ok(END_POSITION);
         }
-        if let Some(position_list_decoder) = self.position_list_decoder.as_mut() {
-            let pos = std::cmp::max(self.current_position, pos);
-            let position_list_block = self.position_list_block.as_deref_mut().unwrap();
+        let pos = std::cmp::max(self.current_position, pos);
+        let position_list_block = self.position_list_block.as_deref_mut().unwrap();
 
-            if self.position_docid != self.current_docid {
-                if self.position_block_cursor == position_list_block.len
-                    || self.current_ttf
-                        > position_list_block.start_ttf + (position_list_block.len as u64)
+        if self.position_docid != self.current_docid {
+            if self.position_block_cursor == position_list_block.len
+                || self.current_ttf
+                    > position_list_block.start_ttf + (position_list_block.len as u64)
+            {
+                if !self
+                    .posting_reader
+                    .decode_one_position_block(self.current_ttf, position_list_block)?
                 {
-                    if !position_list_decoder
-                        .decode_one_block(self.current_ttf, position_list_block)?
-                    {
-                        return Ok(END_POSITION);
-                    }
-                }
-                self.position_docid = self.current_docid;
-                self.position_block_cursor =
-                    (self.current_ttf - position_list_block.start_ttf) as usize;
-                self.current_position = position_list_block.positions[self.position_block_cursor];
-                self.current_position_index = 0;
-                self.position_block_cursor += 1;
-            }
-
-            while self.current_position < pos {
-                self.current_position_index += 1;
-                if self.current_position_index == self.current_tf {
                     return Ok(END_POSITION);
                 }
-                if self.position_block_cursor == position_list_block.len {
-                    if !position_list_decoder.decode_one_block(0, position_list_block)? {
-                        return Ok(END_POSITION);
-                    }
-                }
-
-                self.current_position += position_list_block.positions[self.position_block_cursor];
-                self.position_block_cursor += 1;
             }
-
-            return Ok(self.current_position);
+            self.position_docid = self.current_docid;
+            self.position_block_cursor =
+                (self.current_ttf - position_list_block.start_ttf) as usize;
+            self.current_position = position_list_block.positions[self.position_block_cursor];
+            self.current_position_index = 0;
+            self.position_block_cursor += 1;
         }
 
-        Ok(END_POSITION)
+        while self.current_position < pos {
+            self.current_position_index += 1;
+            if self.current_position_index == self.current_tf {
+                return Ok(END_POSITION);
+            }
+            if self.position_block_cursor == position_list_block.len {
+                if !self
+                    .posting_reader
+                    .decode_one_position_block(0, position_list_block)?
+                {
+                    return Ok(END_POSITION);
+                }
+            }
+
+            self.current_position += position_list_block.positions[self.position_block_cursor];
+            self.position_block_cursor += 1;
+        }
+
+        return Ok(self.current_position);
     }
 }
 
@@ -201,7 +184,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[0])?;
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         assert_eq!(posting_iterator.seek(0)?, 0);
         assert_eq!(posting_iterator.seek(1)?, END_DOCID);
@@ -211,7 +194,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[1])?;
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         assert_eq!(posting_iterator.seek(0)?, 0);
         assert_eq!(posting_iterator.seek(1)?, docids[1]);
@@ -227,14 +210,14 @@ mod tests {
 
         // seek one by one
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for &docid in &docids[..BLOCK_LEN] {
             assert_eq!(posting_iterator.seek(docid)?, docid);
         }
         assert_eq!(posting_iterator.seek(docids[BLOCK_LEN - 1] + 1)?, END_DOCID);
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         // skip some items
         //
@@ -253,7 +236,7 @@ mod tests {
 
         // seek one by one
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for &docid in &docids[..BLOCK_LEN * 2 + 3] {
             assert_eq!(posting_iterator.seek(docid)?, docid);
@@ -265,7 +248,7 @@ mod tests {
 
         // skip some items
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for (i, &docid) in docids[..BLOCK_LEN * 2 + 3].iter().enumerate() {
             if i % 2 == 0 {
@@ -275,7 +258,7 @@ mod tests {
 
         // skip some blocks
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         let docid = docids[BLOCK_LEN + 3];
         assert_eq!(posting_iterator.seek(docid)?, docid);
@@ -315,7 +298,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[0])?;
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         assert_eq!(posting_iterator.seek(0)?, 0);
 
@@ -331,7 +314,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[1])?;
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         assert_eq!(posting_iterator.seek(0)?, 0);
         assert_eq!(posting_iterator.seek(1)?, docids[1]);
@@ -353,14 +336,14 @@ mod tests {
 
         // seek one by one
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for &docid in &docids[..BLOCK_LEN] {
             assert_eq!(posting_iterator.seek(docid)?, docid);
         }
         assert_eq!(posting_iterator.seek(docids[BLOCK_LEN - 1] + 1)?, END_DOCID);
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         // skip some items
         //
@@ -379,7 +362,7 @@ mod tests {
 
         // seek one by one
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for &docid in &docids[..BLOCK_LEN * 2 + 3] {
             assert_eq!(posting_iterator.seek(docid)?, docid);
@@ -391,7 +374,7 @@ mod tests {
 
         // skip some items
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         for (i, &docid) in docids[..BLOCK_LEN * 2 + 3].iter().enumerate() {
             if i % 2 == 0 {
@@ -401,7 +384,7 @@ mod tests {
 
         // skip some blocks
 
-        let mut posting_iterator = PostingIterator::open(&posting_list);
+        let mut posting_iterator = PostingIterator::open_building_posting_list(&posting_list);
 
         let docid = docids[BLOCK_LEN + 3];
         assert_eq!(posting_iterator.seek(docid)?, docid);

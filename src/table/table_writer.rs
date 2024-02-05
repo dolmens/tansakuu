@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    document::{value_to_string, InputDocument, Value},
-    query::Term,
-    util::hash::hash_string_64,
-};
+use crate::{document::Document, query::Term, util::hash::hash_string_64};
 
 use super::{
     segment::{BuildingSegmentData, SegmentWriter},
@@ -30,11 +26,11 @@ impl<'a> TableWriter<'a> {
         }
     }
 
-    pub fn add_doc(&mut self, doc: &InputDocument) {
+    pub fn add_doc<D: Document>(&mut self, doc: &D) {
         self.segment_writer.add_doc(doc);
     }
 
-    pub fn delete_doc(&mut self, term: &Term) {
+    pub fn delete_docs(&mut self, term: &Term) {
         let hashkey = hash_string_64(term.keyword());
         self.table_reader
             .primary_key_index_reader()

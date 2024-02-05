@@ -11,7 +11,7 @@ pub struct IndexSegmentDataFactory {}
 impl IndexSegmentDataFactory {
     pub fn create_builder(&self, index: &Index) -> Box<dyn IndexSegmentDataBuilder> {
         match index.index_type() {
-            IndexType::InvertedIndex => Box::new(InvertedIndexSegmentDataBuilder::new()),
+            IndexType::Text(_) => Box::new(InvertedIndexSegmentDataBuilder::new()),
             IndexType::PrimaryKey => Box::new(PrimaryKeySegmentDataBuilder::new()),
         }
     }

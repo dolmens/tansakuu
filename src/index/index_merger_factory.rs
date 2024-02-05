@@ -8,7 +8,7 @@ pub struct IndexMergerFactory {}
 impl IndexMergerFactory {
     pub fn create(&self, index: &Index) -> Box<dyn IndexMerger> {
         match index.index_type() {
-            IndexType::InvertedIndex => Box::new(InvertedIndexMerger::default()),
+            IndexType::Text(_) => Box::new(InvertedIndexMerger::default()),
             IndexType::PrimaryKey => Box::new(PrimaryKeyMerger::default()),
         }
     }
