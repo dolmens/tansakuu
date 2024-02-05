@@ -1,8 +1,9 @@
 use std::io::Cursor;
 
 use crate::postings::{
-    positions::PositionListDecoder, skip_list::SkipListReader, DocListDecoder, PostingRead,
-    PostingReader, TermInfo,
+    positions::{PositionListDecode, PositionListDecoder},
+    skip_list::SkipListReader,
+    DocListDecode, DocListDecoder, PostingFormat, PostingRead, TermInfo,
 };
 
 use super::InvertedIndexPersistentSegmentData;
@@ -18,10 +19,11 @@ pub type PersistentSegmentPositionListDecoder<'a> =
     PositionListDecoder<PersistentSegmentDataReader<'a>, PersistentSegmentSkipListReader<'a>>;
 
 pub struct PersistentSegmentPostingReader<'a> {
-    posting_reader: PostingReader<
-        PersistentSegmentDocListDecoder<'a>,
-        PersistentSegmentPositionListDecoder<'a>,
-    >,
+    doc_list_decoder: PersistentSegmentDocListDecoder<'a>,
+    position_list_decoder: Option<PersistentSegmentPositionListDecoder<'a>>,
+    term_info: TermInfo,
+    posting_format: PostingFormat,
+    index_data: &'a InvertedIndexPersistentSegmentData,
 }
 
 impl<'a> PersistentSegmentPostingReader<'a> {
@@ -41,27 +43,28 @@ impl<'a> PersistentSegmentPostingReader<'a> {
             skip_list_data,
         );
 
-        let position_list_decoder = if posting_format.has_position_list() {
-            let position_list_data =
-                &index_data.position_list_data.as_slice()[term_info.position_list_range()];
-            let position_list_data = Cursor::new(position_list_data);
-            let position_skip_list_data = &index_data.position_skip_list_data.as_slice()
-                [term_info.position_skip_list_range()];
+        Self {
+            doc_list_decoder,
+            position_list_decoder: None,
+            term_info,
+            posting_format,
+            index_data,
+        }
+    }
 
-            Some(PositionListDecoder::open(
-                term_info.position_list_item_count,
-                position_list_data,
-                term_info.position_skip_list_item_count,
-                position_skip_list_data,
-            ))
-        } else {
-            None
-        };
+    fn init_position_list_decoder(&mut self) {
+        let position_list_data =
+            &self.index_data.position_list_data.as_slice()[self.term_info.position_list_range()];
+        let position_list_data = Cursor::new(position_list_data);
+        let position_skip_list_data = &self.index_data.position_skip_list_data.as_slice()
+            [self.term_info.position_skip_list_range()];
 
-        let posting_reader =
-            PostingReader::new(posting_format, doc_list_decoder, position_list_decoder);
-
-        Self { posting_reader }
+        self.position_list_decoder = Some(PositionListDecoder::open(
+            self.term_info.position_list_item_count,
+            position_list_data,
+            self.term_info.position_skip_list_item_count,
+            position_skip_list_data,
+        ));
     }
 }
 
@@ -71,7 +74,8 @@ impl<'a> PostingRead for PersistentSegmentPostingReader<'a> {
         docid: crate::DocId,
         doc_list_block: &mut crate::postings::DocListBlock,
     ) -> std::io::Result<bool> {
-        self.posting_reader.decode_one_block(docid, doc_list_block)
+        self.doc_list_decoder
+            .decode_one_block(docid, doc_list_block)
     }
 
     fn decode_one_position_block(
@@ -79,7 +83,15 @@ impl<'a> PostingRead for PersistentSegmentPostingReader<'a> {
         from_ttf: u64,
         position_list_block: &mut crate::postings::positions::PositionListBlock,
     ) -> std::io::Result<bool> {
-        self.posting_reader
-            .decode_one_position_block(from_ttf, position_list_block)
+        if !self.posting_format.has_position_list() {
+            return Ok(false);
+        }
+        if self.position_list_decoder.is_none() {
+            self.init_position_list_decoder();
+        }
+        self.position_list_decoder
+            .as_mut()
+            .unwrap()
+            .decode_one_block(from_ttf, position_list_block)
     }
 }

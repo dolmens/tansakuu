@@ -52,8 +52,8 @@ impl<'a> InvertedIndexPostingReader<'a> {
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if let Some(segment_decoder) = self.segment_reader.as_mut() {
-            segment_decoder.decode_one_position_block(from_ttf, position_list_block)
+        if let Some(segment_reader) = self.segment_reader.as_mut() {
+            segment_reader.decode_one_position_block(from_ttf, position_list_block)
         } else {
             Ok(false)
         }
