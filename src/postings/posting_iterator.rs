@@ -58,22 +58,9 @@ impl<R: PostingRead> PostingIterator<R> {
         let docid = std::cmp::max(self.current_docid, docid);
 
         if self.block_cursor == self.doc_list_block.len || docid > self.doc_list_block.last_docid {
-            if !self
-                .posting_reader
-                .decode_one_block(docid, &mut self.doc_list_block)?
-            {
-                self.current_docid = END_DOCID;
+            if !self.decode_one_block(docid)? {
                 return Ok(END_DOCID);
             }
-            self.current_docid = self.doc_list_block.base_docid + self.doc_list_block.docids[0];
-            if let Some(termfreqs) = &self.doc_list_block.termfreqs {
-                self.current_ttf = self.doc_list_block.base_ttf;
-                self.current_tf = termfreqs[0];
-            }
-            if let Some(fieldmasks) = &self.doc_list_block.fieldmasks {
-                self.current_fieldmask = fieldmasks[0];
-            }
-            self.block_cursor = 1;
         }
 
         while self.current_docid < docid {
@@ -95,32 +82,14 @@ impl<R: PostingRead> PostingIterator<R> {
         if !self.posting_format.has_tflist() || !self.posting_format.has_position_list() {
             return Ok(END_POSITION);
         }
-        if self.position_list_block.is_none() {
-            self.position_list_block = Some(Box::new(PositionListBlock::new()));
-        }
-        let position_list_block = self.position_list_block.as_deref_mut().unwrap();
 
         if self.position_docid != self.current_docid {
-            if self.position_block_cursor == position_list_block.len
-                || self.current_ttf
-                    > position_list_block.start_ttf + (position_list_block.len as u64)
-            {
-                if !self
-                    .posting_reader
-                    .decode_one_position_block(self.current_ttf, position_list_block)?
-                {
-                    return Ok(END_POSITION);
-                }
+            if !self.decode_one_position_block()? {
+                return Ok(END_POSITION);
             }
-            self.position_docid = self.current_docid;
-            self.position_block_cursor =
-                (self.current_ttf - position_list_block.start_ttf) as usize;
-            self.current_position = position_list_block.positions[self.position_block_cursor];
-            self.current_position_index = 0;
-            self.position_block_cursor += 1;
         }
 
-        let pos = std::cmp::max(self.current_position, pos);
+        let position_list_block = self.position_list_block.as_deref_mut().unwrap();
         while self.current_position < pos {
             self.current_position_index += 1;
             if self.current_position_index == self.current_tf {
@@ -140,6 +109,52 @@ impl<R: PostingRead> PostingIterator<R> {
         }
 
         return Ok(self.current_position);
+    }
+
+    fn decode_one_block(&mut self, docid: DocId) -> io::Result<bool> {
+        if !self
+            .posting_reader
+            .decode_one_block(docid, &mut self.doc_list_block)?
+        {
+            self.current_docid = END_DOCID;
+            return Ok(false);
+        }
+        self.current_docid = self.doc_list_block.base_docid + self.doc_list_block.docids[0];
+        if let Some(termfreqs) = &self.doc_list_block.termfreqs {
+            self.current_ttf = self.doc_list_block.base_ttf;
+            self.current_tf = termfreqs[0];
+        }
+        if let Some(fieldmasks) = &self.doc_list_block.fieldmasks {
+            self.current_fieldmask = fieldmasks[0];
+        }
+        self.block_cursor = 1;
+
+        Ok(true)
+    }
+
+    fn decode_one_position_block(&mut self) -> io::Result<bool> {
+        if self.position_list_block.is_none() {
+            self.position_list_block = Some(Box::new(PositionListBlock::new()));
+        }
+        let position_list_block = self.position_list_block.as_deref_mut().unwrap();
+
+        if self.position_block_cursor == position_list_block.len
+            || self.current_ttf > position_list_block.start_ttf + (position_list_block.len as u64)
+        {
+            if !self
+                .posting_reader
+                .decode_one_position_block(self.current_ttf, position_list_block)?
+            {
+                return Ok(false);
+            }
+        }
+        self.position_docid = self.current_docid;
+        self.position_block_cursor = (self.current_ttf - position_list_block.start_ttf) as usize;
+        self.current_position = position_list_block.positions[self.position_block_cursor];
+        self.current_position_index = 0;
+        self.position_block_cursor += 1;
+
+        Ok(true)
     }
 }
 
