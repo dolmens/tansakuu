@@ -1,4 +1,4 @@
-use std::io::{self};
+use std::io;
 
 use crate::{
     postings::{positions::PositionListBlock, BuildingPostingReader, DocListBlock, PostingRead},
