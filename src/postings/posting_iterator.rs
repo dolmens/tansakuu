@@ -36,12 +36,6 @@ impl<'a> PostingIterator<BuildingPostingReader<'a>> {
 impl<R: PostingRead> PostingIterator<R> {
     pub fn new(posting_format: PostingFormat, posting_reader: R) -> Self {
         let doc_list_block = DocListBlock::new(posting_format.doc_list_format());
-        let position_list_block =
-            if posting_format.has_tflist() && posting_format.has_position_list() {
-                Some(Box::new(PositionListBlock::new()))
-            } else {
-                None
-            };
 
         Self {
             current_docid: 0,
@@ -54,7 +48,7 @@ impl<R: PostingRead> PostingIterator<R> {
             current_position: 0,
             current_position_index: 0,
             position_block_cursor: 0,
-            position_list_block,
+            position_list_block: None,
             posting_reader,
             posting_format,
         }
@@ -101,7 +95,9 @@ impl<R: PostingRead> PostingIterator<R> {
         if !self.posting_format.has_tflist() || !self.posting_format.has_position_list() {
             return Ok(END_POSITION);
         }
-        let pos = std::cmp::max(self.current_position, pos);
+        if self.position_list_block.is_none() {
+            self.position_list_block = Some(Box::new(PositionListBlock::new()));
+        }
         let position_list_block = self.position_list_block.as_deref_mut().unwrap();
 
         if self.position_docid != self.current_docid {
@@ -124,6 +120,7 @@ impl<R: PostingRead> PostingIterator<R> {
             self.position_block_cursor += 1;
         }
 
+        let pos = std::cmp::max(self.current_position, pos);
         while self.current_position < pos {
             self.current_position_index += 1;
             if self.current_position_index == self.current_tf {
@@ -132,7 +129,7 @@ impl<R: PostingRead> PostingIterator<R> {
             if self.position_block_cursor == position_list_block.len {
                 if !self
                     .posting_reader
-                    .decode_one_position_block(0, position_list_block)?
+                    .decode_one_position_block(self.current_ttf, position_list_block)?
                 {
                     return Ok(END_POSITION);
                 }

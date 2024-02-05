@@ -75,7 +75,7 @@ impl IndexReader for InvertedIndexReader {
         }
         if !segment_postings.is_empty() {
             Some(Box::new(BufferedPostingIterator::new(
-                &self.posting_format,
+                self.posting_format.clone(),
                 segment_postings,
             )))
         } else {

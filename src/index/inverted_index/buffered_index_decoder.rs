@@ -1,11 +1,14 @@
 use std::io;
 
-use crate::{postings::DocListBlock, DocId, INVALID_DOCID};
+use crate::{
+    postings::{positions::PositionListBlock, DocListBlock},
+    DocId, INVALID_DOCID,
+};
 
 use super::{buffered_segment_decoder::BufferedSegmentDecoder, SegmentPosting};
 
 pub struct BufferedIndexDecoder<'a> {
-    decoder: Option<BufferedSegmentDecoder<'a>>,
+    segment_decoder: Option<BufferedSegmentDecoder<'a>>,
     cursor: usize,
     postings: Vec<SegmentPosting<'a>>,
 }
@@ -13,7 +16,7 @@ pub struct BufferedIndexDecoder<'a> {
 impl<'a> BufferedIndexDecoder<'a> {
     pub fn new(segment_postings: Vec<SegmentPosting<'a>>) -> Self {
         Self {
-            decoder: None,
+            segment_decoder: None,
             cursor: 0,
             postings: segment_postings,
         }
@@ -24,12 +27,12 @@ impl<'a> BufferedIndexDecoder<'a> {
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
-        if self.decoder.is_none() {
+        if self.segment_decoder.is_none() {
             self.move_to_segment(docid);
         }
         loop {
             if self
-                .decoder
+                .segment_decoder
                 .as_mut()
                 .unwrap()
                 .decode_one_block(docid, doc_list_block)?
@@ -42,12 +45,24 @@ impl<'a> BufferedIndexDecoder<'a> {
         }
     }
 
+    pub fn decode_one_position_block(
+        &mut self,
+        from_ttf: u64,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        if let Some(segment_decoder) = self.segment_decoder.as_mut() {
+            segment_decoder.decode_one_position_block(from_ttf, position_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
     fn move_to_segment(&mut self, docid: DocId) -> bool {
         let cursor = self.locate_segment(self.cursor, docid);
         if cursor >= self.postings.len() {
             return false;
         }
-        self.decoder = Some(BufferedSegmentDecoder::open(unsafe {
+        self.segment_decoder = Some(BufferedSegmentDecoder::open(unsafe {
             std::mem::transmute(&self.postings[cursor])
         }));
         self.cursor = cursor + 1;
