@@ -92,31 +92,30 @@ impl ValueReader for TermInfoValueReader {
         self.term_infos.clear();
         let num_els = VInt::deserialize_u64(&mut data)?;
         for _ in 0..num_els {
-            let skip_list_item_count = VInt::deserialize_u64(&mut data)? as usize;
-            let skip_list_start = VInt::deserialize_u64(&mut data)? as usize;
-            let skip_list_end = VInt::deserialize_u64(&mut data)? as usize;
-            let doc_count = VInt::deserialize_u64(&mut data)? as usize;
+            let df = VInt::deserialize_u64(&mut data)? as usize;
             let doc_list_start = VInt::deserialize_u64(&mut data)? as usize;
             let doc_list_end = VInt::deserialize_u64(&mut data)? as usize;
-            let position_skip_list_item_count = VInt::deserialize_u64(&mut data)? as usize;
-            let position_skip_list_start = VInt::deserialize_u64(&mut data)? as usize;
-            let position_skip_list_end = VInt::deserialize_u64(&mut data)? as usize;
-            let position_list_item_count = VInt::deserialize_u64(&mut data)? as usize;
+            let skip_list_start = VInt::deserialize_u64(&mut data)? as usize;
+            let skip_list_end = VInt::deserialize_u64(&mut data)? as usize;
+
+            let ttf = VInt::deserialize_u64(&mut data)? as usize;
             let position_list_start = VInt::deserialize_u64(&mut data)? as usize;
             let position_list_end = VInt::deserialize_u64(&mut data)? as usize;
+            let position_skip_list_start = VInt::deserialize_u64(&mut data)? as usize;
+            let position_skip_list_end = VInt::deserialize_u64(&mut data)? as usize;
+
             let term_info = TermInfo {
-                skip_list_item_count,
-                skip_list_start,
-                skip_list_end,
-                doc_count,
+                df,
                 doc_list_start,
                 doc_list_end,
-                position_skip_list_item_count,
-                position_skip_list_start,
-                position_skip_list_end,
-                position_list_item_count,
+                skip_list_start,
+                skip_list_end,
+
+                ttf,
                 position_list_start,
                 position_list_end,
+                position_skip_list_start,
+                position_skip_list_end,
             };
             self.term_infos.push(term_info);
         }
@@ -143,18 +142,17 @@ impl ValueWriter for TermInfoValueWriter {
             return;
         }
         for term_info in &self.term_infos {
-            VInt(term_info.skip_list_item_count as u64).serialize_into_vec(buffer);
-            VInt(term_info.skip_list_start as u64).serialize_into_vec(buffer);
-            VInt(term_info.skip_list_end as u64).serialize_into_vec(buffer);
-            VInt(term_info.doc_count as u64).serialize_into_vec(buffer);
+            VInt(term_info.df as u64).serialize_into_vec(buffer);
             VInt(term_info.doc_list_start as u64).serialize_into_vec(buffer);
             VInt(term_info.doc_list_end as u64).serialize_into_vec(buffer);
-            VInt(term_info.position_skip_list_item_count as u64).serialize_into_vec(buffer);
-            VInt(term_info.position_skip_list_start as u64).serialize_into_vec(buffer);
-            VInt(term_info.position_skip_list_end as u64).serialize_into_vec(buffer);
-            VInt(term_info.position_list_item_count as u64).serialize_into_vec(buffer);
+            VInt(term_info.skip_list_start as u64).serialize_into_vec(buffer);
+            VInt(term_info.skip_list_end as u64).serialize_into_vec(buffer);
+
+            VInt(term_info.ttf as u64).serialize_into_vec(buffer);
             VInt(term_info.position_list_start as u64).serialize_into_vec(buffer);
             VInt(term_info.position_list_end as u64).serialize_into_vec(buffer);
+            VInt(term_info.position_skip_list_start as u64).serialize_into_vec(buffer);
+            VInt(term_info.position_skip_list_end as u64).serialize_into_vec(buffer);
         }
     }
 

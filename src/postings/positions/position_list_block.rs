@@ -1,9 +1,9 @@
-use crate::POSITION_BLOCK_LEN;
+use crate::POSITION_LIST_BLOCK_LEN;
 
 pub struct PositionListBlock {
     pub start_ttf: u64,
     pub len: usize,
-    pub positions: [u32; POSITION_BLOCK_LEN],
+    pub positions: [u32; POSITION_LIST_BLOCK_LEN],
 }
 
 impl PositionListBlock {
@@ -11,7 +11,7 @@ impl PositionListBlock {
         Self {
             start_ttf: 0,
             len: 0,
-            positions: [0; POSITION_BLOCK_LEN],
+            positions: [0; POSITION_LIST_BLOCK_LEN],
         }
     }
 }

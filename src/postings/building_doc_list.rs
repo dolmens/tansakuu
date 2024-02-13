@@ -97,8 +97,8 @@ impl<A: Allocator> DocListEncode for BuildingDocListEncoder<A> {
         self.doc_list_encoder.flush()
     }
 
-    fn item_count(&self) -> (usize, usize) {
-        self.doc_list_encoder.item_count()
+    fn df(&self) -> usize {
+        self.doc_list_encoder.df()
     }
 
     fn written_bytes(&self) -> (usize, usize) {

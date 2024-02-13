@@ -63,12 +63,12 @@ impl<D: DocListEncode, P: PositionListEncode> PostingWriter<D, P> {
         Ok(())
     }
 
-    pub fn doc_list_item_count(&self) -> (usize, usize) {
-        self.doc_list_encoder.item_count()
+    pub fn df(&self) -> usize {
+        self.doc_list_encoder.df()
     }
 
-    pub fn position_list_item_count(&self) -> Option<(usize, usize)> {
-        self.position_list_encoder.as_ref().map(|p| p.item_count())
+    pub fn ttf(&self) -> Option<usize> {
+        self.position_list_encoder.as_ref().map(|p| p.ttf())
     }
 
     pub fn doc_list_written_bytes(&self) -> (usize, usize) {

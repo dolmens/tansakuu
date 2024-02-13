@@ -1,8 +1,8 @@
 use crate::schema::{Index, IndexType};
 
 use super::{
-    inverted_index::InvertedIndexSegmentDataBuilder,
-    primary_key::PrimaryKeySegmentDataBuilder, IndexSegmentDataBuilder,
+    inverted_index::InvertedIndexSegmentDataBuilder, primary_key::PrimaryKeySegmentDataBuilder,
+    IndexSegmentDataBuilder,
 };
 
 #[derive(Default)]

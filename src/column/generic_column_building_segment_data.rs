@@ -1,6 +1,6 @@
 use allocator_api2::alloc::Global;
 
-use crate::{DocId, util::chunked_vec::ChunkedVec};
+use crate::{util::chunked_vec::ChunkedVec, DocId};
 
 use super::ColumnSegmentData;
 

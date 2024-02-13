@@ -144,24 +144,23 @@ impl IndexMerger for InvertedIndexMerger {
             let position_skip_list_end =
                 position_skip_list_start + position_skip_list_written_bytes;
 
-            let (doc_count, skip_list_item_count) = posting_writer.doc_list_encoder().item_count();
-            let (position_list_item_count, position_skip_list_item_count) = posting_writer
+            let df = posting_writer.doc_list_encoder().df();
+            let ttf = posting_writer
                 .position_list_encoder()
-                .map_or((0, 0), |encoder| encoder.item_count());
+                .map_or(0, |encoder| encoder.ttf());
 
             let term_info = TermInfo {
-                skip_list_item_count,
-                skip_list_start,
-                skip_list_end,
-                doc_count,
+                df,
                 doc_list_start,
                 doc_list_end,
-                position_skip_list_item_count,
-                position_skip_list_start,
-                position_skip_list_end,
-                position_list_item_count,
+                skip_list_start,
+                skip_list_end,
+
+                ttf,
                 position_list_start,
                 position_list_end,
+                position_skip_list_start,
+                position_skip_list_end,
             };
 
             skip_list_start = skip_list_end;

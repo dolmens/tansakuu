@@ -36,7 +36,7 @@ pub trait DocListDecode {
 
 pub struct DocListDecoder<R: Read + Seek, S: SkipListRead> {
     read_count: usize,
-    doc_count: usize,
+    df: usize,
     reader: R,
     skip_list_reader: S,
     doc_list_format: DocListFormat,
@@ -45,12 +45,12 @@ pub struct DocListDecoder<R: Read + Seek, S: SkipListRead> {
 impl<R: Read + Seek, S: Read> DocListDecoder<R, SkipListReader<S>> {
     pub fn open(
         doc_list_format: DocListFormat,
-        doc_count: usize,
+        df: usize,
         reader: R,
-        skip_list_item_count: usize,
         skip_list_input_reader: S,
     ) -> Self {
         let skip_list_format = doc_list_format.skip_list_format().clone();
+        let skip_list_item_count = (df + DOC_LIST_BLOCK_LEN - 1) / DOC_LIST_BLOCK_LEN;
         let skip_list_reader = SkipListReader::open(
             skip_list_format,
             skip_list_item_count,
@@ -59,7 +59,7 @@ impl<R: Read + Seek, S: Read> DocListDecoder<R, SkipListReader<S>> {
 
         Self {
             read_count: 0,
-            doc_count,
+            df,
             reader,
             skip_list_reader,
             doc_list_format,
@@ -76,7 +76,7 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecoder<R, S> {
     ) -> Self {
         Self {
             read_count: 0,
-            doc_count,
+            df: doc_count,
             reader,
             skip_list_reader,
             doc_list_format,
@@ -84,11 +84,11 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecoder<R, S> {
     }
 
     pub fn eof(&self) -> bool {
-        self.read_count == self.doc_count
+        self.read_count == self.df
     }
 
     pub fn doc_count(&self) -> usize {
-        self.doc_count
+        self.df
     }
 
     pub fn read_count(&self) -> usize {
@@ -117,7 +117,7 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
         let (skip_found, prev_key, block_last_key, start_offset, _end_offset, skipped_count) =
             self.skip_list_reader.seek(docid as u64)?;
         if !skip_found {
-            self.read_count = self.doc_count;
+            self.read_count = self.df;
             return Ok(false);
         }
 
@@ -131,7 +131,7 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
 
         self.reader.seek(SeekFrom::Start(start_offset))?;
 
-        let block_len = std::cmp::min(self.doc_count - self.read_count, DOC_LIST_BLOCK_LEN);
+        let block_len = std::cmp::min(self.df - self.read_count, DOC_LIST_BLOCK_LEN);
         self.read_count += block_len;
         doc_list_block.len = block_len;
         let block_encoder = BlockEncoder;
@@ -246,7 +246,7 @@ mod tests {
         );
 
         assert!(!decoder.eof());
-        assert_eq!(decoder.doc_count, BLOCK_LEN * 2 + 3);
+        assert_eq!(decoder.df, BLOCK_LEN * 2 + 3);
         assert_eq!(decoder.read_count, 0);
 
         assert!(decoder.decode_one_block(0, &mut block)?);

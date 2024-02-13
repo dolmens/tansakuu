@@ -10,7 +10,7 @@
 
 use std::{
     ptr::NonNull,
-    sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering, AtomicU32, AtomicU8},
+    sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering},
 };
 
 macro_rules! atomic {

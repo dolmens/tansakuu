@@ -85,8 +85,8 @@ impl<A: Allocator> PositionListEncode for BuildingPositionListEncoder<A> {
         self.position_list_encoder.flush()
     }
 
-    fn item_count(&self) -> (usize, usize) {
-        self.position_list_encoder.item_count()
+    fn ttf(&self) -> usize {
+        self.position_list_encoder.ttf()
     }
 
     fn written_bytes(&self) -> (usize, usize) {
@@ -187,12 +187,12 @@ mod tests {
             building_position_list::BuildingPositionListDecoder, BuildingPositionListEncoder,
             PositionListBlock, PositionListDecode, PositionListEncode,
         },
-        POSITION_BLOCK_LEN,
+        POSITION_LIST_BLOCK_LEN,
     };
 
     #[test]
     fn test_basic() -> io::Result<()> {
-        const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
+        const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
         let mut position_list_encoder: BuildingPositionListEncoder =
             BuildingPositionListEncoder::new(1024);
         let building_position_list = position_list_encoder.building_position_list().clone();
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn test_multi_thread() -> io::Result<()> {
-        const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
+        const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
         let mut position_list_encoder: BuildingPositionListEncoder =
             BuildingPositionListEncoder::new(1024);
         let building_position_list = position_list_encoder.building_position_list().clone();

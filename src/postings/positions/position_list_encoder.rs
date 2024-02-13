@@ -11,7 +11,7 @@ use crate::{
         skip_list::{BasicSkipListWriter, SkipListFormat, SkipListWrite, SkipListWriter},
     },
     util::atomic::{AcqRelU64, RelaxedU32},
-    POSITION_BLOCK_LEN,
+    POSITION_LIST_BLOCK_LEN,
 };
 
 use super::PositionListBlock;
@@ -20,12 +20,12 @@ pub trait PositionListEncode {
     fn add_pos(&mut self, pos: u32) -> io::Result<()>;
     fn end_doc(&mut self);
     fn flush(&mut self) -> io::Result<()>;
-    fn item_count(&self) -> (usize, usize);
+    fn ttf(&self) -> usize;
     fn written_bytes(&self) -> (usize, usize);
 }
 
 pub struct PositionListEncoder<W: Write, S: SkipListWrite> {
-    item_count: usize,
+    ttf: usize,
     last_pos: u32,
     buffer_len: usize,
     item_count_flushed: usize,
@@ -51,7 +51,7 @@ pub struct PositionListFlushInfoSnapshot {
 }
 
 pub struct BuildingPositionListBlock {
-    positions: [RelaxedU32; POSITION_BLOCK_LEN],
+    positions: [RelaxedU32; POSITION_LIST_BLOCK_LEN],
 }
 
 #[derive(Default)]
@@ -70,8 +70,8 @@ impl PositionListEncode for EmptyPositionListEncoder {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
-    fn item_count(&self) -> (usize, usize) {
-        (0, 0)
+    fn ttf(&self) -> usize {
+        0
     }
     fn written_bytes(&self) -> (usize, usize) {
         (0, 0)
@@ -134,7 +134,7 @@ impl BuildingPositionListBlock {
         const ZERO: RelaxedU32 = RelaxedU32::new(0);
 
         Self {
-            positions: [ZERO; POSITION_BLOCK_LEN],
+            positions: [ZERO; POSITION_LIST_BLOCK_LEN],
         }
     }
 
@@ -219,7 +219,7 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
     pub fn new(writer: W, skip_list_writer: S) -> Self {
         let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
-            item_count: 0,
+            ttf: 0,
             last_pos: 0,
             buffer_len: 0,
             item_count_flushed: 0,
@@ -272,14 +272,14 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
 
 impl<W: Write, S: SkipListWrite> PositionListEncode for PositionListEncoder<W, S> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
-        self.item_count += 1;
+        self.ttf += 1;
         self.building_block.positions[self.buffer_len].store(pos - self.last_pos);
         self.buffer_len += 1;
         let flush_info =
             PositionListFlushInfoSnapshot::new(self.item_count_flushed, self.buffer_len);
         self.flush_info.store(flush_info);
 
-        if self.buffer_len == POSITION_BLOCK_LEN {
+        if self.buffer_len == POSITION_LIST_BLOCK_LEN {
             self.flush_buffer()?;
         }
 
@@ -299,8 +299,8 @@ impl<W: Write, S: SkipListWrite> PositionListEncode for PositionListEncoder<W, S
         Ok(())
     }
 
-    fn item_count(&self) -> (usize, usize) {
-        (self.item_count, self.skip_list_writer.item_count())
+    fn ttf(&self) -> usize {
+        self.ttf
     }
 
     fn written_bytes(&self) -> (usize, usize) {
@@ -320,12 +320,12 @@ mod tests {
             compression::BlockEncoder, positions::PositionListEncode,
             positions::PositionListEncoder, skip_list::BasicSkipListWriter,
         },
-        POSITION_BLOCK_LEN,
+        POSITION_LIST_BLOCK_LEN,
     };
 
     #[test]
     fn test_basic() -> io::Result<()> {
-        const BLOCK_LEN: usize = POSITION_BLOCK_LEN;
+        const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
 
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();
         // the positions 0 and 1 are one doc, BLOCK_LEN and BLOCK_LEN + 1 are one doc.
@@ -378,7 +378,7 @@ mod tests {
         let block_encoder = BlockEncoder;
 
         let mut buf_reader = BufReader::new(output_buf.as_slice());
-        let mut position_block = [0u32; POSITION_BLOCK_LEN];
+        let mut position_block = [0u32; POSITION_LIST_BLOCK_LEN];
         let mut num_read_bytes =
             block_encoder.decode_u32(&mut buf_reader, &mut position_block[..])?;
         assert_eq!(num_read_bytes, skip_list_offsets[0] as usize);

@@ -35,13 +35,8 @@ impl<'a> PersistentSegmentPostingReader<'a> {
         let doc_list_data = Cursor::new(doc_list_data);
         let skip_list_data = &index_data.skip_list_data.as_slice()[term_info.skip_list_range()];
 
-        let doc_list_decoder = DocListDecoder::open(
-            doc_list_format,
-            term_info.doc_count,
-            doc_list_data,
-            term_info.skip_list_item_count,
-            skip_list_data,
-        );
+        let doc_list_decoder =
+            DocListDecoder::open(doc_list_format, term_info.df, doc_list_data, skip_list_data);
 
         Self {
             doc_list_decoder,
@@ -60,9 +55,8 @@ impl<'a> PersistentSegmentPostingReader<'a> {
             [self.term_info.position_skip_list_range()];
 
         self.position_list_decoder = Some(PositionListDecoder::open(
-            self.term_info.position_list_item_count,
+            self.term_info.ttf,
             position_list_data,
-            self.term_info.position_skip_list_item_count,
             position_skip_list_data,
         ));
     }

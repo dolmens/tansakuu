@@ -20,12 +20,12 @@ pub trait DocListEncode {
     fn add_pos(&mut self, field: usize) -> io::Result<()>;
     fn end_doc(&mut self, docid: DocId) -> io::Result<()>;
     fn flush(&mut self) -> io::Result<()>;
-    fn item_count(&self) -> (usize, usize);
+    fn df(&self) -> usize;
     fn written_bytes(&self) -> (usize, usize);
 }
 
 pub struct DocListEncoder<W: Write, S: SkipListWrite> {
-    doc_count: usize,
+    df: usize,
     last_docid: DocId,
     current_tf: u32,
     total_tf: u64,
@@ -120,7 +120,7 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
         let building_block = Arc::new(BuildingDocListBlock::new(&doc_list_format));
         let flush_info = Arc::new(DocListFlushInfo::new());
         Self {
-            doc_count: 0,
+            df: 0,
             last_docid: 0,
             current_tf: 0,
             total_tf: 0,
@@ -198,8 +198,8 @@ impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
     }
 
     fn end_doc(&mut self, docid: DocId) -> io::Result<()> {
-        assert!(self.doc_count == 0 || docid > self.last_docid);
-        self.doc_count += 1;
+        assert!(self.df == 0 || docid > self.last_docid);
+        self.df += 1;
 
         let building_block = self.building_block.as_ref();
         building_block.add_docid(self.buffer_len, docid - self.last_docid);
@@ -228,8 +228,8 @@ impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
         Ok(())
     }
 
-    fn item_count(&self) -> (usize, usize) {
-        (self.doc_count, self.skip_list_writer.item_count())
+    fn df(&self) -> usize {
+        self.df
     }
 
     fn written_bytes(&self) -> (usize, usize) {

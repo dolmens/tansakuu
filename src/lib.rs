@@ -28,8 +28,13 @@ pub const END_POSITION: u32 = u32::MAX - 1;
 pub const INVALID_POSITION: u32 = u32::MAX;
 
 pub const DOC_LIST_BLOCK_LEN: usize = 128;
+pub const MAX_UNCOMPRESSED_DOC_LIST_LEN: usize = 5;
+
 pub const SKIPLIST_BLOCK_LEN: usize = 32;
-pub const POSITION_BLOCK_LEN: usize = 128;
+pub const MAX_UNCOMPRESSED_SKIP_LIST_LEN: usize = 10;
+
+pub const POSITION_LIST_BLOCK_LEN: usize = 128;
+pub const MAX_UNCOMPRESSED_POSITION_LIST_LEN: usize = 5;
 
 pub const INVALID_VERSION_ID: VersionId = 0;
 

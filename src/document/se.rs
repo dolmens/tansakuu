@@ -4,7 +4,7 @@ use std::io::{self, Read};
 
 use tantivy_common::{f64_to_u64, BinarySerializable, VInt};
 
-use super::{OwnedValue, ReferenceValueLeaf, CowString};
+use super::{CowString, OwnedValue, ReferenceValueLeaf};
 use crate::document::{type_codes, Document, ReferenceValue, Value};
 use crate::schema::Schema;
 

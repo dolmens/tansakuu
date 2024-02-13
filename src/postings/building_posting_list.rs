@@ -187,7 +187,7 @@ mod tests {
             building_posting_list::BuildingPostingReader, positions::PositionListBlock,
             BuildingPostingWriter, DocListBlock, PostingFormat, PostingRead,
         },
-        DocId, DOC_LIST_BLOCK_LEN, POSITION_BLOCK_LEN,
+        DocId, DOC_LIST_BLOCK_LEN, POSITION_LIST_BLOCK_LEN,
     };
 
     #[test]
@@ -608,7 +608,7 @@ mod tests {
         let ttf: usize = positions[0..BLOCK_LEN].iter().map(|ps| ps.len()).sum();
         let mut current_ttf = 0;
         while current_ttf < ttf {
-            let block_len = std::cmp::min(ttf - current_ttf, POSITION_BLOCK_LEN);
+            let block_len = std::cmp::min(ttf - current_ttf, POSITION_LIST_BLOCK_LEN);
             assert!(posting_reader
                 .decode_position_buffer(current_ttf as u64, &mut position_list_block)?);
             assert_eq!(position_list_block.len, block_len);
