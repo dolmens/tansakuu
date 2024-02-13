@@ -12,7 +12,10 @@ pub struct PostingIterator<R: PostingRead> {
     current_ttf: u64,
     current_tf: u32,
     current_fieldmask: u8,
-    block_cursor: usize,
+    need_decode_tf: bool,
+    need_decode_fieldmask: bool,
+    tf_buffer_cursor: usize,
+    doc_buffer_cursor: usize,
     doc_list_block: DocListBlock,
     position_docid: DocId,
     current_position: u32,
@@ -20,8 +23,6 @@ pub struct PostingIterator<R: PostingRead> {
     position_block_cursor: usize,
     position_list_block: Option<Box<PositionListBlock>>,
     posting_reader: R,
-    // doc_list_decoder: D,
-    // position_list_decoder: Option<P>,
     posting_format: PostingFormat,
 }
 
@@ -38,11 +39,14 @@ impl<R: PostingRead> PostingIterator<R> {
         let doc_list_block = DocListBlock::new(posting_format.doc_list_format());
 
         Self {
-            current_docid: 0,
+            current_docid: INVALID_DOCID,
             current_ttf: 0,
             current_tf: 0,
             current_fieldmask: 0,
-            block_cursor: 0,
+            need_decode_tf: false,
+            need_decode_fieldmask: false,
+            tf_buffer_cursor: 0,
+            doc_buffer_cursor: 0,
             doc_list_block,
             position_docid: INVALID_DOCID,
             current_position: 0,
@@ -55,24 +59,17 @@ impl<R: PostingRead> PostingIterator<R> {
     }
 
     pub fn seek(&mut self, docid: DocId) -> io::Result<DocId> {
-        let docid = std::cmp::max(self.current_docid, docid);
-
-        if self.block_cursor == self.doc_list_block.len || docid > self.doc_list_block.last_docid {
-            if !self.decode_one_block(docid)? {
+        if self.doc_buffer_cursor == self.doc_list_block.len
+            || docid > self.doc_list_block.last_docid
+        {
+            if !self.decode_doc_buffer(docid)? {
                 return Ok(END_DOCID);
             }
         }
 
         while self.current_docid < docid {
-            self.current_docid += self.doc_list_block.docids[self.block_cursor];
-            if let Some(termfreqs) = &self.doc_list_block.termfreqs {
-                self.current_ttf += self.current_tf as u64;
-                self.current_tf = termfreqs[self.block_cursor];
-            }
-            if let Some(fieldmasks) = &self.doc_list_block.fieldmasks {
-                self.current_fieldmask = fieldmasks[self.block_cursor];
-            }
-            self.block_cursor += 1;
+            self.current_docid += self.doc_list_block.docids[self.doc_buffer_cursor];
+            self.doc_buffer_cursor += 1;
         }
 
         Ok(self.current_docid)
@@ -83,25 +80,29 @@ impl<R: PostingRead> PostingIterator<R> {
             return Ok(END_POSITION);
         }
 
+        if self.current_docid >= END_DOCID {
+            return Ok(END_POSITION);
+        }
+
         if self.position_docid != self.current_docid {
-            if !self.decode_one_position_block()? {
+            if !self.move_to_current_doc()? {
                 return Ok(END_POSITION);
             }
         }
 
-        let position_list_block = self.position_list_block.as_deref_mut().unwrap();
         while self.current_position < pos {
+            let position_list_block = self.position_list_block.as_deref_mut().unwrap();
+
+            if self.position_block_cursor == position_list_block.len {
+                if !self.decode_next_position_record()? {
+                    return Ok(END_POSITION);
+                }
+                continue;
+            }
+
             self.current_position_index += 1;
             if self.current_position_index == self.current_tf {
                 return Ok(END_POSITION);
-            }
-            if self.position_block_cursor == position_list_block.len {
-                if !self
-                    .posting_reader
-                    .decode_one_position_block(self.current_ttf, position_list_block)?
-                {
-                    return Ok(END_POSITION);
-                }
             }
 
             self.current_position += position_list_block.positions[self.position_block_cursor];
@@ -111,28 +112,69 @@ impl<R: PostingRead> PostingIterator<R> {
         return Ok(self.current_position);
     }
 
-    fn decode_one_block(&mut self, docid: DocId) -> io::Result<bool> {
+    fn decode_doc_buffer(&mut self, docid: DocId) -> io::Result<bool> {
         if !self
             .posting_reader
-            .decode_one_block(docid, &mut self.doc_list_block)?
+            .decode_doc_buffer(docid, &mut self.doc_list_block)?
         {
             self.current_docid = END_DOCID;
             return Ok(false);
         }
         self.current_docid = self.doc_list_block.base_docid + self.doc_list_block.docids[0];
-        if let Some(termfreqs) = &self.doc_list_block.termfreqs {
+        if self.posting_format.has_tflist() {
             self.current_ttf = self.doc_list_block.base_ttf;
-            self.current_tf = termfreqs[0];
         }
-        if let Some(fieldmasks) = &self.doc_list_block.fieldmasks {
-            self.current_fieldmask = fieldmasks[0];
-        }
-        self.block_cursor = 1;
+        self.doc_buffer_cursor = 1;
+        self.need_decode_tf = true;
+        self.need_decode_fieldmask = true;
 
         Ok(true)
     }
 
-    fn decode_one_position_block(&mut self) -> io::Result<bool> {
+    fn decode_tf_buffer(&mut self) -> io::Result<bool> {
+        if self.need_decode_tf {
+            self.need_decode_tf = false;
+            if !self
+                .posting_reader
+                .decode_tf_buffer(&mut self.doc_list_block)?
+            {
+                return Ok(false);
+            }
+            self.tf_buffer_cursor = 0;
+        }
+
+        Ok(true)
+    }
+
+    fn get_current_tf(&mut self) -> io::Result<u32> {
+        self.decode_tf_buffer()?;
+        debug_assert!(self.doc_buffer_cursor > 0);
+        self.current_tf =
+            self.doc_list_block.termfreqs.as_deref().unwrap()[self.doc_buffer_cursor - 1];
+        Ok(self.current_tf)
+    }
+
+    fn get_current_ttf(&mut self) -> io::Result<u64> {
+        self.decode_tf_buffer()?;
+        debug_assert!(self.doc_buffer_cursor > 0);
+        while self.tf_buffer_cursor < self.doc_buffer_cursor - 1 {
+            self.current_ttf +=
+                self.doc_list_block.termfreqs.as_deref().unwrap()[self.tf_buffer_cursor] as u64;
+            self.tf_buffer_cursor += 1;
+        }
+        Ok(self.current_ttf)
+    }
+
+    fn move_to_current_doc(&mut self) -> io::Result<bool> {
+        if !self.decode_tf_buffer()? {
+            return Ok(false);
+        }
+        self.get_current_tf()?;
+        self.get_current_ttf()?;
+        self.decode_position_buffer()
+    }
+
+    fn decode_position_buffer(&mut self) -> io::Result<bool> {
         if self.position_list_block.is_none() {
             self.position_list_block = Some(Box::new(PositionListBlock::new()));
         }
@@ -143,7 +185,7 @@ impl<R: PostingRead> PostingIterator<R> {
         {
             if !self
                 .posting_reader
-                .decode_one_position_block(self.current_ttf, position_list_block)?
+                .decode_position_buffer(self.current_ttf, position_list_block)?
             {
                 return Ok(false);
             }
@@ -153,6 +195,21 @@ impl<R: PostingRead> PostingIterator<R> {
         self.current_position = position_list_block.positions[self.position_block_cursor];
         self.current_position_index = 0;
         self.position_block_cursor += 1;
+
+        Ok(true)
+    }
+
+    fn decode_next_position_record(&mut self) -> io::Result<bool> {
+        let position_list_block = self.position_list_block.as_mut().unwrap();
+
+        if !self
+            .posting_reader
+            .decode_next_position_record(position_list_block)?
+        {
+            return Ok(false);
+        }
+        self.current_position += position_list_block.positions[0];
+        self.position_block_cursor = 1;
 
         Ok(true)
     }

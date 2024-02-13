@@ -8,15 +8,30 @@ use super::{
 };
 
 pub trait PostingRead {
+    fn decode_doc_buffer(
+        &mut self,
+        docid: DocId,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool>;
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool>;
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool>;
+
     fn decode_one_block(
         &mut self,
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool>;
 
-    fn decode_one_position_block(
+    fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool>;
+
+    fn decode_next_position_record(
+        &mut self,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool>;
 }
@@ -54,6 +69,24 @@ impl<D: DocListDecode, P: PositionListDecode> PostingReader<D, P> {
 }
 
 impl<D: DocListDecode, P: PositionListDecode> PostingRead for PostingReader<D, P> {
+    fn decode_doc_buffer(
+        &mut self,
+        docid: DocId,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool> {
+        self.doc_list_decoder
+            .decode_doc_buffer(docid, doc_list_block)
+    }
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        self.doc_list_decoder.decode_tf_buffer(doc_list_block)
+    }
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        self.doc_list_decoder
+            .decode_fieldmask_buffer(doc_list_block)
+    }
+
     fn decode_one_block(
         &mut self,
         docid: DocId,
@@ -63,13 +96,24 @@ impl<D: DocListDecode, P: PositionListDecode> PostingRead for PostingReader<D, P
             .decode_one_block(docid, doc_list_block)
     }
 
-    fn decode_one_position_block(
+    fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if let Some(position_list_reader) = self.position_list_decoder.as_mut() {
-            position_list_reader.decode_one_block(from_ttf, position_list_block)
+        if let Some(position_list_decoder) = self.position_list_decoder.as_mut() {
+            position_list_decoder.decode_position_buffer(from_ttf, position_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn decode_next_position_record(
+        &mut self,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        if let Some(position_list_decoder) = self.position_list_decoder.as_mut() {
+            position_list_decoder.decode_next_record(position_list_block)
         } else {
             Ok(false)
         }

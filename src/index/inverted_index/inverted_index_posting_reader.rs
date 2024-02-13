@@ -24,7 +24,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
         }
     }
 
-    pub fn decode_one_block(
+    pub fn decode_doc_buffer(
         &mut self,
         docid: DocId,
         doc_list_block: &mut DocListBlock,
@@ -37,7 +37,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
                 .segment_reader
                 .as_mut()
                 .unwrap()
-                .decode_one_block(docid, doc_list_block)?
+                .decode_doc_buffer(docid, doc_list_block)?
             {
                 return Ok(true);
             }
@@ -47,13 +47,43 @@ impl<'a> InvertedIndexPostingReader<'a> {
         }
     }
 
-    pub fn decode_one_position_block(
+    pub fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        if let Some(segment_reader) = self.segment_reader.as_mut() {
+            segment_reader.decode_tf_buffer(doc_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn decode_fieldmask_buffer(
+        &mut self,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool> {
+        if let Some(segment_reader) = self.segment_reader.as_mut() {
+            segment_reader.decode_fieldmask_buffer(doc_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
         if let Some(segment_reader) = self.segment_reader.as_mut() {
-            segment_reader.decode_one_position_block(from_ttf, position_list_block)
+            segment_reader.decode_position_buffer(from_ttf, position_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn decode_next_position_record(
+        &mut self,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        if let Some(segment_reader) = self.segment_reader.as_mut() {
+            segment_reader.decode_next_position_record(position_list_block)
         } else {
             Ok(false)
         }

@@ -9,11 +9,29 @@ use super::{
 };
 
 pub trait DocListDecode {
-    fn decode_one_block(
+    fn decode_doc_buffer(
         &mut self,
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool>;
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool>;
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool>;
+
+    fn decode_one_block(
+        &mut self,
+        docid: DocId,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool> {
+        if !self.decode_doc_buffer(docid, doc_list_block)? {
+            return Ok(false);
+        }
+        self.decode_tf_buffer(doc_list_block)?;
+        self.decode_fieldmask_buffer(doc_list_block)?;
+
+        Ok(true)
+    }
 }
 
 pub struct DocListDecoder<R: Read + Seek, S: SkipListRead> {
@@ -91,7 +109,7 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecoder<R, S> {
 }
 
 impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
-    fn decode_one_block(
+    fn decode_doc_buffer(
         &mut self,
         docid: DocId,
         doc_list_block: &mut DocListBlock,
@@ -118,24 +136,30 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
         doc_list_block.len = block_len;
         let block_encoder = BlockEncoder;
         block_encoder.decode_u32(&mut self.reader, &mut doc_list_block.docids[0..block_len])?;
-        if self.doc_list_format.has_tflist() {
-            if let Some(termfreqs) = doc_list_block.termfreqs.as_deref_mut() {
-                block_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
-            } else {
-                let mut termfreqs = [0; DOC_LIST_BLOCK_LEN];
-                block_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..block_len])?;
-            }
-        }
-        if self.doc_list_format.has_fieldmask() {
-            if let Some(fieldmasks) = doc_list_block.fieldmasks.as_deref_mut() {
-                block_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..block_len])?;
-            } else {
-                let mut fieldmasks = [0; DOC_LIST_BLOCK_LEN];
-                block_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..block_len])?;
-            }
-        }
 
         Ok(true)
+    }
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        if self.doc_list_format.has_tflist() {
+            let termfreqs = doc_list_block.termfreqs.as_deref_mut().unwrap();
+            let block_encoder = BlockEncoder;
+            block_encoder.decode_u32(&mut self.reader, &mut termfreqs[0..doc_list_block.len])?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        if self.doc_list_format.has_fieldmask() {
+            let fieldmasks = doc_list_block.fieldmasks.as_deref_mut().unwrap();
+            let block_encoder = BlockEncoder;
+            block_encoder.decode_u8(&mut self.reader, &mut fieldmasks[0..doc_list_block.len])?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 

@@ -136,6 +136,22 @@ impl<'a> BuildingPostingReader<'a> {
 }
 
 impl<'a> PostingRead for BuildingPostingReader<'a> {
+    fn decode_doc_buffer(
+        &mut self,
+        docid: DocId,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool> {
+        self.posting_reader.decode_doc_buffer(docid, doc_list_block)
+    }
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        self.posting_reader.decode_tf_buffer(doc_list_block)
+    }
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        self.posting_reader.decode_fieldmask_buffer(doc_list_block)
+    }
+
     fn decode_one_block(
         &mut self,
         docid: DocId,
@@ -144,13 +160,21 @@ impl<'a> PostingRead for BuildingPostingReader<'a> {
         self.posting_reader.decode_one_block(docid, doc_list_block)
     }
 
-    fn decode_one_position_block(
+    fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
         position_list_block: &mut super::positions::PositionListBlock,
     ) -> io::Result<bool> {
         self.posting_reader
-            .decode_one_position_block(from_ttf, position_list_block)
+            .decode_position_buffer(from_ttf, position_list_block)
+    }
+
+    fn decode_next_position_record(
+        &mut self,
+        position_list_block: &mut super::positions::PositionListBlock,
+    ) -> io::Result<bool> {
+        self.posting_reader
+            .decode_next_position_record(position_list_block)
     }
 }
 
@@ -528,7 +552,7 @@ mod tests {
             positions[0].len() as u32
         );
 
-        assert!(posting_reader.decode_one_position_block(0, &mut position_list_block)?);
+        assert!(posting_reader.decode_position_buffer(0, &mut position_list_block)?);
         assert_eq!(
             &position_list_block.positions[0..position_list_block.len],
             &positions[0]
@@ -558,7 +582,7 @@ mod tests {
             positions[1].len() as u32
         );
 
-        assert!(posting_reader.decode_one_position_block(0, &mut position_list_block)?);
+        assert!(posting_reader.decode_position_buffer(0, &mut position_list_block)?);
         let ttf = positions[0].len() + positions[1].len();
         assert_eq!(
             &position_list_block.positions[0..position_list_block.len],
@@ -586,7 +610,7 @@ mod tests {
         while current_ttf < ttf {
             let block_len = std::cmp::min(ttf - current_ttf, POSITION_BLOCK_LEN);
             assert!(posting_reader
-                .decode_one_position_block(current_ttf as u64, &mut position_list_block)?);
+                .decode_position_buffer(current_ttf as u64, &mut position_list_block)?);
             assert_eq!(position_list_block.len, block_len);
             assert_eq!(position_list_block.start_ttf, current_ttf as u64);
             assert_eq!(

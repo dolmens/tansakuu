@@ -375,6 +375,22 @@ impl DocListBlockSnapshot {
         self.len == 0
     }
 
+    pub fn docids(&self) -> Option<&[DocId]> {
+        self.docids.as_deref().map(|docids| &docids[0..self.len])
+    }
+
+    pub fn termfreqs(&self) -> Option<&[u32]> {
+        self.termfreqs
+            .as_deref()
+            .map(|termfreqs| &termfreqs[0..self.len])
+    }
+
+    pub fn fieldmasks(&self) -> Option<&[u8]> {
+        self.fieldmasks
+            .as_deref()
+            .map(|fieldmasks| &fieldmasks[0..self.len])
+    }
+
     pub fn copy_to(&self, doc_list_block: &mut DocListBlock) {
         let len = self.len;
         doc_list_block.len = len;

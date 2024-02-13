@@ -28,6 +28,7 @@ pub struct BuildingDocListEncoder<A: Allocator = Global> {
 
 pub struct BuildingDocListDecoder<'a> {
     read_count: usize,
+    block_offset: usize,
     flushed_count: usize,
     building_block_snapshot: DocListBlockSnapshot,
     doc_list_decoder: DocListDecoder<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
@@ -136,6 +137,7 @@ impl<'a> BuildingDocListDecoder<'a> {
 
         Self {
             read_count: 0,
+            block_offset: 0,
             flushed_count,
             building_block_snapshot,
             doc_list_decoder,
@@ -156,7 +158,7 @@ impl<'a> BuildingDocListDecoder<'a> {
 }
 
 impl<'a> DocListDecode for BuildingDocListDecoder<'a> {
-    fn decode_one_block(
+    fn decode_doc_buffer(
         &mut self,
         docid: DocId,
         doc_list_block: &mut DocListBlock,
@@ -168,25 +170,32 @@ impl<'a> DocListDecode for BuildingDocListDecoder<'a> {
         if self.read_count < self.flushed_count {
             if self
                 .doc_list_decoder
-                .decode_one_block(docid, doc_list_block)?
+                .decode_doc_buffer(docid, doc_list_block)?
             {
+                self.block_offset = self.read_count;
                 self.read_count += doc_list_block.len;
                 return Ok(true);
             }
         }
 
         self.read_count = self.flushed_count;
+        self.block_offset = self.read_count;
 
-        if self.building_block_snapshot.len() == 0 {
+        let len = self.building_block_snapshot.len();
+        if len == 0 {
             return Ok(false);
         }
 
-        self.read_count += self.building_block_snapshot.len();
+        self.read_count += len;
 
         let mut last_docid = self.doc_list_decoder.last_docid();
         let base_docid = last_docid;
-        self.building_block_snapshot.copy_to(doc_list_block);
-        for i in 0..doc_list_block.len {
+
+        doc_list_block.len = len;
+        doc_list_block.docids[0..len]
+            .copy_from_slice(self.building_block_snapshot.docids().unwrap());
+
+        for i in 0..len {
             last_docid += doc_list_block.docids[i];
         }
         if last_docid < docid {
@@ -198,6 +207,38 @@ impl<'a> DocListDecode for BuildingDocListDecoder<'a> {
         doc_list_block.base_ttf = self.doc_list_decoder.last_ttf();
 
         Ok(true)
+    }
+
+    fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        if self.doc_list_decoder.doc_list_format().has_tflist() {
+            if self.block_offset < self.flushed_count {
+                return self.doc_list_decoder.decode_tf_buffer(doc_list_block);
+            }
+            let termfreqs = doc_list_block.termfreqs.as_deref_mut().unwrap();
+            let snapshot = self.building_block_snapshot.termfreqs().unwrap();
+            let len = snapshot.len();
+            termfreqs[0..len].copy_from_slice(snapshot);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn decode_fieldmask_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
+        if self.doc_list_decoder.doc_list_format().has_fieldmask() {
+            if self.block_offset < self.flushed_count {
+                return self
+                    .doc_list_decoder
+                    .decode_fieldmask_buffer(doc_list_block);
+            }
+            let fieldmask = doc_list_block.fieldmasks.as_deref_mut().unwrap();
+            let snapshot = self.building_block_snapshot.fieldmasks().unwrap();
+            let len = snapshot.len();
+            fieldmask[0..len].copy_from_slice(snapshot);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 

@@ -46,14 +46,9 @@ impl DocListBlock {
         }
     }
 
-    // pub fn first_docid(&self) -> DocId {
-    //     assert!(self.len > 0);
-    //     self.docids[0]
-    // }
-
-    // pub fn last_docid(&self) -> DocId {
-    //     self.docids[self.len - 1]
-    // }
+    pub fn new_tf_buf(&self) -> Box<[u32]> {
+        unimplemented!()
+    }
 
     pub fn decode_docids(&mut self, last_docid: DocId) {
         self.docids[0..self.len]

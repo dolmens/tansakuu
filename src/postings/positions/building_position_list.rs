@@ -135,26 +135,40 @@ impl<'a> BuildingPositionListDecoder<'a> {
 }
 
 impl<'a> PositionListDecode for BuildingPositionListDecoder<'a> {
-    fn decode_one_block(
+    fn decode_position_buffer(
         &mut self,
         ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if ((ttf as usize) >= self.flushed_count + self.buffer_len)
-            || ((ttf as usize) < self.read_count)
-        {
+        if (ttf as usize) >= self.flushed_count + self.buffer_len {
             return Ok(false);
         }
         if (ttf as usize) < self.flushed_count {
-            if self
-                .position_list_decoder
-                .decode_one_block(ttf, position_list_block)?
-            {
-                self.read_count += position_list_block.len;
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            self.position_list_decoder
+                .decode_position_buffer(ttf, position_list_block)?;
+            self.read_count += position_list_block.len;
+            Ok(true)
+        } else {
+            self.building_block_snapshot.copy_to(position_list_block);
+            position_list_block.start_ttf = self.flushed_count as u64;
+            self.read_count += self.buffer_len;
+            Ok(true)
+        }
+    }
+
+    fn decode_next_record(
+        &mut self,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        if self.read_count >= self.flushed_count + self.buffer_len {
+            return Ok(false);
+        }
+
+        if self.read_count < self.flushed_count {
+            self.position_list_decoder
+                .decode_next_record(position_list_block)?;
+            self.read_count += position_list_block.len;
+            Ok(true)
         } else {
             self.building_block_snapshot.copy_to(position_list_block);
             position_list_block.start_ttf = self.flushed_count as u64;
@@ -209,14 +223,14 @@ mod tests {
         position_list_encoder.end_doc();
 
         let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
-        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_position_buffer(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 2);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..2],
             &positions_deltas[0..2]
         );
-        assert!(!position_list_decoder.decode_one_block(2, &mut position_list_block)?);
+        assert!(!position_list_decoder.decode_position_buffer(2, &mut position_list_block)?);
 
         for i in 2..BLOCK_LEN {
             position_list_encoder.add_pos(positions[i])?;
@@ -224,16 +238,15 @@ mod tests {
         position_list_encoder.end_doc();
 
         let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
-        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_position_buffer(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
             &position_list_block.positions[0..BLOCK_LEN],
             &positions_deltas[0..BLOCK_LEN]
         );
-        assert!(
-            !position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?
-        );
+        assert!(!position_list_decoder
+            .decode_position_buffer(BLOCK_LEN as u64, &mut position_list_block)?);
 
         position_list_encoder.add_pos(positions[BLOCK_LEN])?;
         position_list_encoder.add_pos(positions[BLOCK_LEN + 1])?;
@@ -246,7 +259,7 @@ mod tests {
 
         let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
-        assert!(position_list_decoder.decode_one_block(0, &mut position_list_block)?);
+        assert!(position_list_decoder.decode_position_buffer(0, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, 0);
         assert_eq!(
@@ -254,7 +267,8 @@ mod tests {
             &positions_deltas[0..BLOCK_LEN]
         );
 
-        assert!(position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(position_list_decoder
+            .decode_position_buffer(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
@@ -263,7 +277,7 @@ mod tests {
         );
 
         assert!(position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
@@ -271,13 +285,14 @@ mod tests {
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
         assert!(!position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         // skip one block
 
         let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
-        assert!(position_list_decoder.decode_one_block(BLOCK_LEN as u64, &mut position_list_block)?);
+        assert!(position_list_decoder
+            .decode_position_buffer(BLOCK_LEN as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, BLOCK_LEN);
         assert_eq!(position_list_block.start_ttf, BLOCK_LEN as u64);
         assert_eq!(
@@ -286,7 +301,7 @@ mod tests {
         );
 
         assert!(position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
@@ -294,14 +309,14 @@ mod tests {
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
         assert!(!position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         // skip two block
 
         let mut position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
 
         assert!(position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2) as u64, &mut position_list_block)?);
         assert_eq!(position_list_block.len, 3);
         assert_eq!(position_list_block.start_ttf, (BLOCK_LEN * 2) as u64);
         assert_eq!(
@@ -309,7 +324,7 @@ mod tests {
             &positions_deltas[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
         );
         assert!(!position_list_decoder
-            .decode_one_block((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
+            .decode_position_buffer((BLOCK_LEN * 2 + 3) as u64, &mut position_list_block)?);
 
         Ok(())
     }
@@ -368,7 +383,7 @@ mod tests {
                         BuildingPositionListDecoder::open(&building_position_list);
                     let mut ttf = 0_usize;
                     while position_list_decoder
-                        .decode_one_block(ttf as u64, &mut position_list_block)?
+                        .decode_position_buffer(ttf as u64, &mut position_list_block)?
                     {
                         let len = position_list_block.len;
                         assert_eq!(position_list_block.start_ttf, ttf as u64);
