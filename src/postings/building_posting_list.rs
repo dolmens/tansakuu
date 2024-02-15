@@ -18,7 +18,7 @@ pub struct BuildingPostingList<A: Allocator = Global> {
     pub posting_format: PostingFormat,
 }
 
-pub struct BuildingPostingWriter<A: Allocator = Global> {
+pub struct BuildingPostingWriter<A: Allocator + Clone = Global> {
     posting_writer: PostingWriter<BuildingDocListEncoder<A>, BuildingPositionListEncoder<A>>,
     building_posting_list: BuildingPostingList<A>,
 }
@@ -126,8 +126,8 @@ impl<'a> BuildingPostingReader<'a> {
         self.doc_list_decoder().eof()
     }
 
-    pub fn doc_count(&self) -> usize {
-        self.doc_list_decoder().doc_count()
+    pub fn df(&self) -> usize {
+        self.doc_list_decoder().df()
     }
 
     pub fn read_count(&self) -> usize {
@@ -201,11 +201,11 @@ mod tests {
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 0);
+        assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(!posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 0);
+        assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -232,7 +232,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 1);
+        assert_eq!(posting_reader.df(), 1);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert_eq!(doc_list_block.base_docid, 0);
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(doc_list_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
 
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 1);
+        assert_eq!(posting_reader.df(), 1);
         assert_eq!(posting_reader.read_count(), 1);
 
         assert!(!posting_reader.decode_one_block(docids[0], &mut doc_list_block)?);
@@ -468,7 +468,7 @@ mod tests {
                         break;
                     }
                 }
-                if posting_reader.doc_count() == BLOCK_LEN * 2 + 3 {
+                if posting_reader.df() == BLOCK_LEN * 2 + 3 {
                     break;
                 }
                 thread::yield_now();
@@ -497,11 +497,11 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 0);
+        assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(!posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert!(posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 0);
+        assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -540,7 +540,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 1);
+        assert_eq!(posting_reader.df(), 1);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert_eq!(doc_list_block.base_docid, 0);
@@ -565,7 +565,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), 2);
+        assert_eq!(posting_reader.df(), 2);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert_eq!(doc_list_block.base_docid, 0);
@@ -598,7 +598,7 @@ mod tests {
 
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
         assert!(!posting_reader.eof());
-        assert_eq!(posting_reader.doc_count(), BLOCK_LEN);
+        assert_eq!(posting_reader.df(), BLOCK_LEN);
         assert_eq!(posting_reader.read_count(), 0);
         assert!(posting_reader.decode_one_block(0, &mut doc_list_block)?);
         assert_eq!(doc_list_block.base_docid, 0);

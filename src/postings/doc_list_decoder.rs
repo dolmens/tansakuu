@@ -1,6 +1,6 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::{DocId, DOC_LIST_BLOCK_LEN};
+use crate::{DocId, DOC_LIST_BLOCK_LEN, MAX_UNCOMPRESSED_DOC_LIST_LEN};
 
 use super::{
     compression::BlockEncoder,
@@ -38,7 +38,7 @@ pub struct DocListDecoder<R: Read + Seek, S: SkipListRead> {
     read_count: usize,
     df: usize,
     reader: R,
-    skip_list_reader: S,
+    skip_list_reader: Option<S>,
     doc_list_format: DocListFormat,
 }
 
@@ -49,13 +49,17 @@ impl<R: Read + Seek, S: Read> DocListDecoder<R, SkipListReader<S>> {
         reader: R,
         skip_list_input_reader: S,
     ) -> Self {
-        let skip_list_format = doc_list_format.skip_list_format().clone();
-        let skip_list_item_count = (df + DOC_LIST_BLOCK_LEN - 1) / DOC_LIST_BLOCK_LEN;
-        let skip_list_reader = SkipListReader::open(
-            skip_list_format,
-            skip_list_item_count,
-            skip_list_input_reader,
-        );
+        let skip_list_reader = if df > MAX_UNCOMPRESSED_DOC_LIST_LEN {
+            let skip_list_format = doc_list_format.skip_list_format().clone();
+            let skip_list_item_count = (df + DOC_LIST_BLOCK_LEN - 1) / DOC_LIST_BLOCK_LEN;
+            Some(SkipListReader::open(
+                skip_list_format,
+                skip_list_item_count,
+                skip_list_input_reader,
+            ))
+        } else {
+            None
+        };
 
         Self {
             read_count: 0,
@@ -78,29 +82,61 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecoder<R, S> {
             read_count: 0,
             df: doc_count,
             reader,
+            skip_list_reader: Some(skip_list_reader),
+            doc_list_format,
+        }
+    }
+
+    pub fn open_with_skip_list_reader_optional(
+        doc_list_format: DocListFormat,
+        doc_count: usize,
+        reader: R,
+        skip_list_reader: Option<S>,
+    ) -> Self {
+        Self {
+            read_count: 0,
+            df: doc_count,
+            reader,
             skip_list_reader,
             doc_list_format,
         }
+    }
+
+    fn decode_doc_buffer_short_list(
+        &mut self,
+        docid: DocId,
+        doc_list_block: &mut DocListBlock,
+    ) -> io::Result<bool> {
+        if self.read_count == self.df {
+            return Ok(false);
+        }
+
+        let block_len = self.df;
+        self.read_count += block_len;
+        doc_list_block.len = block_len;
+        let block_encoder = BlockEncoder;
+        block_encoder.decode_u32(&mut self.reader, &mut doc_list_block.docids[0..block_len])?;
+
+        doc_list_block.base_docid = 0;
+        let last_docid = doc_list_block.docids[0..block_len].iter().sum::<DocId>();
+        if last_docid < docid {
+            return Ok(false);
+        }
+        doc_list_block.last_docid = last_docid;
+
+        Ok(true)
     }
 
     pub fn eof(&self) -> bool {
         self.read_count == self.df
     }
 
-    pub fn doc_count(&self) -> usize {
+    pub fn df(&self) -> usize {
         self.df
     }
 
-    pub fn read_count(&self) -> usize {
-        self.read_count
-    }
-
-    pub fn last_docid(&self) -> DocId {
-        self.skip_list_reader.current_key() as DocId
-    }
-
-    pub fn last_ttf(&self) -> u64 {
-        self.skip_list_reader.block_last_value()
+    pub fn skip_list_reader(&self) -> Option<&S> {
+        self.skip_list_reader.as_ref()
     }
 
     pub fn doc_list_format(&self) -> &DocListFormat {
@@ -114,8 +150,13 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
+        if self.df <= MAX_UNCOMPRESSED_DOC_LIST_LEN {
+            return self.decode_doc_buffer_short_list(docid, doc_list_block);
+        }
+
+        let skip_list_reader = self.skip_list_reader.as_mut().unwrap();
         let (skip_found, prev_key, block_last_key, start_offset, _end_offset, skipped_count) =
-            self.skip_list_reader.seek(docid as u64)?;
+            skip_list_reader.seek(docid as u64)?;
         if !skip_found {
             self.read_count = self.df;
             return Ok(false);
@@ -126,7 +167,7 @@ impl<R: Read + Seek, S: SkipListRead> DocListDecode for DocListDecoder<R, S> {
         doc_list_block.base_docid = prev_key as DocId;
         doc_list_block.last_docid = block_last_key as DocId;
         if self.doc_list_format.has_tflist() {
-            doc_list_block.base_ttf = self.skip_list_reader.prev_value();
+            doc_list_block.base_ttf = skip_list_reader.prev_value();
         };
 
         self.reader.seek(SeekFrom::Start(start_offset))?;

@@ -2,12 +2,15 @@ use std::{io, sync::Arc};
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::DocId;
+use crate::{DocId, MAX_UNCOMPRESSED_DOC_LIST_LEN};
 
 use super::{
     doc_list_encoder::{BuildingDocListBlock, DocListBlockSnapshot, DocListFlushInfo},
     doc_list_encoder_builder,
-    skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter},
+    skip_list::{
+        AtomicBuildingSkipList, BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter,
+        DeferredBuildingSkipListWriter, SkipListRead,
+    },
     ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListDecode, DocListDecoder,
     DocListEncode, DocListEncoder, DocListFormat,
 };
@@ -17,12 +20,12 @@ pub struct BuildingDocList<A: Allocator = Global> {
     flush_info: Arc<DocListFlushInfo>,
     building_block: Arc<BuildingDocListBlock>,
     byte_slice_list: Arc<ByteSliceList<A>>,
-    building_skip_list: BuildingSkipList<A>,
+    building_skip_list: Arc<AtomicBuildingSkipList<A>>,
     doc_list_format: DocListFormat,
 }
 
-pub struct BuildingDocListEncoder<A: Allocator = Global> {
-    doc_list_encoder: DocListEncoder<ByteSliceWriter<A>, BuildingSkipListWriter<A>>,
+pub struct BuildingDocListEncoder<A: Allocator + Clone = Global> {
+    doc_list_encoder: DocListEncoder<ByteSliceWriter<A>, DeferredBuildingSkipListWriter<A>>,
     building_doc_list: BuildingDocList<A>,
 }
 
@@ -51,7 +54,7 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = doc_list_format.skip_list_format().clone();
 
-        let skip_list_writer = BuildingSkipListWriter::new_in(
+        let skip_list_writer = DeferredBuildingSkipListWriter::new_in(
             skip_list_format,
             initial_slice_capacity,
             allocator.clone(),
@@ -84,7 +87,7 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
     }
 }
 
-impl<A: Allocator> DocListEncode for BuildingDocListEncoder<A> {
+impl<A: Allocator + Clone> DocListEncode for BuildingDocListEncoder<A> {
     fn add_pos(&mut self, field: usize) -> io::Result<()> {
         self.doc_list_encoder.add_pos(field)
     }
@@ -126,9 +129,15 @@ impl<'a> BuildingDocListDecoder<'a> {
             byte_slice_reader = ByteSliceReader::open(byte_slice_list);
         }
 
-        let skip_list_reader = BuildingSkipListReader::open(&building_doc_list.building_skip_list);
+        let skip_list_reader = if flushed_count > MAX_UNCOMPRESSED_DOC_LIST_LEN {
+            Some(BuildingSkipListReader::open(
+                &building_doc_list.building_skip_list.load(),
+            ))
+        } else {
+            None
+        };
 
-        let doc_list_decoder = DocListDecoder::open_with_skip_list_reader(
+        let doc_list_decoder = DocListDecoder::open_with_skip_list_reader_optional(
             doc_list_format,
             flushed_count,
             byte_slice_reader,
@@ -148,7 +157,7 @@ impl<'a> BuildingDocListDecoder<'a> {
         self.read_count == self.flushed_count + self.building_block_snapshot.len()
     }
 
-    pub fn doc_count(&self) -> usize {
+    pub fn df(&self) -> usize {
         self.flushed_count + self.building_block_snapshot.len()
     }
 
@@ -188,23 +197,27 @@ impl<'a> DocListDecode for BuildingDocListDecoder<'a> {
 
         self.read_count += len;
 
-        let mut last_docid = self.doc_list_decoder.last_docid();
+        let mut last_docid = 0;
+        let mut base_ttf = 0;
+        if self.flushed_count > 0 {
+            let skip_list_reader = self.doc_list_decoder.skip_list_reader().unwrap();
+            last_docid = skip_list_reader.current_key() as DocId;
+            base_ttf = skip_list_reader.current_value();
+        }
         let base_docid = last_docid;
 
         doc_list_block.len = len;
         doc_list_block.docids[0..len]
             .copy_from_slice(self.building_block_snapshot.docids().unwrap());
 
-        for i in 0..len {
-            last_docid += doc_list_block.docids[i];
-        }
+        last_docid += doc_list_block.docids[0..len].iter().sum::<DocId>();
         if last_docid < docid {
             return Ok(false);
         }
 
         doc_list_block.base_docid = base_docid;
         doc_list_block.last_docid = last_docid;
-        doc_list_block.base_ttf = self.doc_list_decoder.last_ttf();
+        doc_list_block.base_ttf = base_ttf;
 
         Ok(true)
     }
@@ -264,11 +277,11 @@ mod tests {
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut doc_list_decoder = BuildingDocListDecoder::open(&building_doc_list);
         assert!(doc_list_decoder.eof());
-        assert_eq!(doc_list_decoder.doc_count(), 0);
+        assert_eq!(doc_list_decoder.df(), 0);
         assert_eq!(doc_list_decoder.read_count, 0);
         assert!(!doc_list_decoder.decode_one_block(0, &mut doc_list_block)?);
         assert!(doc_list_decoder.eof());
-        assert_eq!(doc_list_decoder.doc_count(), 0);
+        assert_eq!(doc_list_decoder.df(), 0);
         assert_eq!(doc_list_decoder.read_count, 0);
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -295,7 +308,7 @@ mod tests {
 
         let mut doc_list_decoder = BuildingDocListDecoder::open(&building_doc_list);
         assert!(!doc_list_decoder.eof());
-        assert_eq!(doc_list_decoder.doc_count(), 1);
+        assert_eq!(doc_list_decoder.df(), 1);
         assert_eq!(doc_list_decoder.read_count, 0);
         assert!(doc_list_decoder.decode_one_block(0, &mut doc_list_block)?);
         assert_eq!(doc_list_block.base_docid, 0);
@@ -305,7 +318,7 @@ mod tests {
         assert_eq!(doc_list_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
 
         assert!(doc_list_decoder.eof());
-        assert_eq!(doc_list_decoder.doc_count(), 1);
+        assert_eq!(doc_list_decoder.df(), 1);
         assert_eq!(doc_list_decoder.read_count, 1);
 
         assert!(!doc_list_decoder.decode_one_block(docids[0], &mut doc_list_block)?);
@@ -530,7 +543,7 @@ mod tests {
                         break;
                     }
                 }
-                if posting_reader.doc_count() == BLOCK_LEN * 2 + 3 {
+                if posting_reader.df() == BLOCK_LEN * 2 + 3 {
                     break;
                 }
                 thread::yield_now();

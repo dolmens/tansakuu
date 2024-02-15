@@ -7,7 +7,7 @@ use tantivy_common::CountingWriter;
 
 use crate::{
     util::atomic::{AcqRelU64, RelaxedU32, RelaxedU8},
-    DocId, DOC_LIST_BLOCK_LEN,
+    DocId, DOC_LIST_BLOCK_LEN, MAX_UNCOMPRESSED_DOC_LIST_LEN,
 };
 
 use super::{
@@ -171,11 +171,13 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
                 }
             }
 
-            self.skip_list_writer.add_skip_item(
-                self.last_docid as u64,
-                self.writer.written_bytes(),
-                Some(self.total_tf),
-            )?;
+            if self.df > MAX_UNCOMPRESSED_DOC_LIST_LEN {
+                self.skip_list_writer.add_skip_item(
+                    self.last_docid as u64,
+                    self.writer.written_bytes(),
+                    Some(self.total_tf),
+                )?;
+            }
 
             self.doc_count_flushed += self.buffer_len;
             self.buffer_len = 0;

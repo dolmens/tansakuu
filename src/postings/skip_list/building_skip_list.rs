@@ -11,8 +11,8 @@ use super::{
 
 #[derive(Clone)]
 pub struct BuildingSkipList<A: Allocator = Global> {
-    building_block: Arc<BuildingSkipListBlock>,
     flush_info: Arc<SkipListFlushInfo>,
+    building_block: Arc<BuildingSkipListBlock>,
     byte_slice_list: Arc<ByteSliceList<A>>,
     skip_list_format: SkipListFormat,
 }
@@ -52,8 +52,8 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_writer = SkipListWriter::new(skip_list_format.clone(), byte_slice_writer);
         let building_skip_list = BuildingSkipList {
-            building_block: skip_list_writer.building_block().clone(),
             flush_info: skip_list_writer.flush_info().clone(),
+            building_block: skip_list_writer.building_block().clone(),
             byte_slice_list,
             skip_list_format,
         };
@@ -76,10 +76,6 @@ impl<A: Allocator> SkipListWrite for BuildingSkipListWriter<A> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.skip_list_writer.flush()
-    }
-
-    fn item_count(&self) -> usize {
-        self.skip_list_writer.item_count()
     }
 
     fn written_bytes(&self) -> usize {
@@ -192,7 +188,7 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
         self.prev_value
     }
 
-    fn block_last_value(&self) -> u64 {
+    fn current_value(&self) -> u64 {
         self.current_value
     }
 }

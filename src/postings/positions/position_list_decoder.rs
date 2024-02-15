@@ -6,7 +6,7 @@ use crate::{
         positions::PositionListBlock,
         skip_list::{SkipListFormat, SkipListRead, SkipListReader},
     },
-    POSITION_LIST_BLOCK_LEN,
+    MAX_UNCOMPRESSED_POSITION_LIST_LEN, POSITION_LIST_BLOCK_LEN,
 };
 
 pub trait PositionListDecode {
@@ -26,7 +26,7 @@ pub struct PositionListDecoder<R: Read + Seek, S: SkipListRead> {
     read_count: usize,
     ttf: usize,
     reader: R,
-    skip_list_reader: S,
+    skip_list_reader: Option<S>,
 }
 
 pub struct EmptyPositionListDecoder;
@@ -54,15 +54,18 @@ pub fn none_position_list_decoder() -> Option<EmptyPositionListDecoder> {
 impl<R: Read + Seek, SR: Read> PositionListDecoder<R, SkipListReader<SR>> {
     pub fn open(ttf: usize, reader: R, skip_list_reader: SR) -> Self {
         let skip_list_format = SkipListFormat::default();
-        let skip_list_item_count = (ttf + POSITION_LIST_BLOCK_LEN - 1) / POSITION_LIST_BLOCK_LEN;
-        let skip_list_reader =
-            SkipListReader::open(skip_list_format, skip_list_item_count, skip_list_reader);
-        Self::open_with_skip_list_reader(ttf, reader, skip_list_reader)
-    }
-}
+        let skip_list_reader = if ttf > MAX_UNCOMPRESSED_POSITION_LIST_LEN {
+            let skip_list_item_count =
+                (ttf + POSITION_LIST_BLOCK_LEN - 1) / POSITION_LIST_BLOCK_LEN;
+            Some(SkipListReader::open(
+                skip_list_format,
+                skip_list_item_count,
+                skip_list_reader,
+            ))
+        } else {
+            None
+        };
 
-impl<R: Read + Seek, S: SkipListRead> PositionListDecoder<R, S> {
-    pub fn open_with_skip_list_reader(ttf: usize, reader: R, skip_list_reader: S) -> Self {
         Self {
             read_count: 0,
             ttf,
@@ -72,8 +75,30 @@ impl<R: Read + Seek, S: SkipListRead> PositionListDecoder<R, S> {
     }
 }
 
-impl<R: Read + Seek, S: SkipListRead> PositionListDecode for PositionListDecoder<R, S> {
-    fn decode_position_buffer(
+impl<R: Read + Seek, S: SkipListRead> PositionListDecoder<R, S> {
+    pub fn open_with_skip_list_reader(ttf: usize, reader: R, skip_list_reader: S) -> Self {
+        Self {
+            read_count: 0,
+            ttf,
+            reader,
+            skip_list_reader: Some(skip_list_reader),
+        }
+    }
+
+    pub fn open_with_skip_list_reader_optional(
+        ttf: usize,
+        reader: R,
+        skip_list_reader: Option<S>,
+    ) -> Self {
+        Self {
+            read_count: 0,
+            ttf,
+            reader,
+            skip_list_reader,
+        }
+    }
+
+    fn decode_position_buffer_short_list(
         &mut self,
         ttf: u64,
         position_list_block: &mut PositionListBlock,
@@ -81,8 +106,42 @@ impl<R: Read + Seek, S: SkipListRead> PositionListDecode for PositionListDecoder
         if self.read_count == self.ttf || (ttf as usize) >= self.ttf {
             return Ok(false);
         }
-        let (_skip_found, _prev_key, _block_last_key, start_offset, _end_offset, skipped_count) =
-            self.skip_list_reader.seek(ttf)?;
+
+        let block_len = self.ttf;
+        position_list_block.len = block_len;
+        position_list_block.start_ttf = 0;
+        let block_encoder = BlockEncoder;
+        block_encoder.decode_u32(
+            &mut self.reader,
+            &mut position_list_block.positions[0..block_len],
+        )?;
+
+        self.read_count += block_len;
+
+        Ok(true)
+    }
+}
+
+impl<R: Read + Seek, S: SkipListRead> PositionListDecode for PositionListDecoder<R, S> {
+    fn decode_position_buffer(
+        &mut self,
+        ttf: u64,
+        position_list_block: &mut PositionListBlock,
+    ) -> io::Result<bool> {
+        if self.ttf <= MAX_UNCOMPRESSED_POSITION_LIST_LEN {
+            return self.decode_position_buffer_short_list(ttf, position_list_block);
+        }
+
+        if self.read_count == self.ttf || (ttf as usize) >= self.ttf {
+            return Ok(false);
+        }
+
+        let skip_list_reader = self.skip_list_reader.as_mut().unwrap();
+        let (skip_found, _prev_key, _block_last_key, start_offset, _end_offset, skipped_count) =
+            skip_list_reader.seek(ttf)?;
+        if !skip_found {
+            return Ok(false);
+        }
         self.read_count = skipped_count * POSITION_LIST_BLOCK_LEN;
 
         self.reader.seek(SeekFrom::Start(start_offset))?;
@@ -134,67 +193,69 @@ mod tests {
             positions::{PositionListBlock, PositionListDecode, PositionListDecoder},
             skip_list::BasicSkipListReader,
         },
-        POSITION_LIST_BLOCK_LEN,
+        MAX_UNCOMPRESSED_POSITION_LIST_LEN, POSITION_LIST_BLOCK_LEN,
     };
 
-    // #[test]
-    // fn test_short_list() -> io::Result<()> {
-    //     const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
-    //     let positions: Vec<_> = (0..(BLOCK_LEN - 1) as u32).collect();
-    //     let mut buf = vec![];
-    //     let block_encoder = BlockEncoder;
-    //     block_encoder.encode_u32(&positions, &mut buf)?;
+    #[test]
+    fn test_short_list() -> io::Result<()> {
+        const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
+        const UNCOMPRESSED_LEN: usize = MAX_UNCOMPRESSED_POSITION_LIST_LEN;
+        let positions: Vec<_> = (0..UNCOMPRESSED_LEN as u32).collect();
+        let mut buf = vec![];
+        let block_encoder = BlockEncoder;
+        block_encoder.encode_u32(&positions, &mut buf)?;
 
-    //     {
-    //         let buf_reader = Cursor::new(buf.as_slice());
+        {
+            let buf_reader = Cursor::new(buf.as_slice());
 
-    //         let skipbuf = vec![];
-    //         let mut position_list_decoder =
-    //             PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, &skipbuf[..]);
+            let skipbuf = vec![];
+            let mut position_list_decoder =
+                PositionListDecoder::open(UNCOMPRESSED_LEN, buf_reader, &skipbuf[..]);
 
-    //         let mut position_list_block = PositionListBlock::new();
-    //         assert!(position_list_decoder.decode_position_buffer(0, &mut position_list_block)?);
-    //         assert_eq!(position_list_block.len, BLOCK_LEN - 1);
-    //         assert_eq!(position_list_block.start_ttf, 0);
-    //         assert_eq!(
-    //             &position_list_block.positions[0..BLOCK_LEN - 1],
-    //             &positions[..]
-    //         );
-    //         assert_eq!(position_list_decoder.read_count, BLOCK_LEN - 1);
-    //     }
+            let mut position_list_block = PositionListBlock::new();
+            assert!(position_list_decoder.decode_position_buffer(0, &mut position_list_block)?);
+            assert_eq!(position_list_block.len, UNCOMPRESSED_LEN);
+            assert_eq!(position_list_block.start_ttf, 0);
+            assert_eq!(
+                &position_list_block.positions[0..UNCOMPRESSED_LEN],
+                &positions[..]
+            );
+            assert_eq!(position_list_decoder.read_count, UNCOMPRESSED_LEN);
+        }
 
-    //     {
-    //         let buf_reader = Cursor::new(buf.as_slice());
+        {
+            let buf_reader = Cursor::new(buf.as_slice());
 
-    //         let skipbuf = vec![];
-    //         let mut position_list_decoder =
-    //             PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, &skipbuf[..]);
+            let skipbuf = vec![];
+            let mut position_list_decoder =
+                PositionListDecoder::open(UNCOMPRESSED_LEN, buf_reader, &skipbuf[..]);
 
-    //         let mut position_list_block = PositionListBlock::new();
-    //         assert!(position_list_decoder.decode_position_buffer(3, &mut position_list_block)?);
-    //         assert_eq!(position_list_block.len, BLOCK_LEN - 1);
-    //         assert_eq!(position_list_block.start_ttf, 0);
-    //         assert_eq!(
-    //             &position_list_block.positions[0..BLOCK_LEN - 1],
-    //             &positions[..]
-    //         );
-    //         assert_eq!(position_list_decoder.read_count, BLOCK_LEN - 1);
-    //     }
+            let mut position_list_block = PositionListBlock::new();
+            assert!(position_list_decoder
+                .decode_position_buffer((UNCOMPRESSED_LEN - 1) as u64, &mut position_list_block)?);
+            assert_eq!(position_list_block.len, UNCOMPRESSED_LEN);
+            assert_eq!(position_list_block.start_ttf, 0);
+            assert_eq!(
+                &position_list_block.positions[0..UNCOMPRESSED_LEN],
+                &positions[..]
+            );
+            assert_eq!(position_list_decoder.read_count, UNCOMPRESSED_LEN);
+        }
 
-    //     {
-    //         let buf_reader = Cursor::new(buf.as_slice());
+        {
+            let buf_reader = Cursor::new(buf.as_slice());
 
-    //         let skipbuf = vec![];
-    //         let mut position_list_decoder =
-    //             PositionListDecoder::open(BLOCK_LEN - 1, buf_reader, &skipbuf[..]);
+            let skipbuf = vec![];
+            let mut position_list_decoder =
+                PositionListDecoder::open(UNCOMPRESSED_LEN, buf_reader, &skipbuf[..]);
 
-    //         let mut position_list_block = PositionListBlock::new();
-    //         assert!(!position_list_decoder
-    //             .decode_position_buffer((BLOCK_LEN - 1) as u64, &mut position_list_block)?);
-    //     }
+            let mut position_list_block = PositionListBlock::new();
+            assert!(!position_list_decoder
+                .decode_position_buffer(UNCOMPRESSED_LEN as u64, &mut position_list_block)?);
+        }
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     #[test]
     fn test_with_skip_list() -> io::Result<()> {
@@ -202,7 +263,11 @@ mod tests {
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();
 
         let mut buf = vec![];
-        let keys: Vec<u64> = vec![(BLOCK_LEN - 1) as u64, (BLOCK_LEN * 2 - 1) as u64];
+        let keys: Vec<u64> = vec![
+            (BLOCK_LEN - 1) as u64,
+            (BLOCK_LEN * 2 - 1) as u64,
+            (BLOCK_LEN * 2 + 3 - 1) as u64,
+        ];
         let mut offsets = Vec::<u64>::new();
         let mut offset = 0;
 
@@ -211,7 +276,9 @@ mod tests {
         offsets.push(offset as u64);
         offset += block_encoder.encode_u32(&positions[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)?;
         offsets.push(offset as u64);
-        block_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
+        offset +=
+            block_encoder.encode_u32(&positions[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)?;
+        offsets.push(offset as u64);
 
         let mut position_list_block = PositionListBlock::new();
 

@@ -138,21 +138,6 @@ impl<'a> SegmentReaderInner<'a> {
         }
     }
 
-    pub fn decode_one_block(
-        &mut self,
-        docid: DocId,
-        doc_list_block: &mut DocListBlock,
-    ) -> io::Result<bool> {
-        match self {
-            Self::Persistent(persistent_segment_reader) => {
-                persistent_segment_reader.decode_one_block(docid, doc_list_block)
-            }
-            Self::Building(building_segment_reader) => {
-                building_segment_reader.decode_one_block(docid, doc_list_block)
-            }
-        }
-    }
-
     pub fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
@@ -214,14 +199,6 @@ impl<'a> PersistentSegmentReader<'a> {
         self.posting_reader.decode_fieldmask_buffer(doc_list_block)
     }
 
-    pub fn decode_one_block(
-        &mut self,
-        docid: DocId,
-        doc_list_block: &mut DocListBlock,
-    ) -> io::Result<bool> {
-        self.posting_reader.decode_one_block(docid, doc_list_block)
-    }
-
     pub fn decode_position_buffer(
         &mut self,
         from_ttf: u64,
@@ -269,15 +246,6 @@ impl<'a> BuildingSegmentReader<'a> {
     ) -> io::Result<bool> {
         self.building_posting_reader
             .decode_fieldmask_buffer(doc_list_block)
-    }
-
-    pub fn decode_one_block(
-        &mut self,
-        docid: DocId,
-        doc_list_block: &mut DocListBlock,
-    ) -> io::Result<bool> {
-        self.building_posting_reader
-            .decode_one_block(docid, doc_list_block)
     }
 
     pub fn decode_position_buffer(

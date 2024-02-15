@@ -11,7 +11,7 @@ use crate::{
         skip_list::{BasicSkipListWriter, SkipListFormat, SkipListWrite, SkipListWriter},
     },
     util::atomic::{AcqRelU64, RelaxedU32},
-    POSITION_LIST_BLOCK_LEN,
+    MAX_UNCOMPRESSED_POSITION_LIST_LEN, POSITION_LIST_BLOCK_LEN,
 };
 
 use super::PositionListBlock;
@@ -255,12 +255,14 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
             self.item_count_flushed += self.buffer_len;
             self.buffer_len = 0;
 
-            // The skip item is the block's last key
-            self.skip_list_writer.add_skip_item(
-                self.item_count_flushed as u64 - 1,
-                self.writer.written_bytes(),
-                None,
-            )?;
+            if self.ttf > MAX_UNCOMPRESSED_POSITION_LIST_LEN {
+                // The skip item is the block's last key
+                self.skip_list_writer.add_skip_item(
+                    self.item_count_flushed as u64 - 1,
+                    self.writer.written_bytes(),
+                    None,
+                )?;
+            }
 
             let flush_info = PositionListFlushInfoSnapshot::new(self.item_count_flushed, 0);
             self.flush_info.store(flush_info);

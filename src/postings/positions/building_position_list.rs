@@ -2,9 +2,15 @@ use std::{io, sync::Arc};
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::postings::{
-    skip_list::{BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter, SkipListFormat},
-    ByteSliceList, ByteSliceReader, ByteSliceWriter,
+use crate::{
+    postings::{
+        skip_list::{
+            AtomicBuildingSkipList, BuildingSkipListReader, DeferredBuildingSkipListWriter,
+            SkipListFormat,
+        },
+        ByteSliceList, ByteSliceReader, ByteSliceWriter,
+    },
+    MAX_UNCOMPRESSED_POSITION_LIST_LEN,
 };
 
 use super::{
@@ -17,11 +23,12 @@ pub struct BuildingPositionList<A: Allocator = Global> {
     pub flush_info: Arc<PositionListFlushInfo>,
     pub building_block: Arc<BuildingPositionListBlock>,
     pub byte_slice_list: Arc<ByteSliceList<A>>,
-    pub building_skip_list: BuildingSkipList<A>,
+    pub building_skip_list: Arc<AtomicBuildingSkipList<A>>,
 }
 
-pub struct BuildingPositionListEncoder<A: Allocator = Global> {
-    position_list_encoder: PositionListEncoder<ByteSliceWriter<A>, BuildingSkipListWriter<A>>,
+pub struct BuildingPositionListEncoder<A: Allocator + Clone = Global> {
+    position_list_encoder:
+        PositionListEncoder<ByteSliceWriter<A>, DeferredBuildingSkipListWriter<A>>,
     building_position_list: BuildingPositionList<A>,
 }
 
@@ -45,12 +52,12 @@ impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
             ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = SkipListFormat::builder().build();
-        let skip_list_writer = BuildingSkipListWriter::new_in(
+        let skip_list_writer = DeferredBuildingSkipListWriter::new_in(
             skip_list_format,
             initial_slice_capacity,
             allocator.clone(),
         );
-        let building_skip_list = skip_list_writer.building_skip_list().clone();
+        let building_skip_list = skip_list_writer.building_skip_list();
         let position_list_encoder = PositionListEncoder::new(byte_slice_writer, skip_list_writer);
         let flush_info = position_list_encoder.flush_info().clone();
         let building_block = position_list_encoder.building_block().clone();
@@ -72,7 +79,7 @@ impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
     }
 }
 
-impl<A: Allocator> PositionListEncode for BuildingPositionListEncoder<A> {
+impl<A: Allocator + Clone> PositionListEncode for BuildingPositionListEncoder<A> {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
         self.position_list_encoder.add_pos(pos)
     }
@@ -115,10 +122,15 @@ impl<'a> BuildingPositionListDecoder<'a> {
             byte_slice_reader = ByteSliceReader::open(byte_slice_list);
         }
 
-        let skip_list_reader =
-            BuildingSkipListReader::open(&building_position_list.building_skip_list);
+        let skip_list_reader = if flushed_count > MAX_UNCOMPRESSED_POSITION_LIST_LEN {
+            Some(BuildingSkipListReader::open(
+                building_position_list.building_skip_list.load(),
+            ))
+        } else {
+            None
+        };
 
-        let position_list_decoder = PositionListDecoder::open_with_skip_list_reader(
+        let position_list_decoder = PositionListDecoder::open_with_skip_list_reader_optional(
             flushed_count,
             byte_slice_reader,
             skip_list_reader,

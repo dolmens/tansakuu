@@ -10,7 +10,7 @@ pub trait SkipListRead {
     fn seek(&mut self, key: u64) -> io::Result<(bool, u64, u64, u64, u64, usize)>;
     fn current_key(&self) -> u64;
     fn prev_value(&self) -> u64;
-    fn block_last_value(&self) -> u64;
+    fn current_value(&self) -> u64;
 }
 
 pub struct SkipListReader<R: Read> {
@@ -130,7 +130,7 @@ impl<R: Read> SkipListRead for SkipListReader<R> {
         self.prev_value
     }
 
-    fn block_last_value(&self) -> u64 {
+    fn current_value(&self) -> u64 {
         self.current_value
     }
 }
@@ -218,7 +218,7 @@ impl SkipListRead for BasicSkipListReader {
         self.prev_value
     }
 
-    fn block_last_value(&self) -> u64 {
+    fn current_value(&self) -> u64 {
         self.current_key
     }
 }
