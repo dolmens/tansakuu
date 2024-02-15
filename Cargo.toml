@@ -26,3 +26,6 @@ tempfile = "3.9.0"
 thiserror = "1.0.56"
 time = { version = "0.3.31", features = ["serde-human-readable"] }
 uuid = { version = "1.6.1", features = ["v4"] }
+
+[dev-dependencies]
+rand = "0.8.5"

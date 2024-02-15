@@ -5,11 +5,11 @@ use allocator_api2::alloc::{Allocator, Global};
 use crate::{DocId, MAX_UNCOMPRESSED_DOC_LIST_LEN};
 
 use super::{
-    doc_list_encoder::{BuildingDocListBlock, DocListBlockSnapshot, DocListFlushInfo},
+    doc_list_encoder::{BuildingDocListBlock, DocListBlockSnapshot},
     doc_list_encoder_builder,
     skip_list::{
-        AtomicBuildingSkipList, BuildingSkipList, BuildingSkipListReader, BuildingSkipListWriter,
-        DeferredBuildingSkipListWriter, SkipListRead,
+        AtomicBuildingSkipList, BuildingSkipListReader, DeferredBuildingSkipListWriter,
+        SkipListRead,
     },
     ByteSliceList, ByteSliceReader, ByteSliceWriter, DocListBlock, DocListDecode, DocListDecoder,
     DocListEncode, DocListEncoder, DocListFormat,
@@ -85,8 +85,12 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
 }
 
 impl<A: Allocator + Clone> DocListEncode for BuildingDocListEncoder<A> {
-    fn add_pos(&mut self, field: usize) -> io::Result<()> {
-        self.doc_list_encoder.add_pos(field)
+    fn add_pos(&mut self, field: usize) {
+        self.doc_list_encoder.add_pos(field);
+    }
+
+    fn set_field_mask(&mut self, fieldmask: u8) {
+        self.doc_list_encoder.set_field_mask(fieldmask);
     }
 
     fn end_doc(&mut self, docid: DocId) -> io::Result<()> {
@@ -303,7 +307,7 @@ mod tests {
         let termfreqs = &termfreqs[..];
 
         for _ in 0..termfreqs[0] {
-            doc_list_encoder.add_pos(0)?;
+            doc_list_encoder.add_pos(0);
         }
         doc_list_encoder.end_doc(docids[0])?;
 
@@ -325,7 +329,7 @@ mod tests {
         assert!(!doc_list_decoder.decode_one_block(docids[0], &mut doc_list_block)?);
 
         for _ in 0..termfreqs[1] {
-            doc_list_encoder.add_pos(0)?;
+            doc_list_encoder.add_pos(0);
         }
         doc_list_encoder.end_doc(docids[1])?;
 
@@ -344,7 +348,7 @@ mod tests {
 
         for i in 2..BLOCK_LEN {
             for _ in 0..termfreqs[i] {
-                doc_list_encoder.add_pos(0)?;
+                doc_list_encoder.add_pos(0);
             }
             doc_list_encoder.end_doc(docids[i])?;
         }
@@ -365,7 +369,7 @@ mod tests {
 
         for i in 0..BLOCK_LEN + 3 {
             for _ in 0..termfreqs[i + BLOCK_LEN] {
-                doc_list_encoder.add_pos(0)?;
+                doc_list_encoder.add_pos(0);
             }
             doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
         }
@@ -508,7 +512,7 @@ mod tests {
             let w = scope.spawn(move || {
                 for i in 0..BLOCK_LEN * 2 + 3 {
                     for _ in 0..termfreqs[i] {
-                        doc_list_encoder.add_pos(0).unwrap();
+                        doc_list_encoder.add_pos(0);
                     }
                     doc_list_encoder.end_doc(docids[i]).unwrap();
                     thread::yield_now();

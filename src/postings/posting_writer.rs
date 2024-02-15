@@ -36,13 +36,17 @@ impl<D: DocListEncode, P: PositionListEncode> PostingWriter<D, P> {
     }
 
     pub fn add_pos(&mut self, field: usize, pos: u32) -> io::Result<()> {
-        self.doc_list_encoder.add_pos(field)?;
+        self.doc_list_encoder.add_pos(field);
 
         if let Some(position_list_encoder) = self.position_list_encoder.as_mut() {
             position_list_encoder.add_pos(pos)?;
         }
 
         Ok(())
+    }
+
+    pub fn set_fieldmask(&mut self, fieldmask: u8) {
+        self.doc_list_encoder.set_field_mask(fieldmask);
     }
 
     pub fn end_doc(&mut self, docid: DocId) -> io::Result<()> {

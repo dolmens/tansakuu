@@ -11,7 +11,6 @@ pub struct PostingIterator<R: PostingRead> {
     current_docid: DocId,
     current_ttf: u64,
     current_tf: u32,
-    current_fieldmask: u8,
     need_decode_tf: bool,
     need_decode_fieldmask: bool,
     tf_buffer_cursor: usize,
@@ -42,7 +41,6 @@ impl<R: PostingRead> PostingIterator<R> {
             current_docid: INVALID_DOCID,
             current_ttf: 0,
             current_tf: 0,
-            current_fieldmask: 0,
             need_decode_tf: false,
             need_decode_fieldmask: false,
             tf_buffer_cursor: 0,
@@ -146,7 +144,17 @@ impl<R: PostingRead> PostingIterator<R> {
         Ok(true)
     }
 
-    fn get_current_tf(&mut self) -> io::Result<u32> {
+    fn decode_fieldmask_buffer(&mut self) -> io::Result<bool> {
+        if self.need_decode_fieldmask {
+            self.need_decode_fieldmask = false;
+            self.posting_reader
+                .decode_fieldmask_buffer(&mut self.doc_list_block)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn get_current_tf(&mut self) -> io::Result<u32> {
         self.decode_tf_buffer()?;
         debug_assert!(self.doc_buffer_cursor > 0);
         self.current_tf =
@@ -154,7 +162,7 @@ impl<R: PostingRead> PostingIterator<R> {
         Ok(self.current_tf)
     }
 
-    fn get_current_ttf(&mut self) -> io::Result<u64> {
+    pub fn get_current_ttf(&mut self) -> io::Result<u64> {
         self.decode_tf_buffer()?;
         debug_assert!(self.doc_buffer_cursor > 0);
         while self.tf_buffer_cursor < self.doc_buffer_cursor - 1 {
@@ -163,6 +171,18 @@ impl<R: PostingRead> PostingIterator<R> {
             self.tf_buffer_cursor += 1;
         }
         Ok(self.current_ttf)
+    }
+
+    pub fn get_current_fieldmask(&mut self) -> io::Result<u8> {
+        if self.posting_format.has_fieldmask() {
+            self.decode_tf_buffer()?;
+            self.decode_fieldmask_buffer()?;
+            let fieldmask =
+                self.doc_list_block.fieldmasks.as_deref().unwrap()[self.doc_buffer_cursor - 1];
+            Ok(fieldmask)
+        } else {
+            Ok(0)
+        }
     }
 
     fn move_to_current_doc(&mut self) -> io::Result<bool> {

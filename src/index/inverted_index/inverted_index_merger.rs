@@ -8,7 +8,7 @@ use crate::{
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
     schema::IndexType,
-    DocId, END_DOCID,
+    DocId, END_DOCID, END_POSITION,
 };
 
 use super::{InvertedIndexPersistentSegmentData, InvertedIndexPersistentSegmentReader};
@@ -121,7 +121,28 @@ impl IndexMerger for InvertedIndexMerger {
                             break;
                         }
                         if let Some(new_docid) = segment_docid_mappings[docid as usize] {
-                            posting_writer.add_pos(0, 0).unwrap();
+                            if posting_format.has_tflist() {
+                                if posting_format.has_position_list() {
+                                    let mut pos = 0;
+                                    loop {
+                                        pos = posting_iterator.seek_pos(pos).unwrap();
+                                        if pos == END_POSITION {
+                                            posting_writer.add_pos(0, pos).unwrap();
+                                            break;
+                                        }
+                                        pos += 1;
+                                    }
+                                } else {
+                                    let tf = posting_iterator.get_current_tf().unwrap();
+                                    for _ in 0..tf {
+                                        posting_writer.add_pos(0, 0).unwrap();
+                                    }
+                                }
+                            }
+                            if posting_format.has_fieldmask() {
+                                let fieldmask = posting_iterator.get_current_fieldmask().unwrap();
+                                posting_writer.set_fieldmask(fieldmask);
+                            }
                             posting_writer.end_doc(new_docid).unwrap();
                         }
                         docid += 1;

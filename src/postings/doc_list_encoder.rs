@@ -17,7 +17,8 @@ use super::{
 };
 
 pub trait DocListEncode {
-    fn add_pos(&mut self, field: usize) -> io::Result<()>;
+    fn add_pos(&mut self, field: usize);
+    fn set_field_mask(&mut self, fieldmask: u8);
     fn end_doc(&mut self, docid: DocId) -> io::Result<()>;
     fn flush(&mut self) -> io::Result<()>;
     fn df(&self) -> usize;
@@ -184,13 +185,15 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
 }
 
 impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
-    fn add_pos(&mut self, field: usize) -> io::Result<()> {
+    fn add_pos(&mut self, field: usize) {
         self.current_tf += 1;
         self.total_tf += 1;
         debug_assert!(field < 8);
         self.fieldmask |= 1 << field;
+    }
 
-        Ok(())
+    fn set_field_mask(&mut self, fieldmask: u8) {
+        self.fieldmask = fieldmask;
     }
 
     fn end_doc(&mut self, docid: DocId) -> io::Result<()> {
@@ -453,7 +456,7 @@ mod tests {
         let termfreqs = &termfreqs[..];
 
         for _ in 0..termfreqs[0] {
-            doc_list_encoder.add_pos(0)?;
+            doc_list_encoder.add_pos(0);
         }
         doc_list_encoder.end_doc(docids[0])?;
 
@@ -467,7 +470,7 @@ mod tests {
         );
 
         for _ in 0..termfreqs[1] {
-            doc_list_encoder.add_pos(0)?;
+            doc_list_encoder.add_pos(0);
         }
         doc_list_encoder.end_doc(docids[1])?;
 
@@ -487,7 +490,7 @@ mod tests {
 
         for i in 2..BLOCK_LEN {
             for _ in 0..termfreqs[i] {
-                doc_list_encoder.add_pos(0)?;
+                doc_list_encoder.add_pos(0);
             }
             doc_list_encoder.end_doc(docids[i])?;
         }
@@ -498,7 +501,7 @@ mod tests {
 
         for i in 0..BLOCK_LEN + 3 {
             for _ in 0..termfreqs[i + BLOCK_LEN] {
-                doc_list_encoder.add_pos(0)?;
+                doc_list_encoder.add_pos(0);
             }
             doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
         }
@@ -585,7 +588,7 @@ mod tests {
             .collect();
 
         for t in 0..termfreqs[0] {
-            doc_list_encoder.add_pos(fields[0][t as usize])?;
+            doc_list_encoder.add_pos(fields[0][t as usize]);
         }
         doc_list_encoder.end_doc(docids[0])?;
 
@@ -599,7 +602,7 @@ mod tests {
         );
 
         for t in 0..termfreqs[1] {
-            doc_list_encoder.add_pos(fields[1][t as usize])?;
+            doc_list_encoder.add_pos(fields[1][t as usize]);
         }
         doc_list_encoder.end_doc(docids[1])?;
 
@@ -619,7 +622,7 @@ mod tests {
 
         for i in 2..BLOCK_LEN {
             for t in 0..termfreqs[i] {
-                doc_list_encoder.add_pos(fields[i][t as usize])?;
+                doc_list_encoder.add_pos(fields[i][t as usize]);
             }
             doc_list_encoder.end_doc(docids[i])?;
         }
@@ -630,7 +633,7 @@ mod tests {
 
         for i in 0..BLOCK_LEN + 3 {
             for t in 0..termfreqs[i + BLOCK_LEN] {
-                doc_list_encoder.add_pos(fields[i + BLOCK_LEN][t as usize])?;
+                doc_list_encoder.add_pos(fields[i + BLOCK_LEN][t as usize]);
             }
             doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
         }

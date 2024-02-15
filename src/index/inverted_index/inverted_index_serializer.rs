@@ -122,8 +122,15 @@ impl IndexSerializer for InvertedIndexSerializer {
                             pos += 1;
                         }
                     } else {
-                        // get current tf...
+                        let tf = posting_iterator.get_current_tf().unwrap();
+                        for _ in 0..tf {
+                            posting_writer.add_pos(0, 0).unwrap();
+                        }
                     }
+                }
+                if posting_format.has_fieldmask() {
+                    let fieldmask = posting_iterator.get_current_fieldmask().unwrap();
+                    posting_writer.set_fieldmask(fieldmask);
                 }
                 posting_writer.end_doc(docid).unwrap();
                 docid += 1;

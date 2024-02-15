@@ -12,7 +12,6 @@ pub struct BufferedPostingIterator<'a> {
     current_docid: DocId,
     current_ttf: u64,
     current_tf: u32,
-    current_fieldmask: u8,
     need_decode_tf: bool,
     need_decode_fieldmask: bool,
     tf_buffer_cursor: usize,
@@ -36,7 +35,6 @@ impl<'a> BufferedPostingIterator<'a> {
             current_docid: u32::MAX,
             current_ttf: 0,
             current_tf: 0,
-            current_fieldmask: 0,
             need_decode_tf: false,
             need_decode_fieldmask: false,
             tf_buffer_cursor: 0,
@@ -134,25 +132,6 @@ impl<'a> BufferedPostingIterator<'a> {
         Ok(true)
     }
 
-    fn get_current_tf(&mut self) -> io::Result<u32> {
-        self.decode_tf_buffer()?;
-        debug_assert!(self.doc_buffer_cursor > 0);
-        self.current_tf =
-            self.doc_list_block.termfreqs.as_deref().unwrap()[self.doc_buffer_cursor - 1];
-        Ok(self.current_tf)
-    }
-
-    fn get_current_ttf(&mut self) -> io::Result<u64> {
-        self.decode_tf_buffer()?;
-        debug_assert!(self.doc_buffer_cursor > 0);
-        while self.tf_buffer_cursor < self.doc_buffer_cursor - 1 {
-            self.current_ttf +=
-                self.doc_list_block.termfreqs.as_deref().unwrap()[self.tf_buffer_cursor] as u64;
-            self.tf_buffer_cursor += 1;
-        }
-        Ok(self.current_ttf)
-    }
-
     fn move_to_current_doc(&mut self) -> io::Result<bool> {
         if self.position_docid != self.current_docid {
             self.position_docid = self.current_docid;
@@ -164,6 +143,35 @@ impl<'a> BufferedPostingIterator<'a> {
             self.decode_doc_position_buffer()
         } else {
             Ok(true)
+        }
+    }
+
+    pub fn get_current_tf(&mut self) -> io::Result<u32> {
+        self.decode_tf_buffer()?;
+        self.current_tf =
+            self.doc_list_block.termfreqs.as_deref().unwrap()[self.doc_buffer_cursor - 1];
+        Ok(self.current_tf)
+    }
+
+    pub fn get_current_ttf(&mut self) -> io::Result<u64> {
+        self.decode_tf_buffer()?;
+        while self.tf_buffer_cursor < self.doc_buffer_cursor - 1 {
+            self.current_ttf +=
+                self.doc_list_block.termfreqs.as_deref().unwrap()[self.tf_buffer_cursor] as u64;
+            self.tf_buffer_cursor += 1;
+        }
+        Ok(self.current_ttf)
+    }
+
+    pub fn get_current_fieldmask(&mut self) -> io::Result<u8> {
+        if self.posting_format.has_fieldmask() {
+            self.decode_tf_buffer()?;
+            self.decode_fieldmask_buffer()?;
+            let fieldmask =
+                self.doc_list_block.fieldmasks.as_deref().unwrap()[self.doc_buffer_cursor - 1];
+            Ok(fieldmask)
+        } else {
+            Ok(0)
         }
     }
 }
@@ -235,6 +243,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
     use std::io;
 
     use crate::{
@@ -289,7 +298,7 @@ mod tests {
         assert_eq!(posting_iterator.seek_pos(1)?, 2);
         assert_eq!(posting_iterator.seek_pos(3)?, 4);
         assert_eq!(posting_iterator.seek_pos(5)?, END_POSITION);
-        // }
+
         assert_eq!(posting_iterator.seek(1)?, END_DOCID);
 
         for i in 0..termfreqs[1] {
@@ -707,6 +716,188 @@ mod tests {
             pos += 1;
         }
         assert_eq!(doc_positions, positions[BLOCK_LEN + 3]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_tf_and_fieldmask() -> io::Result<()> {
+        const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
+        let posting_format = PostingFormat::builder()
+            .with_tflist()
+            .with_fieldmask()
+            .with_position_list()
+            .build();
+        let mut posting_writer: BuildingPostingWriter =
+            BuildingPostingWriter::new(posting_format.clone(), 1024);
+        let posting_list = posting_writer.building_posting_list().clone();
+
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas = &docids_deltas[..];
+        let docids: Vec<_> = docids_deltas
+            .iter()
+            .scan(0, |acc, &x| {
+                *acc += x;
+                Some(*acc)
+            })
+            .collect();
+        let docids = &docids[..];
+
+        let mut rng = rand::thread_rng();
+
+        let termfreqs: Vec<u32> = (0..BLOCK_LEN * 2 + 3)
+            .map(|_| rng.gen_range(1..=64))
+            .collect();
+        let termfreqs = &termfreqs[..];
+
+        let mut positions: Vec<Vec<u32>> = vec![];
+        let mut field_indexes: Vec<Vec<usize>> = vec![];
+        let mut fieldmasks: Vec<u8> = vec![];
+
+        for &tf in termfreqs {
+            let mut mask = 0;
+            let mut field = rng.gen_range(0..8) as usize;
+            mask |= 1 << field;
+            let mut indexes = vec![field];
+            let mut pos = 0;
+            let mut one_positions: Vec<u32> = vec![pos];
+            for _ in 1..tf {
+                if field < 7 {
+                    field += 1;
+                    mask |= 1 << field;
+                }
+                indexes.push(field);
+                pos += 1;
+                one_positions.push(pos);
+            }
+            positions.push(one_positions);
+            field_indexes.push(indexes);
+            fieldmasks.push(mask);
+        }
+
+        for t in 0..termfreqs[0] {
+            posting_writer.add_pos(field_indexes[0][t as usize], positions[0][t as usize])?;
+        }
+        posting_writer.end_doc(docids[0])?;
+
+        let building_segment = SegmentPosting::new_building_segment(0, &posting_list);
+        let segment_postings = vec![building_segment];
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        assert_eq!(posting_iterator.seek(0)?, 0);
+
+        assert_eq!(posting_iterator.get_current_tf()?, termfreqs[0]);
+        assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[0]);
+
+        assert_eq!(posting_iterator.seek(1)?, END_DOCID);
+
+        // Skip tf to get fm
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        assert_eq!(posting_iterator.seek(0)?, 0);
+        assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[0]);
+        assert_eq!(posting_iterator.seek(1)?, END_DOCID);
+
+        for t in 0..termfreqs[1] {
+            posting_writer.add_pos(field_indexes[1][t as usize], positions[1][t as usize])?;
+        }
+        posting_writer.end_doc(docids[1])?;
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        // Skip one doc to get tf
+        assert_eq!(posting_iterator.seek(0)?, 0);
+        assert_eq!(posting_iterator.seek(1)?, docids[1]);
+
+        assert_eq!(posting_iterator.seek(docids[1] + 1)?, END_DOCID);
+        assert_eq!(posting_iterator.get_current_tf()?, termfreqs[1]);
+        assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[1]);
+
+        for i in 2..BLOCK_LEN {
+            for t in 0..termfreqs[i] {
+                posting_writer.add_pos(field_indexes[i][t as usize], positions[i][t as usize])?;
+            }
+            posting_writer.end_doc(docids[i])?;
+        }
+
+        // seek one by one
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        for (i, &docid) in docids[..BLOCK_LEN].iter().enumerate() {
+            assert_eq!(posting_iterator.seek(docid)?, docid);
+            assert_eq!(posting_iterator.get_current_tf()?, termfreqs[i]);
+            assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[i]);
+        }
+        assert_eq!(posting_iterator.seek(docids[BLOCK_LEN - 1] + 1)?, END_DOCID);
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        // skip some items
+
+        for (i, &docid) in docids[..BLOCK_LEN].iter().enumerate() {
+            if i % 2 == 0 {
+                assert_eq!(posting_iterator.seek(docid)?, docid);
+                assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[i]);
+            }
+        }
+
+        for i in 0..BLOCK_LEN + 3 {
+            for t in 0..termfreqs[i + BLOCK_LEN] {
+                posting_writer.add_pos(
+                    field_indexes[i + BLOCK_LEN][t as usize],
+                    positions[i + BLOCK_LEN][t as usize],
+                )?;
+            }
+            posting_writer.end_doc(docids[i + BLOCK_LEN])?;
+        }
+
+        // seek one by one
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        for (i, &docid) in docids[..BLOCK_LEN * 2 + 3].iter().enumerate() {
+            assert_eq!(posting_iterator.seek(docid)?, docid);
+            // Just fieldmask
+            assert_eq!(posting_iterator.get_current_fieldmask()?, fieldmasks[i]);
+        }
+        assert_eq!(
+            posting_iterator.seek(docids[BLOCK_LEN * 2 + 3 - 1] + 1)?,
+            END_DOCID
+        );
+
+        // skip some items
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        for (i, &docid) in docids[..BLOCK_LEN * 2 + 3].iter().enumerate() {
+            if i % 2 == 0 {
+                assert_eq!(posting_iterator.seek(docid)?, docid);
+                // Just tf
+                assert_eq!(posting_iterator.get_current_tf()?, termfreqs[i]);
+            }
+        }
+
+        // skip some blocks
+
+        let mut posting_iterator =
+            BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
+
+        let docid = docids[BLOCK_LEN + 3];
+        assert_eq!(posting_iterator.seek(docid)?, docid);
+        assert_eq!(posting_iterator.get_current_tf()?, termfreqs[BLOCK_LEN + 3]);
+        assert_eq!(
+            posting_iterator.get_current_fieldmask()?,
+            fieldmasks[BLOCK_LEN + 3]
+        );
 
         Ok(())
     }
