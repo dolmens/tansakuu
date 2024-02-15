@@ -5,13 +5,12 @@ use allocator_api2::alloc::{Allocator, Global};
 use crate::postings::{ByteSliceList, ByteSliceReader, ByteSliceWriter};
 
 use super::{
-    BuildingSkipListBlock, SkipListBlockSnapshot, SkipListFlushInfo, SkipListFormat, SkipListRead,
-    SkipListReader, SkipListWrite, SkipListWriter,
+    BuildingSkipListBlock, SkipListBlockSnapshot, SkipListFormat, SkipListRead, SkipListReader,
+    SkipListWrite, SkipListWriter,
 };
 
 #[derive(Clone)]
 pub struct BuildingSkipList<A: Allocator = Global> {
-    flush_info: Arc<SkipListFlushInfo>,
     building_block: Arc<BuildingSkipListBlock>,
     byte_slice_list: Arc<ByteSliceList<A>>,
     skip_list_format: SkipListFormat,
@@ -52,7 +51,6 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_writer = SkipListWriter::new(skip_list_format.clone(), byte_slice_writer);
         let building_skip_list = BuildingSkipList {
-            flush_info: skip_list_writer.flush_info().clone(),
             building_block: skip_list_writer.building_block().clone(),
             byte_slice_list,
             skip_list_format,
@@ -85,7 +83,7 @@ impl<A: Allocator> SkipListWrite for BuildingSkipListWriter<A> {
 
 impl<'a> BuildingSkipListReader<'a> {
     pub fn open<A: Allocator>(building_skip_list: &'a BuildingSkipList<A>) -> Self {
-        let flush_info = building_skip_list.flush_info.load();
+        let flush_info = building_skip_list.building_block.flush_info.load();
         let byte_slice_list = building_skip_list.byte_slice_list.as_ref();
         let building_block = building_skip_list.building_block.as_ref();
         let skip_list_format = building_skip_list.skip_list_format.clone();
@@ -96,7 +94,11 @@ impl<'a> BuildingSkipListReader<'a> {
             ByteSliceReader::open(byte_slice_list)
         };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
-        let flushed_count_updated = building_skip_list.flush_info.load().flushed_count();
+        let flushed_count_updated = building_skip_list
+            .building_block
+            .flush_info
+            .load()
+            .flushed_count();
         if flushed_count < flushed_count_updated {
             building_block_snapshot.clear();
             flushed_count = flushed_count_updated;

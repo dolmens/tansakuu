@@ -17,7 +17,6 @@ use super::{
 
 #[derive(Clone)]
 pub struct BuildingDocList<A: Allocator = Global> {
-    flush_info: Arc<DocListFlushInfo>,
     building_block: Arc<BuildingDocListBlock>,
     byte_slice_list: Arc<ByteSliceList<A>>,
     building_skip_list: Arc<AtomicBuildingSkipList<A>>,
@@ -65,11 +64,9 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
             .with_writer(byte_slice_writer)
             .with_skip_list_writer(skip_list_writer)
             .build();
-        let flush_info = doc_list_encoder.flush_info().clone();
         let building_block = doc_list_encoder.building_block().clone();
 
         let building_doc_list = BuildingDocList {
-            flush_info,
             building_block,
             byte_slice_list,
             building_skip_list,
@@ -111,7 +108,7 @@ impl<A: Allocator + Clone> DocListEncode for BuildingDocListEncoder<A> {
 
 impl<'a> BuildingDocListDecoder<'a> {
     pub fn open<A: Allocator>(building_doc_list: &'a BuildingDocList<A>) -> Self {
-        let flush_info = building_doc_list.flush_info.load();
+        let flush_info = building_doc_list.building_block.flush_info.load();
         let byte_slice_list = building_doc_list.byte_slice_list.as_ref();
         let building_block = building_doc_list.building_block.as_ref();
         let doc_list_format = building_doc_list.doc_list_format.clone();
@@ -122,7 +119,11 @@ impl<'a> BuildingDocListDecoder<'a> {
             ByteSliceReader::open(byte_slice_list)
         };
         let mut building_block_snapshot = building_block.snapshot(flush_info.buffer_len());
-        let flushed_count_updated = building_doc_list.flush_info.load().flushed_count();
+        let flushed_count_updated = building_doc_list
+            .building_block
+            .flush_info
+            .load()
+            .flushed_count();
         if flushed_count < flushed_count_updated {
             building_block_snapshot.clear();
             flushed_count = flushed_count_updated;

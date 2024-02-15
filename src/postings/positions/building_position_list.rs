@@ -15,12 +15,11 @@ use crate::{
 
 use super::{
     BuildingPositionListBlock, PositionListBlock, PositionListBlockSnapshot, PositionListDecode,
-    PositionListDecoder, PositionListEncode, PositionListEncoder, PositionListFlushInfo,
+    PositionListDecoder, PositionListEncode, PositionListEncoder,
 };
 
 #[derive(Clone)]
 pub struct BuildingPositionList<A: Allocator = Global> {
-    pub flush_info: Arc<PositionListFlushInfo>,
     pub building_block: Arc<BuildingPositionListBlock>,
     pub byte_slice_list: Arc<ByteSliceList<A>>,
     pub building_skip_list: Arc<AtomicBuildingSkipList<A>>,
@@ -59,10 +58,8 @@ impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
         );
         let building_skip_list = skip_list_writer.building_skip_list();
         let position_list_encoder = PositionListEncoder::new(byte_slice_writer, skip_list_writer);
-        let flush_info = position_list_encoder.flush_info().clone();
         let building_block = position_list_encoder.building_block().clone();
         let building_position_list = BuildingPositionList {
-            flush_info,
             building_block,
             byte_slice_list,
             building_skip_list,
@@ -105,7 +102,7 @@ impl<'a> BuildingPositionListDecoder<'a> {
     pub fn open<A: Allocator>(building_position_list: &'a BuildingPositionList<A>) -> Self {
         let byte_slice_list = building_position_list.byte_slice_list.as_ref();
         let building_block = building_position_list.building_block.as_ref();
-        let flush_info = building_position_list.flush_info.load();
+        let flush_info = building_position_list.building_block.flush_info.load();
         let mut flushed_count = flush_info.flushed_count();
         let mut buffer_len = flush_info.buffer_len();
         let mut byte_slice_reader = if flushed_count == 0 {
@@ -114,7 +111,11 @@ impl<'a> BuildingPositionListDecoder<'a> {
             ByteSliceReader::open(byte_slice_list)
         };
         let mut building_block_snapshot = building_block.snapshot(buffer_len);
-        let flushed_count_updated = building_position_list.flush_info.load().flushed_count();
+        let flushed_count_updated = building_position_list
+            .building_block
+            .flush_info
+            .load()
+            .flushed_count();
         if flushed_count < flushed_count_updated {
             building_block_snapshot.clear();
             flushed_count = flushed_count_updated;

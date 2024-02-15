@@ -25,13 +25,13 @@ pub struct SkipListWriter<W: Write> {
     last_value: u64,
     buffer_len: usize,
     item_count_flushed: usize,
-    flush_info: Arc<SkipListFlushInfo>,
     building_block: Arc<BuildingSkipListBlock>,
     output_writer: CountingWriter<W>,
     skip_list_format: SkipListFormat,
 }
 
 pub struct BuildingSkipListBlock {
+    pub flush_info: SkipListFlushInfo,
     keys: [RelaxedU32; SKIPLIST_BLOCK_LEN],
     offsets: [RelaxedU32; SKIPLIST_BLOCK_LEN],
     values: Option<Box<[RelaxedU32]>>,
@@ -56,7 +56,6 @@ pub struct SkipListFlushInfoSnapshot {
 impl<W: Write> SkipListWriter<W> {
     pub fn new(skip_list_format: SkipListFormat, output_writer: W) -> Self {
         let building_block = Arc::new(BuildingSkipListBlock::new(&skip_list_format));
-        let flush_info = Arc::new(SkipListFlushInfo::new());
 
         Self {
             last_key: 0,
@@ -64,15 +63,10 @@ impl<W: Write> SkipListWriter<W> {
             last_value: 0,
             buffer_len: 0,
             item_count_flushed: 0,
-            flush_info,
             building_block,
             output_writer: CountingWriter::wrap(output_writer),
             skip_list_format,
         }
-    }
-
-    pub fn flush_info(&self) -> &Arc<SkipListFlushInfo> {
-        &self.flush_info
     }
 
     pub fn building_block(&self) -> &Arc<BuildingSkipListBlock> {
@@ -96,7 +90,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
 
         self.buffer_len += 1;
         let flush_info = SkipListFlushInfoSnapshot::new(self.item_count_flushed, self.buffer_len);
-        self.flush_info.store(flush_info);
+        self.building_block.flush_info.store(flush_info);
 
         if self.buffer_len == SKIPLIST_BLOCK_LEN {
             self.flush()?;
@@ -136,7 +130,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
             self.item_count_flushed += self.buffer_len;
             self.buffer_len = 0;
             let flush_info = SkipListFlushInfoSnapshot::new(self.item_count_flushed, 0);
-            self.flush_info.store(flush_info);
+            self.building_block.flush_info.store(flush_info);
         }
 
         Ok(())
@@ -149,6 +143,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
 
 impl BuildingSkipListBlock {
     pub fn new(skip_list_format: &SkipListFormat) -> Self {
+        let flush_info = SkipListFlushInfo::new();
         let keys = std::iter::repeat_with(|| RelaxedU32::new(0))
             .take(SKIPLIST_BLOCK_LEN)
             .collect::<Vec<_>>()
@@ -173,6 +168,7 @@ impl BuildingSkipListBlock {
         };
 
         Self {
+            flush_info,
             keys,
             offsets,
             values,
@@ -310,7 +306,6 @@ mod tests {
         let skip_list_format = SkipListFormat::builder().build();
         let mut buf = vec![];
         let mut skip_list_writer = SkipListWriter::new(skip_list_format, &mut buf);
-        let flush_info = skip_list_writer.flush_info().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
         let docids_deltas = &docids_deltas[..];
@@ -341,13 +336,13 @@ mod tests {
             skip_list_writer.add_skip_item(docids[i] as u64, offsets[i], None)?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = skip_list_writer.building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.buffer_len(), 3);
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
 
         skip_list_writer.flush()?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = skip_list_writer.building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
 

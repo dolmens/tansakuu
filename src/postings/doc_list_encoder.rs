@@ -32,7 +32,6 @@ pub struct DocListEncoder<W: Write, S: SkipListWrite> {
     fieldmask: u8,
     buffer_len: usize,
     doc_count_flushed: usize,
-    flush_info: Arc<DocListFlushInfo>,
     building_block: Arc<BuildingDocListBlock>,
     writer: CountingWriter<W>,
     skip_list_writer: S,
@@ -54,6 +53,7 @@ pub struct DocListFlushInfoSnapshot {
 }
 
 pub struct BuildingDocListBlock {
+    pub flush_info: DocListFlushInfo,
     pub docids: [RelaxedU32; DOC_LIST_BLOCK_LEN],
     pub termfreqs: Option<Box<[RelaxedU32]>>,
     pub fieldmasks: Option<Box<[RelaxedU8]>>,
@@ -118,7 +118,6 @@ impl<W: Write, S: SkipListWrite> DocListEncoderBuilder<W, S> {
 impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
     pub fn new(doc_list_format: DocListFormat, writer: W, skip_list_writer: S) -> Self {
         let building_block = Arc::new(BuildingDocListBlock::new(&doc_list_format));
-        let flush_info = Arc::new(DocListFlushInfo::new());
         Self {
             df: 0,
             last_docid: 0,
@@ -127,16 +126,11 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
             fieldmask: 0,
             buffer_len: 0,
             doc_count_flushed: 0,
-            flush_info,
             building_block,
             writer: CountingWriter::wrap(writer),
             skip_list_writer,
             doc_list_format,
         }
-    }
-
-    pub fn flush_info(&self) -> &Arc<DocListFlushInfo> {
-        &self.flush_info
     }
 
     pub fn building_block(&self) -> &Arc<BuildingDocListBlock> {
@@ -182,7 +176,7 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
             self.doc_count_flushed += self.buffer_len;
             self.buffer_len = 0;
             let flush_info = DocListFlushInfoSnapshot::new(self.doc_count_flushed, 0);
-            self.flush_info.store(flush_info);
+            self.building_block.flush_info.store(flush_info);
         }
 
         Ok(())
@@ -214,7 +208,7 @@ impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
 
         self.buffer_len += 1;
         let flush_info = DocListFlushInfoSnapshot::new(self.doc_count_flushed, self.buffer_len);
-        self.flush_info.store(flush_info);
+        self.building_block.flush_info.store(flush_info);
 
         if self.buffer_len == DOC_LIST_BLOCK_LEN {
             self.flush_buffer()?;
@@ -291,6 +285,7 @@ impl DocListFlushInfoSnapshot {
 
 impl BuildingDocListBlock {
     pub fn new(doc_list_format: &DocListFormat) -> Self {
+        let flush_info = DocListFlushInfo::new();
         const ZERO: RelaxedU32 = RelaxedU32::new(0);
         let docids = [ZERO; DOC_LIST_BLOCK_LEN];
         let termfreqs = if doc_list_format.has_tflist() {
@@ -315,6 +310,7 @@ impl BuildingDocListBlock {
         };
 
         Self {
+            flush_info,
             docids,
             termfreqs,
             fieldmasks,
@@ -438,7 +434,6 @@ mod tests {
         let skip_list_writer = SkipListWriter::new(skip_list_format, &mut skip_list_buf);
         let mut doc_list_encoder = DocListEncoder::new(doc_list_format, &mut buf, skip_list_writer);
         let building_block = doc_list_encoder.building_block().clone();
-        let flush_info = doc_list_encoder.flush_info().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
         let docids_deltas = &docids_deltas[..];
@@ -462,7 +457,7 @@ mod tests {
         }
         doc_list_encoder.end_doc(docids[0])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -476,7 +471,7 @@ mod tests {
         }
         doc_list_encoder.end_doc(docids[1])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -497,7 +492,7 @@ mod tests {
             doc_list_encoder.end_doc(docids[i])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
@@ -508,13 +503,13 @@ mod tests {
             doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
         assert_eq!(flush_info_snapshot.buffer_len(), 3);
 
         doc_list_encoder.flush()?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
@@ -558,7 +553,6 @@ mod tests {
         let skip_list_writer = SkipListWriter::new(skip_list_format, &mut skip_list_buf);
         let mut doc_list_encoder = DocListEncoder::new(doc_list_format, &mut buf, skip_list_writer);
         let building_block = doc_list_encoder.building_block().clone();
-        let flush_info = doc_list_encoder.flush_info().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
         let docids_deltas = &docids_deltas[..];
@@ -595,7 +589,7 @@ mod tests {
         }
         doc_list_encoder.end_doc(docids[0])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -609,7 +603,7 @@ mod tests {
         }
         doc_list_encoder.end_doc(docids[1])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -630,7 +624,7 @@ mod tests {
             doc_list_encoder.end_doc(docids[i])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
@@ -641,13 +635,13 @@ mod tests {
             doc_list_encoder.end_doc(docids[i + BLOCK_LEN])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
         assert_eq!(flush_info_snapshot.buffer_len(), 3);
 
         doc_list_encoder.flush()?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 

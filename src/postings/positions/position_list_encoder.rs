@@ -29,7 +29,6 @@ pub struct PositionListEncoder<W: Write, S: SkipListWrite> {
     last_pos: u32,
     buffer_len: usize,
     item_count_flushed: usize,
-    flush_info: Arc<PositionListFlushInfo>,
     building_block: Arc<BuildingPositionListBlock>,
     writer: CountingWriter<W>,
     skip_list_writer: S,
@@ -51,6 +50,7 @@ pub struct PositionListFlushInfoSnapshot {
 }
 
 pub struct BuildingPositionListBlock {
+    pub flush_info: PositionListFlushInfo,
     positions: [RelaxedU32; POSITION_LIST_BLOCK_LEN],
 }
 
@@ -134,6 +134,7 @@ impl BuildingPositionListBlock {
         const ZERO: RelaxedU32 = RelaxedU32::new(0);
 
         Self {
+            flush_info: PositionListFlushInfo::new(),
             positions: [ZERO; POSITION_LIST_BLOCK_LEN],
         }
     }
@@ -217,13 +218,11 @@ impl<W: Write, S: SkipListWrite> PositionListEncoderBuilder<W, S> {
 
 impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
     pub fn new(writer: W, skip_list_writer: S) -> Self {
-        let flush_info = Arc::new(PositionListFlushInfo::new());
         Self {
             ttf: 0,
             last_pos: 0,
             buffer_len: 0,
             item_count_flushed: 0,
-            flush_info,
             building_block: Arc::new(BuildingPositionListBlock::new()),
             writer: CountingWriter::wrap(writer),
             skip_list_writer,
@@ -232,10 +231,6 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
 
     pub fn skip_list_writer(&self) -> &S {
         &self.skip_list_writer
-    }
-
-    pub fn flush_info(&self) -> &Arc<PositionListFlushInfo> {
-        &self.flush_info
     }
 
     pub fn building_block(&self) -> &Arc<BuildingPositionListBlock> {
@@ -265,7 +260,7 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
             }
 
             let flush_info = PositionListFlushInfoSnapshot::new(self.item_count_flushed, 0);
-            self.flush_info.store(flush_info);
+            self.building_block.flush_info.store(flush_info);
         }
 
         Ok(())
@@ -279,7 +274,7 @@ impl<W: Write, S: SkipListWrite> PositionListEncode for PositionListEncoder<W, S
         self.buffer_len += 1;
         let flush_info =
             PositionListFlushInfoSnapshot::new(self.item_count_flushed, self.buffer_len);
-        self.flush_info.store(flush_info);
+        self.building_block.flush_info.store(flush_info);
 
         if self.buffer_len == POSITION_LIST_BLOCK_LEN {
             self.flush_buffer()?;

@@ -198,7 +198,6 @@ mod tests {
 
     #[test]
     fn test_short_list() -> io::Result<()> {
-        const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
         const UNCOMPRESSED_LEN: usize = MAX_UNCOMPRESSED_POSITION_LIST_LEN;
         let positions: Vec<_> = (0..UNCOMPRESSED_LEN as u32).collect();
         let mut buf = vec![];

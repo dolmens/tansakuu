@@ -115,7 +115,6 @@ mod tests {
             none_position_list_encoder(),
         );
         let building_block = posting_writer.doc_list_encoder().building_block().clone();
-        let flush_info = posting_writer.doc_list_encoder().flush_info().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
         let docids_deltas = &docids_deltas[..];
@@ -139,7 +138,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[0])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -153,7 +152,7 @@ mod tests {
         }
         posting_writer.end_doc(docids[1])?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
         assert_eq!(building_block.docids[0].load(), docids[0]);
@@ -174,7 +173,7 @@ mod tests {
             posting_writer.end_doc(docids[i])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
@@ -185,13 +184,13 @@ mod tests {
             posting_writer.end_doc(docids[i + BLOCK_LEN])?;
         }
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2);
         assert_eq!(flush_info_snapshot.buffer_len(), 3);
 
         posting_writer.flush()?;
 
-        let flush_info_snapshot = flush_info.load();
+        let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), BLOCK_LEN * 2 + 3);
         assert_eq!(flush_info_snapshot.buffer_len(), 0);
 
