@@ -2,7 +2,10 @@ use std::{io, sync::Arc};
 
 use allocator_api2::alloc::{Allocator, Global};
 
-use crate::{DocId, MAX_UNCOMPRESSED_DOC_LIST_LEN};
+use crate::{
+    util::fractional_capacity_policy::FractionalChunkCapacityPolicy, DocId,
+    MAX_UNCOMPRESSED_DOC_LIST_LEN,
+};
 
 use super::{
     doc_list_encoder::{BuildingDocListBlock, DocListBlockSnapshot},
@@ -24,7 +27,10 @@ pub struct BuildingDocList<A: Allocator = Global> {
 }
 
 pub struct BuildingDocListEncoder<A: Allocator + Clone = Global> {
-    doc_list_encoder: DocListEncoder<ByteSliceWriter<A>, DeferredBuildingSkipListWriter<A>>,
+    doc_list_encoder: DocListEncoder<
+        ByteSliceWriter<FractionalChunkCapacityPolicy, A>,
+        DeferredBuildingSkipListWriter<A>,
+    >,
     building_doc_list: BuildingDocList<A>,
 }
 
@@ -37,27 +43,19 @@ pub struct BuildingDocListDecoder<'a> {
 }
 
 impl<A: Allocator + Clone + Default> BuildingDocListEncoder<A> {
-    pub fn new(doc_list_format: DocListFormat, initial_slice_capacity: usize) -> Self {
-        Self::new_in(doc_list_format, initial_slice_capacity, A::default())
+    pub fn new(doc_list_format: DocListFormat) -> Self {
+        Self::new_in(doc_list_format, A::default())
     }
 }
 
 impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
-    pub fn new_in(
-        doc_list_format: DocListFormat,
-        initial_slice_capacity: usize,
-        allocator: A,
-    ) -> Self {
-        let byte_slice_writer =
-            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
+    pub fn new_in(doc_list_format: DocListFormat, allocator: A) -> Self {
+        let byte_slice_writer = ByteSliceWriter::new_in(allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = doc_list_format.skip_list_format().clone();
 
-        let skip_list_writer = DeferredBuildingSkipListWriter::new_in(
-            skip_list_format,
-            initial_slice_capacity,
-            allocator.clone(),
-        );
+        let skip_list_writer =
+            DeferredBuildingSkipListWriter::new_in(skip_list_format, allocator.clone());
         let building_skip_list = skip_list_writer.building_skip_list().clone();
 
         let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
@@ -277,7 +275,7 @@ mod tests {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
         let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format.clone(), 1024);
+            BuildingDocListEncoder::new(doc_list_format.clone());
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut doc_list_decoder = BuildingDocListDecoder::open(&building_doc_list);
@@ -488,7 +486,7 @@ mod tests {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
         let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format.clone(), 1024);
+            BuildingDocListEncoder::new(doc_list_format.clone());
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();

@@ -249,7 +249,7 @@ mod tests {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut posting_writer: BuildingPostingWriter =
-            BuildingPostingWriter::new(posting_format.clone(), 1024);
+            BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -363,7 +363,7 @@ mod tests {
             .with_position_list()
             .build();
         let mut posting_writer: BuildingPostingWriter =
-            BuildingPostingWriter::new(posting_format.clone(), 1024);
+            BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();

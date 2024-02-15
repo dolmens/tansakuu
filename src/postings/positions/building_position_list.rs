@@ -10,6 +10,7 @@ use crate::{
         },
         ByteSliceList, ByteSliceReader, ByteSliceWriter,
     },
+    util::fractional_capacity_policy::FractionalChunkCapacityPolicy,
     MAX_UNCOMPRESSED_POSITION_LIST_LEN,
 };
 
@@ -26,8 +27,10 @@ pub struct BuildingPositionList<A: Allocator = Global> {
 }
 
 pub struct BuildingPositionListEncoder<A: Allocator + Clone = Global> {
-    position_list_encoder:
-        PositionListEncoder<ByteSliceWriter<A>, DeferredBuildingSkipListWriter<A>>,
+    position_list_encoder: PositionListEncoder<
+        ByteSliceWriter<FractionalChunkCapacityPolicy, A>,
+        DeferredBuildingSkipListWriter<A>,
+    >,
     building_position_list: BuildingPositionList<A>,
 }
 
@@ -40,22 +43,18 @@ pub struct BuildingPositionListDecoder<'a> {
 }
 
 impl<A: Allocator + Clone + Default> BuildingPositionListEncoder<A> {
-    pub fn new(initial_slice_capacity: usize) -> Self {
-        Self::new_in(initial_slice_capacity, Default::default())
+    pub fn new() -> Self {
+        Self::new_in(Default::default())
     }
 }
 
 impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
-    pub fn new_in(initial_slice_capacity: usize, allocator: A) -> Self {
-        let byte_slice_writer =
-            ByteSliceWriter::with_initial_capacity_in(initial_slice_capacity, allocator.clone());
+    pub fn new_in(allocator: A) -> Self {
+        let byte_slice_writer = ByteSliceWriter::new_in(allocator.clone());
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = SkipListFormat::builder().build();
-        let skip_list_writer = DeferredBuildingSkipListWriter::new_in(
-            skip_list_format,
-            initial_slice_capacity,
-            allocator.clone(),
-        );
+        let skip_list_writer =
+            DeferredBuildingSkipListWriter::new_in(skip_list_format, allocator.clone());
         let building_skip_list = skip_list_writer.building_skip_list();
         let position_list_encoder = PositionListEncoder::new(byte_slice_writer, skip_list_writer);
         let building_block = position_list_encoder.building_block().clone();
@@ -207,7 +206,7 @@ mod tests {
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
         let mut position_list_encoder: BuildingPositionListEncoder =
-            BuildingPositionListEncoder::new(1024);
+            BuildingPositionListEncoder::new();
         let building_position_list = position_list_encoder.building_position_list().clone();
         let mut position_list_block = PositionListBlock::new();
         let position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
@@ -346,7 +345,7 @@ mod tests {
     fn test_multi_thread() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
         let mut position_list_encoder: BuildingPositionListEncoder =
-            BuildingPositionListEncoder::new(1024);
+            BuildingPositionListEncoder::new();
         let building_position_list = position_list_encoder.building_position_list().clone();
 
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();

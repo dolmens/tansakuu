@@ -9,7 +9,6 @@ use super::{BuildingSkipList, BuildingSkipListWriter, SkipListFormat, SkipListWr
 pub struct DeferredBuildingSkipListWriter<A: Allocator = Global> {
     skip_list_writer: Option<Box<BuildingSkipListWriter<A>>>,
     building_skip_list: Arc<AtomicBuildingSkipList<A>>,
-    initial_slice_capacity: usize,
     skip_list_format: SkipListFormat,
     allocator: Option<A>,
 }
@@ -47,15 +46,10 @@ impl<A: Allocator> Drop for AtomicBuildingSkipList<A> {
 }
 
 impl<A: Allocator> DeferredBuildingSkipListWriter<A> {
-    pub fn new_in(
-        skip_list_format: SkipListFormat,
-        initial_slice_capacity: usize,
-        allocator: A,
-    ) -> Self {
+    pub fn new_in(skip_list_format: SkipListFormat, allocator: A) -> Self {
         Self {
             skip_list_writer: None,
             building_skip_list: Arc::new(AtomicBuildingSkipList::new()),
-            initial_slice_capacity,
             skip_list_format,
             allocator: Some(allocator),
         }
@@ -71,7 +65,6 @@ impl<A: Allocator + Clone> SkipListWrite for DeferredBuildingSkipListWriter<A> {
         if self.skip_list_writer.is_none() {
             let skip_list_writer = BuildingSkipListWriter::new_in(
                 self.skip_list_format.clone(),
-                self.initial_slice_capacity,
                 self.allocator.take().unwrap(),
             );
             let building_skip_list = skip_list_writer.building_skip_list().clone();

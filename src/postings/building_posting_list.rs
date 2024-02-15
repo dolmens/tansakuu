@@ -29,29 +29,20 @@ pub struct BuildingPostingReader<'a, A: Allocator = Global> {
 }
 
 impl<A: Allocator + Clone + Default> BuildingPostingWriter<A> {
-    pub fn new(posting_format: PostingFormat, initial_slice_capacity: usize) -> Self {
-        Self::new_in(posting_format, initial_slice_capacity, A::default())
+    pub fn new(posting_format: PostingFormat) -> Self {
+        Self::new_in(posting_format, A::default())
     }
 }
 
 impl<A: Allocator + Clone> BuildingPostingWriter<A> {
-    pub fn new_in(
-        posting_format: PostingFormat,
-        initial_slice_capacity: usize,
-        allocator: A,
-    ) -> Self {
+    pub fn new_in(posting_format: PostingFormat, allocator: A) -> Self {
         let doc_list_format = posting_format.doc_list_format().clone();
-        let doc_list_encoder = BuildingDocListEncoder::new_in(
-            doc_list_format,
-            initial_slice_capacity,
-            allocator.clone(),
-        );
+        let doc_list_encoder = BuildingDocListEncoder::new_in(doc_list_format, allocator.clone());
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
 
         let (position_list_encoder, building_position_list) = if posting_format.has_position_list()
         {
-            let position_list_encoder =
-                BuildingPositionListEncoder::new_in(initial_slice_capacity, allocator.clone());
+            let position_list_encoder = BuildingPositionListEncoder::new_in(allocator.clone());
             let building_position_list = position_list_encoder.building_position_list().clone();
             (Some(position_list_encoder), Some(building_position_list))
         } else {
@@ -203,7 +194,7 @@ mod tests {
         let posting_format = PostingFormat::builder().with_tflist().build();
         let doc_list_format = posting_format.doc_list_format().clone();
         let mut posting_writer: BuildingPostingWriter =
-            BuildingPostingWriter::new(posting_format.clone(), 1024);
+            BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut posting_reader = BuildingPostingReader::open(&posting_list);
@@ -415,7 +406,7 @@ mod tests {
         let posting_format = PostingFormat::builder().with_tflist().build();
         let doc_list_format = posting_format.doc_list_format().clone();
         let mut posting_writer: BuildingPostingWriter =
-            BuildingPostingWriter::new(posting_format.clone(), 1024);
+            BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
@@ -497,7 +488,7 @@ mod tests {
             .build();
         let doc_list_format = posting_format.doc_list_format().clone();
         let mut posting_writer: BuildingPostingWriter =
-            BuildingPostingWriter::new(posting_format.clone(), 1024);
+            BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut position_list_block = PositionListBlock::new();

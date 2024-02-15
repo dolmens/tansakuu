@@ -320,7 +320,7 @@ mod tests {
         POSITION_LIST_BLOCK_LEN,
     };
 
-    use super::{PositionListFlushInfo, PositionListFlushInfoSnapshot};
+    use super::PositionListFlushInfoSnapshot;
 
     #[test]
     fn test_basic() -> io::Result<()> {

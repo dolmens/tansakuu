@@ -70,10 +70,7 @@ impl IndexWriter for InvertedIndexWriter {
                 .posting_indexes
                 .entry(hashkey)
                 .or_insert_with(|| {
-                    let posting_writer = BuildingPostingWriter::new(
-                        self.posting_format.clone(),
-                        HASHMAP_INITIAL_CAPACITY,
-                    );
+                    let posting_writer = BuildingPostingWriter::new(self.posting_format.clone());
                     let building_posting_list = posting_writer.building_posting_list().clone();
                     self.posting_table.insert(hashkey, building_posting_list);
                     self.posting_writers.push(posting_writer);
