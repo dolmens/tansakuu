@@ -99,11 +99,11 @@ impl PositionListFlushInfo {
 }
 
 impl PositionListFlushInfoSnapshot {
-    const BUFFER_LEN_MASK: u64 = 0xFFFF_FFFF;
-    const FLUSHED_COUNT_MASK: u64 = 0xFFFF_FFFF_0000_0000;
+    const BUFFER_LEN_MASK: u64 = 0xFF;
+    const FLUSHED_COUNT_MASK: u64 = 0xFFFF_FFFF_FFFF_FF00;
 
     pub fn new(flushed_count: usize, buffer_len: usize) -> Self {
-        let value = ((flushed_count as u64) << 32) | ((buffer_len as u64) & Self::BUFFER_LEN_MASK);
+        let value = ((flushed_count as u64) << 8) | ((buffer_len as u64) & Self::BUFFER_LEN_MASK);
         Self { value }
     }
 
@@ -121,11 +121,11 @@ impl PositionListFlushInfoSnapshot {
     }
 
     pub fn flushed_count(&self) -> usize {
-        (self.value >> 32) as usize
+        (self.value >> 8) as usize
     }
 
     pub fn set_flushed_count(&mut self, flushed_count: usize) {
-        self.value = (self.value & Self::BUFFER_LEN_MASK) | ((flushed_count as u64) << 32);
+        self.value = (self.value & Self::BUFFER_LEN_MASK) | ((flushed_count as u64) << 8);
     }
 }
 
@@ -320,6 +320,8 @@ mod tests {
         POSITION_LIST_BLOCK_LEN,
     };
 
+    use super::{PositionListFlushInfo, PositionListFlushInfoSnapshot};
+
     #[test]
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
@@ -393,5 +395,19 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_position_flush_info() {
+        let mut flush_info = PositionListFlushInfoSnapshot::new(100, 3);
+        assert_eq!(flush_info.flushed_count(), 100);
+        assert_eq!(flush_info.buffer_len(), 3);
+        flush_info.set_buffer_len(128);
+        assert_eq!(flush_info.flushed_count(), 100);
+        assert_eq!(flush_info.buffer_len(), 128);
+        let flushed_count: usize = 0x11_FFFF_FFFF_FFF1;
+        flush_info.set_flushed_count(flushed_count);
+        assert_eq!(flush_info.flushed_count(), flushed_count);
+        assert_eq!(flush_info.buffer_len(), 128);
     }
 }
