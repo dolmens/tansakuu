@@ -59,6 +59,10 @@ impl<D: DocListDecode, P: PositionListDecode> PostingReader<D, P> {
         &self.doc_list_decoder
     }
 
+    pub fn set_position_list_decoder(&mut self, position_list_decoder: Option<P>) {
+        self.position_list_decoder = position_list_decoder;
+    }
+
     pub fn position_list_decoder(&self) -> Option<&P> {
         self.position_list_decoder.as_ref()
     }

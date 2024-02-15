@@ -23,8 +23,9 @@ pub struct BuildingPostingWriter<A: Allocator + Clone = Global> {
     building_posting_list: BuildingPostingList<A>,
 }
 
-pub struct BuildingPostingReader<'a> {
+pub struct BuildingPostingReader<'a, A: Allocator = Global> {
     posting_reader: PostingReader<BuildingDocListDecoder<'a>, BuildingPositionListDecoder<'a>>,
+    building_posting_list: &'a BuildingPostingList<A>,
 }
 
 impl<A: Allocator + Clone + Default> BuildingPostingWriter<A> {
@@ -92,26 +93,21 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
     }
 }
 
-impl<'a> BuildingPostingReader<'a> {
-    pub fn open<A: Allocator>(building_posting_list: &'a BuildingPostingList<A>) -> Self {
+impl<'a, A: Allocator> BuildingPostingReader<'a, A> {
+    pub fn open(building_posting_list: &'a BuildingPostingList<A>) -> Self {
         let doc_list_decoder =
             BuildingDocListDecoder::open(&building_posting_list.building_doc_list);
-
-        let position_list_decoder =
-            building_posting_list
-                .building_position_list
-                .as_ref()
-                .map(|building_position_list| {
-                    BuildingPositionListDecoder::open(building_position_list)
-                });
 
         let posting_reader = PostingReader::new(
             building_posting_list.posting_format.clone(),
             doc_list_decoder,
-            position_list_decoder,
+            None,
         );
 
-        Self { posting_reader }
+        Self {
+            posting_reader,
+            building_posting_list,
+        }
     }
 
     pub fn doc_list_decoder(&self) -> &BuildingDocListDecoder<'_> {
@@ -135,7 +131,7 @@ impl<'a> BuildingPostingReader<'a> {
     }
 }
 
-impl<'a> PostingRead for BuildingPostingReader<'a> {
+impl<'a, A: Allocator> PostingRead for BuildingPostingReader<'a, A> {
     fn decode_doc_buffer(
         &mut self,
         docid: DocId,
@@ -165,6 +161,17 @@ impl<'a> PostingRead for BuildingPostingReader<'a> {
         from_ttf: u64,
         position_list_block: &mut super::positions::PositionListBlock,
     ) -> io::Result<bool> {
+        if self.posting_reader.position_list_decoder().is_none() {
+            let position_list_decoder = self
+                .building_posting_list
+                .building_position_list
+                .as_ref()
+                .map(|building_position_list| {
+                    BuildingPositionListDecoder::open(building_position_list)
+                });
+            self.posting_reader
+                .set_position_list_decoder(position_list_decoder);
+        }
         self.posting_reader
             .decode_position_buffer(from_ttf, position_list_block)
     }
