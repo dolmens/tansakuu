@@ -7,7 +7,8 @@ use crate::{
     document::{OwnedValue, Value},
     index::IndexWriter,
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat, PostingFormatBuilder},
-    schema::{Index, IndexType},
+    schema::{IndexRef, IndexType},
+    table::SegmentStat,
     util::{
         ha3_capacity_policy::Ha3CapacityPolicy, hash::hash_string_64,
         layered_hashmap::LayeredHashMapWriter,
@@ -27,11 +28,10 @@ pub struct InvertedIndexWriter {
     modified_postings: BTreeSet<usize>,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
     posting_format: PostingFormat,
-    index: Index,
 }
 
 impl InvertedIndexWriter {
-    pub fn new(index: Index) -> Self {
+    pub fn new(index: IndexRef, recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
         let posting_format = match index.index_type() {
             IndexType::Text(text_index_options) => {
                 PostingFormatBuilder::default().with_text_index_options(text_index_options)
@@ -43,8 +43,12 @@ impl InvertedIndexWriter {
         .build();
         let hasher_builder = RandomState::new();
         let capacity_policy = Ha3CapacityPolicy;
+        let hashmap_initial_capacity = recent_segment_stat
+            .and_then(|stat| stat.index_term_count.get(index.name()))
+            .cloned()
+            .unwrap_or(HASHMAP_INITIAL_CAPACITY);
         let posting_table = PostingTable::with_initial_capacity(
-            HASHMAP_INITIAL_CAPACITY,
+            hashmap_initial_capacity,
             hasher_builder,
             capacity_policy,
         );
@@ -55,9 +59,8 @@ impl InvertedIndexWriter {
             posting_writers: Vec::new(),
             posting_indexes: HashMap::new(),
             modified_postings: BTreeSet::new(),
-            index_data: Arc::new(InvertedIndexBuildingSegmentData::new(postings)),
+            index_data: Arc::new(InvertedIndexBuildingSegmentData::new(index, postings)),
             posting_format,
-            index,
         }
     }
 }
@@ -78,7 +81,7 @@ impl IndexWriter for InvertedIndexWriter {
                 })
                 .clone();
             let posting_writer = &mut self.posting_writers[writer_index];
-            let field_offset = self.index.field_offset(field);
+            let field_offset = self.index_data.index.field_offset(field);
             posting_writer.add_pos(field_offset, pos as u32).unwrap();
             self.modified_postings.insert(writer_index);
         }

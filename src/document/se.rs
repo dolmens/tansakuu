@@ -32,7 +32,7 @@ where
         let stored_field_values = || {
             doc.iter_fields_and_values().filter(|(field, _)| {
                 self.schema
-                    .field_by_name(*field)
+                    .field(*field)
                     .is_some_and(|field| field.is_stored())
             })
         };

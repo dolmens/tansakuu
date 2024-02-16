@@ -1,6 +1,6 @@
 use std::{fs::File, sync::Arc};
 
-use crate::{index::IndexSerializer, schema::Index};
+use crate::{index::IndexSerializer, schema::IndexRef};
 
 use super::{PrimaryKeyBuildingSegmentData, PrimaryKeyDictBuilder};
 
@@ -10,7 +10,7 @@ pub struct PrimaryKeySerializer {
 }
 
 impl PrimaryKeySerializer {
-    pub fn new(index: &Index, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
+    pub fn new(index: &IndexRef, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
         Self {
             index_name: index.name().to_string(),
             index_data,

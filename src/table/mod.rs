@@ -10,8 +10,7 @@ mod table_writer;
 mod version;
 
 pub use primary_key_reader::{PrimaryKeyReader, TypedPrimaryKeyReader};
-pub use segment::SegmentId;
-pub use segment::SegmentMeta;
+pub use segment::{SegmentId, SegmentMeta, SegmentStat};
 pub use table::{Table, TableRef};
 pub use table_column_reader::TableColumnReader;
 pub use table_data::{TableData, TableDataRef};

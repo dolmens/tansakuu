@@ -3,6 +3,7 @@ use std::{collections::hash_map::RandomState, sync::Arc};
 use crate::{
     document::OwnedValue,
     index::IndexWriter,
+    table::SegmentStat,
     util::{
         capacity_policy::FixedCapacityPolicy, hash::hash_string_64,
         layered_hashmap::LayeredHashMapWriter,
@@ -19,11 +20,14 @@ pub struct PrimaryKeyWriter {
 }
 
 impl PrimaryKeyWriter {
-    pub fn new() -> Self {
+    pub fn new(recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
+        let hashmap_initial_capacity = recent_segment_stat
+            .map(|stat| stat.doc_count)
+            .unwrap_or(HASHMAP_INITIAL_CAPACITY);
         let keys = LayeredHashMapWriter::with_initial_capacity(
-            HASHMAP_INITIAL_CAPACITY,
+            hashmap_initial_capacity,
             hasher_builder,
             capacity_policy,
         );

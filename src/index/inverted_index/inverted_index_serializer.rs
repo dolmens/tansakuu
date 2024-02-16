@@ -7,7 +7,7 @@ use crate::{
         positions::{position_list_encoder_builder, PositionListEncode},
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
-    schema::{Index, IndexType},
+    schema::{IndexRef, IndexType},
     END_DOCID, END_POSITION,
 };
 
@@ -16,11 +16,11 @@ use super::InvertedIndexBuildingSegmentData;
 pub struct InvertedIndexSerializer {
     index_name: String,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
-    index: Index,
+    index: IndexRef,
 }
 
 impl InvertedIndexSerializer {
-    pub fn new(index: Index, index_data: Arc<InvertedIndexBuildingSegmentData>) -> Self {
+    pub fn new(index: IndexRef, index_data: Arc<InvertedIndexBuildingSegmentData>) -> Self {
         Self {
             index_name: index.name().to_string(),
             index_data,

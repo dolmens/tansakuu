@@ -2,7 +2,9 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use crate::{deletionmap::BuildingDeletionMap, util::atomic::AcqRelUsize};
 
-use super::{BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta};
+use super::{
+    BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta, SegmentStat,
+};
 
 #[derive(Clone)]
 pub struct BuildingSegment {
@@ -34,6 +36,12 @@ impl BuildingSegment {
 
     pub fn data(&self) -> &Arc<BuildingSegmentData> {
         &self.data
+    }
+
+    pub fn collect_segment_stat(&self) -> SegmentStat {
+        let mut segment_stat = SegmentStat::new();
+        self.data.collect_segment_stat(&mut segment_stat);
+        segment_stat
     }
 }
 
@@ -84,5 +92,9 @@ impl BuildingSegmentData {
 
     pub fn deletionmap(&self) -> &BuildingDeletionMap {
         &self.deletionmap
+    }
+
+    pub fn collect_segment_stat(&self, segment_stat: &mut SegmentStat) {
+        self.index_data.collect_segment_stat(segment_stat);
     }
 }

@@ -8,8 +8,8 @@ use arc_swap::ArcSwap;
 use crate::schema::{Schema, SchemaRef};
 
 use super::{
-    segment::BuildingSegmentData, TableData, TableReader, TableSettings, TableSettingsRef,
-    TableWriter,
+    segment::BuildingSegmentData, SegmentStat, TableData, TableReader, TableSettings,
+    TableSettingsRef, TableWriter,
 };
 
 pub struct Table {
@@ -55,6 +55,11 @@ impl Table {
 
     pub fn settings(&self) -> &TableSettingsRef {
         &self.settings
+    }
+
+    pub fn recent_segment_stat(&self) -> Option<Arc<SegmentStat>> {
+        let mut table_data = self.table_data.lock().unwrap();
+        table_data.recent_segment_stat().map(|stat| stat.clone())
     }
 
     pub(crate) fn add_building_segment(&self, building_segment: Arc<BuildingSegmentData>) {

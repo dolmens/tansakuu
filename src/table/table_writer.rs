@@ -15,7 +15,8 @@ pub struct TableWriter<'a> {
 
 impl<'a> TableWriter<'a> {
     pub fn new(table: &'a Table) -> Self {
-        let segment_writer = SegmentWriter::new(table.schema());
+        let recent_segment_stat = table.recent_segment_stat();
+        let segment_writer = SegmentWriter::new(table.schema(), recent_segment_stat.as_ref());
         table.add_building_segment(segment_writer.building_segment().clone());
         let table_reader = table.reader();
 
@@ -40,7 +41,8 @@ impl<'a> TableWriter<'a> {
     }
 
     pub fn new_segment(&mut self) {
-        self.segment_writer = SegmentWriter::new(self.table.schema());
+        let recent_segment_stat = self.table.recent_segment_stat();
+        self.segment_writer = SegmentWriter::new(self.table.schema(), recent_segment_stat.as_ref());
         let new_segment = self.building_segment().clone();
         self.table.add_building_segment(new_segment);
         self.table_reader = self.table.reader();

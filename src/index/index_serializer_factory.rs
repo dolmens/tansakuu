@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::schema::{Index, IndexType};
+use crate::schema::{IndexRef, IndexType};
 
 use super::{
     inverted_index::{InvertedIndexBuildingSegmentData, InvertedIndexSerializer},
@@ -14,7 +14,7 @@ pub struct IndexSerializerFactory {}
 impl IndexSerializerFactory {
     pub fn create(
         &self,
-        index: &Index,
+        index: &IndexRef,
         index_data: Arc<dyn IndexSegmentData>,
     ) -> Box<dyn IndexSerializer> {
         match index.index_type() {

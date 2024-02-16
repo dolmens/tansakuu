@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::BitOr, sync::Arc};
+use std::{cell::Cell, collections::HashMap, ops::BitOr, sync::Arc};
 
 #[derive(Default)]
 pub struct SchemaBuilder {
@@ -7,11 +7,11 @@ pub struct SchemaBuilder {
 
 #[derive(Default)]
 pub struct Schema {
-    fields: Vec<Field>,
-    indexes: Vec<Index>,
-    primary_key: Option<(FieldEntry, IndexEntry)>,
-    fields_map: HashMap<String, FieldEntry>,
-    indexes_map: HashMap<String, IndexEntry>,
+    fields: Vec<FieldRef>,
+    indexes: Vec<IndexRef>,
+    primary_key: Option<(FieldRef, IndexRef)>,
+    fields_map: HashMap<String, FieldRef>,
+    indexes_map: HashMap<String, IndexRef>,
 }
 
 pub type SchemaRef = Arc<Schema>;
@@ -22,22 +22,19 @@ pub enum FieldType {
     I64,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct FieldEntry(usize);
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct IndexEntry(usize);
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
     name: String,
     field_type: FieldType,
     multi: bool,
     column: bool,
     stored: bool,
-    index_entries: Vec<IndexEntry>,
-    index_names: Vec<String>,
+    indexes: Cell<Vec<IndexRef>>,
 }
+
+unsafe impl Send for Field {}
+unsafe impl Sync for Field {}
+
+pub type FieldRef = Arc<Field>;
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct TextIndexOptions {
@@ -53,13 +50,13 @@ pub enum IndexType {
     PrimaryKey,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Index {
     name: String,
     index_type: IndexType,
-    field_entries: Vec<FieldEntry>,
-    field_names: Vec<String>,
+    fields: Vec<FieldRef>,
 }
+
+pub type IndexRef = Arc<Index>;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
@@ -144,62 +141,60 @@ impl SchemaBuilder {
             options.indexed = true;
         }
         assert!(!self.schema.fields_map.contains_key(&field_name));
-        let field = Field {
-            name: field_name.clone(),
+        let field = Arc::new(Field {
+            name: field_name,
             field_type,
             multi: false,
             column: options.column,
             stored: options.stored,
-            index_entries: vec![],
-            index_names: vec![],
-        };
+            indexes: Cell::new(vec![]),
+        });
         self.schema
             .fields_map
-            .insert(field_name.clone(), FieldEntry(self.schema.fields.len()));
-        self.schema.fields.push(field);
+            .insert(field.name().to_string(), field.clone());
 
         if options.indexed {
-            let fields = vec![field_name.clone()];
+            let fields = vec![field.name().to_string()];
             let index_type = if options.primary_key {
                 IndexType::PrimaryKey
             } else {
                 IndexType::Text(Default::default())
             };
-            self.add_index(field_name, index_type, &fields);
+            self.add_index(field.name().to_string(), index_type, &fields);
         }
+
+        self.schema.fields.push(field);
     }
 
     pub fn add_index(&mut self, index_name: String, index_type: IndexType, fields: &[String]) {
         assert!(!self.schema.indexes_map.contains_key(&index_name));
-        let field_names: Vec<_> = fields.iter().cloned().collect();
-        let field_entries: Vec<_> = fields
+        let field_refs: Vec<_> = fields
             .iter()
-            .map(|f| self.schema.fields_map.get(f).unwrap())
+            .map(|f| self.schema.field(f).unwrap())
             .cloned()
             .collect();
-        for entry in &field_entries {
-            self.schema.fields[entry.0]
-                .index_entries
-                .push(IndexEntry(self.schema.indexes.len()));
-            self.schema.fields[entry.0]
-                .index_names
-                .push(index_name.clone());
-        }
-        if index_type == IndexType::PrimaryKey {
-            assert!(self.schema.primary_key.is_none());
-            assert_eq!(fields.len(), 1);
-            self.schema.primary_key =
-                Some((field_entries[0], IndexEntry(self.schema.indexes.len())));
-        }
-        let index = Index {
-            name: index_name.clone(),
+
+        let index = Arc::new(Index {
+            name: index_name,
             index_type,
-            field_entries,
-            field_names,
-        };
+            fields: field_refs,
+        });
+
+        for field_name in fields {
+            let field = self.schema.field(field_name).unwrap();
+            let field_indexes = unsafe { &mut *field.indexes.as_ptr() };
+            field_indexes.push(index.clone())
+        }
+
+        if index.index_type == IndexType::PrimaryKey {
+            assert!(self.schema.primary_key.is_none());
+            assert_eq!(index.fields.len(), 1);
+            self.schema.primary_key = Some((index.fields[0].clone(), index.clone()));
+        }
+
         self.schema
             .indexes_map
-            .insert(index_name, IndexEntry(self.schema.indexes.len()));
+            .insert(index.name().to_string(), index.clone());
         self.schema.indexes.push(index);
     }
 
@@ -213,40 +208,29 @@ impl Schema {
         SchemaBuilder::new()
     }
 
-    pub fn field(&self, field_entry: FieldEntry) -> &Field {
-        &self.fields[field_entry.0]
+    pub fn field(&self, field_name: &str) -> Option<&FieldRef> {
+        self.fields_map.get(field_name)
     }
 
-    pub fn field_by_name(&self, field_name: &str) -> Option<&Field> {
-        self.fields_map
-            .get(field_name)
-            .map(|&entry| &self.fields[entry.0])
+    pub fn index(&self, index_name: &str) -> Option<&IndexRef> {
+        self.indexes_map.get(index_name)
     }
 
-    pub fn index(&self, index_entry: IndexEntry) -> &Index {
-        &self.indexes[index_entry.0]
-    }
-
-    pub fn index_by_name(&self, index_name: &str) -> Option<&Index> {
-        self.indexes_map
-            .get(index_name)
-            .map(|&entry| &self.indexes[entry.0])
-    }
-
-    pub fn primary_key(&self) -> Option<(&Field, &Index)> {
+    pub fn primary_key(&self) -> Option<(&FieldRef, &IndexRef)> {
         self.primary_key
-            .map(|(field_entry, index_entry)| (self.field(field_entry), self.index(index_entry)))
+            .as_ref()
+            .map(|(field, index)| (field, index))
     }
 
-    pub fn indexes(&self) -> &[Index] {
+    pub fn indexes(&self) -> &[IndexRef] {
         &self.indexes
     }
 
-    pub fn columns(&self) -> impl Iterator<Item = &Field> {
+    pub fn columns(&self) -> impl Iterator<Item = &FieldRef> {
         self.fields.iter().filter(|f| f.column)
     }
 
-    pub fn fields(&self) -> &[Field] {
+    pub fn fields(&self) -> &[FieldRef] {
         &self.fields
     }
 }
@@ -261,19 +245,19 @@ impl Index {
     }
 
     pub fn field_offset(&self, field: &str) -> usize {
-        if self.field_names.len() == 1 {
+        if self.fields.len() == 1 {
             return 0;
         }
-        for (i, f) in self.field_names.iter().enumerate() {
-            if f == field {
+        for (i, f) in self.fields.iter().enumerate() {
+            if f.name() == field {
                 return i;
             }
         }
         0
     }
 
-    pub fn fields(&self) -> &[FieldEntry] {
-        &self.field_entries
+    pub fn fields(&self) -> &[FieldRef] {
+        &self.fields
     }
 }
 
@@ -294,8 +278,8 @@ impl Field {
         self.stored
     }
 
-    pub fn indexes(&self) -> &[IndexEntry] {
-        &self.index_entries
+    pub fn indexes(&self) -> &[IndexRef] {
+        unsafe { &*self.indexes.as_ptr() }
     }
 }
 

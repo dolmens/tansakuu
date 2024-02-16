@@ -1,8 +1,11 @@
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
 
 use crate::{
-    column::ColumnSerializerFactory, index::IndexSerializerFactory, schema::SchemaRef,
-    table::segment::SegmentMetaData, DocId, END_DOCID,
+    column::ColumnSerializerFactory,
+    index::IndexSerializerFactory,
+    schema::SchemaRef,
+    table::{segment::SegmentMetaData, SegmentStat},
+    DocId, END_DOCID,
 };
 
 use super::{
@@ -17,6 +20,7 @@ use super::{
 pub struct TableData {
     building_segments: Vec<BuildingSegment>,
     persistent_segments: Vec<PersistentSegment>,
+    recent_segment_stat: Option<Arc<SegmentStat>>,
     version: Version,
     directory: PathBuf,
     schema: SchemaRef,
@@ -46,6 +50,7 @@ impl TableData {
         Self {
             building_segments: vec![],
             persistent_segments,
+            recent_segment_stat: None,
             version,
             directory,
             schema,
@@ -88,6 +93,10 @@ impl TableData {
         }
     }
 
+    pub fn recent_segment_stat(&self) -> Option<&Arc<SegmentStat>> {
+        self.recent_segment_stat.as_ref()
+    }
+
     pub fn add_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {
         if let Some(building_segment) = self.building_segments.last() {
             if !building_segment.data().dumping() {
@@ -117,6 +126,8 @@ impl TableData {
         ));
         building_segment_data.set_dumping_start();
         let building_segment = self.building_segments.last_mut().unwrap();
+        let segment_stat = building_segment.collect_segment_stat();
+        self.recent_segment_stat = Some(Arc::new(segment_stat));
         building_segment
             .meta_mut()
             .set_doc_count(building_segment_data.doc_count());
