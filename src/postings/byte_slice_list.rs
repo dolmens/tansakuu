@@ -14,6 +14,7 @@ use crate::util::{
     fractional_capacity_policy::FractionalChunkCapacityPolicy,
 };
 
+#[repr(C)]
 pub struct ByteSlice {
     next: RelaxedAtomicPtr<ByteSlice>,
     capacity: usize,
@@ -57,12 +58,27 @@ impl ByteSlice {
         unsafe { self.next.load().as_ref() }
     }
 
+    #[cfg(not(miri))]
+    pub fn data(&self) -> NonNull<u8> {
+        unsafe {
+            let pself = self as *const ByteSlice;
+            let pdata = pself.add(1) as *const u8 as *mut u8;
+            debug_assert_eq!(pdata, self.data.as_ptr());
+            NonNull::new_unchecked(pdata)
+        }
+    }
+
+    #[cfg(miri)]
+    pub fn data(&self) -> NonNull<u8> {
+        self.data
+    }
+
     pub fn data_slice(&self, offset: usize, len: usize) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.data.as_ptr().add(offset), len) }
+        unsafe { slice::from_raw_parts(self.data().as_ptr().add(offset), len) }
     }
 
     pub fn data_slice_mut(&self, offset: usize, len: usize) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.data.as_ptr().add(offset), len) }
+        unsafe { slice::from_raw_parts_mut(self.data().as_ptr().add(offset), len) }
     }
 }
 
@@ -105,6 +121,7 @@ impl<A: Allocator> ByteSliceList<A> {
             .extend(Layout::from_size_align(capacity, 1).unwrap())
             .unwrap()
             .0
+            .pad_to_align()
     }
 
     fn create_slice(&self, capacity: usize) -> NonNull<ByteSlice> {
@@ -249,11 +266,18 @@ impl<'a> ByteSliceReader<'a> {
     }
 
     pub fn open<A: Allocator>(byte_slice_list: &'a ByteSliceList<A>) -> Self {
+        let total_size = byte_slice_list.total_size();
+        let current_slice = if total_size > 0 {
+            byte_slice_list.head_ref()
+        } else {
+            None
+        };
+
         Self {
-            total_size: byte_slice_list.total_size(),
+            total_size,
             global_offset: 0,
             current_slice_offset: 0,
-            current_slice: byte_slice_list.head_ref(),
+            current_slice,
         }
     }
 
