@@ -1,4 +1,9 @@
-use std::{alloc::Layout, marker::PhantomData, ptr::NonNull, sync::Arc};
+use std::{
+    alloc::{handle_alloc_error, Layout},
+    marker::PhantomData,
+    ptr::NonNull,
+    sync::Arc,
+};
 
 use allocator_api2::alloc::{Allocator, Global};
 
@@ -177,7 +182,11 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
 
     fn allocate_chunk(&self, index: usize) -> NonNull<T> {
         let layout = self.chunk_layout();
-        let chunk = self.allocator.allocate(layout).unwrap().cast();
+        let chunk = self
+            .allocator
+            .allocate(layout)
+            .unwrap_or_else(|_| handle_alloc_error(layout))
+            .cast();
 
         self.append_chunk(chunk, index);
 
@@ -251,7 +260,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         let node_ptr = self
             .allocator
             .allocate(layout)
-            .unwrap()
+            .unwrap_or_else(|_| handle_alloc_error(layout))
             .cast::<RadixTreeNode<T>>();
         let slot_ptr = self.slot_ptr(node_ptr);
         for i in 0..(1 << self.node_exponent) {

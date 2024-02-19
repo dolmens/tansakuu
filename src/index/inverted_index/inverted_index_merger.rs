@@ -79,7 +79,7 @@ impl IndexMerger for InvertedIndexMerger {
             if hashkey == 0 {
                 continue;
             }
-            let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
+            let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
                 .with_writer(&posting_output_writer)
                 .with_skip_list_output_writer(&skip_list_output_writer)
                 .build();

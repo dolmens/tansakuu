@@ -7,6 +7,7 @@ mod doc_list_decoder;
 mod doc_list_encoder;
 mod doc_list_format;
 mod match_data;
+mod multi_value_buffer;
 pub mod positions;
 mod posting_format;
 mod posting_iterator;
@@ -26,6 +27,9 @@ pub use doc_list_decoder::{DocListDecode, DocListDecoder};
 pub use doc_list_encoder::{doc_list_encoder_builder, DocListEncode, DocListEncoder};
 pub use doc_list_format::{DocListFormat, DocListFormatBuilder};
 pub use match_data::MatchData;
+pub use multi_value_buffer::{
+    MultiValue, MultiValueBuffer, MultiValueBufferPool, MultiValueBuilder, ValueItem,
+};
 pub use posting_format::{PostingFormat, PostingFormatBuilder};
 pub use posting_iterator::PostingIterator;
 pub use posting_reader::{PostingRead, PostingReader};

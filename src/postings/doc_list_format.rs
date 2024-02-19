@@ -1,6 +1,6 @@
 use super::skip_list::SkipListFormat;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub struct DocListFormat {
     has_tflist: bool,
     has_fieldmask: bool,

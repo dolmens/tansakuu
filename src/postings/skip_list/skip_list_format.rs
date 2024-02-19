@@ -1,4 +1,4 @@
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub struct SkipListFormat {
     has_value: bool,
 }

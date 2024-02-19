@@ -1,5 +1,5 @@
 use std::{
-    alloc::Layout,
+    alloc::{handle_alloc_error, Layout},
     io::{self, Read, Write},
     ptr::{self, NonNull},
     slice,
@@ -103,7 +103,10 @@ impl<A: Allocator> ByteSliceList<A> {
 
     fn create_slice_in(capacity: usize, allocator: &A) -> NonNull<ByteSlice> {
         let layout = Self::layout_with_capacity(capacity);
-        let byte_slice_ptr = allocator.allocate(layout).unwrap().cast::<ByteSlice>();
+        let byte_slice_ptr = allocator
+            .allocate(layout)
+            .unwrap_or_else(|_| handle_alloc_error(layout))
+            .cast::<ByteSlice>();
         unsafe {
             let byte_slice_data_ptr =
                 NonNull::new_unchecked(byte_slice_ptr.as_ptr().add(1).cast::<u8>());

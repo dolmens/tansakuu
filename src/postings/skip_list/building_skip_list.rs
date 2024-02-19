@@ -47,7 +47,7 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
     pub fn new_in(skip_list_format: SkipListFormat, allocator: A) -> Self {
         let byte_slice_writer = ByteSliceWriter::new_in(allocator);
         let byte_slice_list = byte_slice_writer.byte_slice_list();
-        let skip_list_writer = SkipListWriter::new(skip_list_format.clone(), byte_slice_writer);
+        let skip_list_writer = SkipListWriter::new(skip_list_format, byte_slice_writer);
         let building_skip_list = BuildingSkipList {
             building_block: skip_list_writer.building_block().clone(),
             byte_slice_list,
@@ -84,7 +84,7 @@ impl<'a> BuildingSkipListReader<'a> {
         let flush_info = building_skip_list.building_block.flush_info.load();
         let byte_slice_list = building_skip_list.byte_slice_list.as_ref();
         let building_block = building_skip_list.building_block.as_ref();
-        let skip_list_format = building_skip_list.skip_list_format.clone();
+        let skip_list_format = building_skip_list.skip_list_format;
         let mut flushed_count = flush_info.flushed_count();
         let mut byte_slice_reader = if flushed_count == 0 {
             ByteSliceReader::empty()
@@ -210,7 +210,7 @@ mod tests {
         const BLOCK_LEN: usize = SKIPLIST_BLOCK_LEN;
         let skip_list_format = SkipListFormat::builder().build();
         let mut skip_list_writer: BuildingSkipListWriter =
-            BuildingSkipListWriter::new(skip_list_format.clone());
+            BuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list().clone();
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 0);
@@ -342,7 +342,7 @@ mod tests {
         const BLOCK_LEN: usize = SKIPLIST_BLOCK_LEN;
         let skip_list_format = SkipListFormat::builder().build();
         let mut skip_list_writer: BuildingSkipListWriter =
-            BuildingSkipListWriter::new(skip_list_format.clone());
+            BuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list().clone();
         let w = thread::spawn(move || {
             for i in 0..BLOCK_LEN + 3 {

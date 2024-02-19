@@ -64,7 +64,7 @@ impl<A: Allocator + Clone> SkipListWrite for DeferredBuildingSkipListWriter<A> {
     fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> std::io::Result<()> {
         if self.skip_list_writer.is_none() {
             let skip_list_writer = BuildingSkipListWriter::new_in(
-                self.skip_list_format.clone(),
+                self.skip_list_format,
                 self.allocator.take().unwrap(),
             );
             let building_skip_list = skip_list_writer.building_skip_list().clone();

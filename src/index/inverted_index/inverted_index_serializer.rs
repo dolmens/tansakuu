@@ -80,7 +80,7 @@ impl IndexSerializer for InvertedIndexSerializer {
         for (hashkey, posting) in postings {
             let mut posting_iterator = PostingIterator::open_building_posting_list(posting);
 
-            let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
+            let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
                 .with_writer(&posting_output_writer)
                 .with_skip_list_output_writer(&skip_list_output_writer)
                 .build();

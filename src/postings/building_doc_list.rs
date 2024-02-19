@@ -58,7 +58,7 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
             DeferredBuildingSkipListWriter::new_in(skip_list_format, allocator.clone());
         let building_skip_list = skip_list_writer.building_skip_list().clone();
 
-        let doc_list_encoder = doc_list_encoder_builder(doc_list_format.clone())
+        let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
             .with_writer(byte_slice_writer)
             .with_skip_list_writer(skip_list_writer)
             .build();
@@ -113,7 +113,7 @@ impl<'a> BuildingDocListDecoder<'a> {
         let flush_info = building_doc_list.building_block.flush_info.load();
         let byte_slice_list = building_doc_list.byte_slice_list.as_ref();
         let building_block = building_doc_list.building_block.as_ref();
-        let doc_list_format = building_doc_list.doc_list_format.clone();
+        let doc_list_format = building_doc_list.doc_list_format;
         let mut flushed_count = flush_info.flushed_count();
         let mut byte_slice_reader = if flushed_count == 0 {
             ByteSliceReader::empty()
@@ -275,7 +275,7 @@ mod tests {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
         let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format.clone());
+            BuildingDocListEncoder::new(doc_list_format);
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut doc_list_decoder = BuildingDocListDecoder::open(&building_doc_list);
@@ -486,7 +486,7 @@ mod tests {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
         let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format.clone());
+            BuildingDocListEncoder::new(doc_list_format);
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();

@@ -2,7 +2,7 @@ use crate::schema::TextIndexOptions;
 
 use super::{skip_list::SkipListFormat, DocListFormat};
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub struct PostingFormat {
     doc_list_format: DocListFormat,
     has_position_list: bool,

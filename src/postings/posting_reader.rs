@@ -201,7 +201,7 @@ mod tests {
             BasicSkipListReader::new(block_last_docids.clone(), block_offsets.clone(), None);
 
         let doc_list_decoder = DocListDecoder::open_with_skip_list_reader(
-            doc_list_format.clone(),
+            doc_list_format,
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
@@ -269,7 +269,7 @@ mod tests {
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut block = DocListBlock::new(&doc_list_format);
         let doc_list_decoder = DocListDecoder::open_with_skip_list_reader(
-            doc_list_format.clone(),
+            doc_list_format,
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,
@@ -317,7 +317,7 @@ mod tests {
         let posting_format = PostingFormat::builder().with_tflist().build();
         let mut block = DocListBlock::new(&doc_list_format);
         let doc_list_decoder = DocListDecoder::open_with_skip_list_reader(
-            doc_list_format.clone(),
+            doc_list_format,
             BLOCK_LEN * 2 + 3,
             buf_reader,
             skip_list_reader,

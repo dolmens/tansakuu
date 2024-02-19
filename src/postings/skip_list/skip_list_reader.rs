@@ -289,8 +289,7 @@ mod tests {
             .unwrap();
 
         let buf_reader = BufReader::new(buf.as_slice());
-        let mut reader =
-            SkipListReader::open(skip_list_format.clone(), BLOCK_LEN * 2 + 3, buf_reader);
+        let mut reader = SkipListReader::open(skip_list_format, BLOCK_LEN * 2 + 3, buf_reader);
         assert!(!reader.eof());
         assert_eq!(reader.item_count, BLOCK_LEN * 2 + 3);
         assert_eq!(reader.read_count, 0);
@@ -325,8 +324,7 @@ mod tests {
         assert_eq!(skipped, BLOCK_LEN * 2 + 3);
 
         let buf_reader = BufReader::new(buf.as_slice());
-        let mut reader =
-            SkipListReader::open(skip_list_format.clone(), BLOCK_LEN * 2 + 3, buf_reader);
+        let mut reader = SkipListReader::open(skip_list_format, BLOCK_LEN * 2 + 3, buf_reader);
         let (found, prev_key, block_last_key, start_offset, end_offset, skipped) =
             reader.seek(keys.last().cloned().unwrap() as u64)?;
         assert!(found);

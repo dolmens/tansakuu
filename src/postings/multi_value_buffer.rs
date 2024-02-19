@@ -1,337 +1,430 @@
 use std::{
-    alloc::Layout,
-    mem,
+    alloc::{handle_alloc_error, Layout},
+    cell::Cell,
+    collections::HashMap,
     ptr::{self, NonNull},
+    sync::Arc,
 };
-
-use allocator_api2::alloc::{Allocator, Global};
 
 use crate::{
-    postings::{Decode, Encode},
-    util::AcqRelUsize,
+    arena::BumpArena,
+    util::atomic::{AcqRelUsize, RelaxedAtomicPtr, RelaxedU32, RelaxedU8},
 };
 
-use super::{ByteSliceReader, ByteSliceWriter};
-
-#[derive(Clone)]
-pub struct ValueItem {
-    pub size: usize,
-    pub align: usize,
-    encode: Encode,
-    decode: Decode,
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub enum ValueItem {
+    U32,
+    U8,
 }
 
 #[derive(Clone)]
 pub struct MultiValue {
+    value_items: Box<[ValueItem]>,
+    item_layouts: Box<[Layout]>,
+}
+
+pub struct MultiValueBuilder {
     value_items: Vec<ValueItem>,
 }
 
+#[derive(Clone)]
+pub struct MultiValueBufferPool {
+    inner: Arc<MultiValueBufferPoolInner>,
+}
+
+struct MultiValueBufferPoolInner {
+    pool: Cell<HashMap<Box<[ValueItem]>, HashMap<usize, Vec<NonNull<u8>>>>>,
+    arena: BumpArena,
+}
+
 pub struct MultiValueBuffer {
-    len: AcqRelUsize,
-    buffer: NonNull<u8>,
-    layout: Layout,
-    offsets: Vec<usize>,
+    capacity: AcqRelUsize,
+    data: RelaxedAtomicPtr<u8>,
     value_items: MultiValue,
-    capacity: usize,
-    allocator: Global,
 }
 
 impl ValueItem {
-    pub fn new<T>(encode: Encode, decode: Decode) -> Self {
-        Self {
-            size: mem::size_of::<T>(),
-            align: mem::align_of::<T>(),
-            encode,
-            decode,
+    pub fn layout(&self) -> Layout {
+        match self {
+            Self::U32 => Layout::new::<RelaxedU32>(),
+            Self::U8 => Layout::new::<RelaxedU8>(),
         }
-    }
-
-    pub fn encode(&self, src: &[u8], dst: &ByteSliceWriter) -> usize {
-        (&self.encode)(src, dst)
-    }
-
-    pub fn decode(&self, src: &mut ByteSliceReader, dst: &mut [u8]) -> usize {
-        (&self.decode)(src, dst)
     }
 }
 
-impl MultiValue {
+impl MultiValueBuilder {
     pub fn new() -> Self {
         Self {
             value_items: vec![],
         }
     }
 
-    pub fn new_with_value_items(value_items: Vec<ValueItem>) -> Self {
-        Self { value_items }
-    }
-
-    pub fn add_value<T>(&mut self, encode: Encode, decode: Decode) {
-        self.add_value_item(ValueItem::new::<T>(encode, decode));
-    }
-
-    pub fn add_value_item(&mut self, value_item: ValueItem) {
+    pub fn add_value_item(mut self, value_item: ValueItem) -> Self {
         self.value_items.push(value_item);
+        Self {
+            value_items: self.value_items,
+        }
     }
 
-    pub fn value_items_count(&self) -> usize {
+    pub fn build(self) -> MultiValue {
+        MultiValue::new(self.value_items.into_boxed_slice())
+    }
+}
+
+impl MultiValue {
+    pub fn new(value_items: Box<[ValueItem]>) -> Self {
+        let item_layouts: Vec<_> = value_items.iter().map(|v| v.layout()).collect();
+
+        Self {
+            value_items,
+            item_layouts: item_layouts.into_boxed_slice(),
+        }
+    }
+
+    pub fn item_count(&self) -> usize {
         self.value_items.len()
+    }
+
+    pub fn value_item(&self, index: usize) -> ValueItem {
+        self.value_items[index]
+    }
+
+    pub fn item_layout(&self, index: usize) -> Layout {
+        self.item_layouts[index]
     }
 
     pub fn value_items(&self) -> &[ValueItem] {
         &self.value_items
     }
-}
 
-fn buffer_layout(multi_value: &MultiValue, len: usize) -> (Layout, Vec<usize>) {
-    let mut layout = Layout::from_size_align(0, 1).unwrap();
-    let mut offsets = vec![];
-    for value_item in multi_value.value_items() {
-        let (layout_next, offset) = layout
-            .extend(Layout::from_size_align(value_item.size * len, value_item.align).unwrap())
-            .unwrap();
-        layout = layout_next;
-        offsets.push(offset);
+    pub fn item_layouts(&self) -> &[Layout] {
+        &self.item_layouts
     }
-    layout = layout.pad_to_align();
-    (layout, offsets)
+
+    pub fn buffer_layout(&self, capacity: usize) -> (Layout, Box<[usize]>) {
+        let mut layout = Layout::new::<usize>();
+        let mut offsets = vec![];
+        for item_layout in self.item_layouts() {
+            let (layout_next, offset) = layout
+                .extend(
+                    Layout::from_size_align(item_layout.size() * capacity, item_layout.align())
+                        .unwrap(),
+                )
+                .unwrap();
+            layout = layout_next;
+            offsets.push(offset);
+        }
+
+        (layout.pad_to_align(), offsets.into_boxed_slice())
+    }
 }
 
-fn buffer_copy(
-    multi_value: &MultiValue,
-    len: usize,
-    src: NonNull<u8>,
-    src_offsets: &[usize],
-    dst: NonNull<u8>,
-    dst_offsets: &[usize],
+fn multi_value_buffer_copy(
+    value_items: &MultiValue,
+    src_buffer: NonNull<u8>,
+    src_capacity: usize,
+    dst_buffer: NonNull<u8>,
+    dst_capacity: usize,
 ) {
-    for ((src_offset, dst_offset), value_item) in src_offsets
+    debug_assert!(src_capacity <= dst_capacity);
+    let (_, src_offsets) = value_items.buffer_layout(src_capacity);
+    let (_, dst_offsets) = value_items.buffer_layout(dst_capacity);
+    for (&value_item, (&src_offset, &dst_offset)) in value_items
+        .value_items()
         .iter()
-        .copied()
-        .zip(dst_offsets.iter().copied())
-        .zip(multi_value.value_items())
+        .zip(src_offsets.iter().zip(dst_offsets.iter()))
     {
-        unsafe {
-            ptr::copy_nonoverlapping(
-                src.as_ptr().add(src_offset),
-                dst.as_ptr().add(dst_offset),
-                value_item.size * len,
-            );
+        match value_item {
+            ValueItem::U32 => {
+                let src_data = unsafe { src_buffer.as_ptr().add(src_offset) } as *mut RelaxedU32;
+                let dst_data = unsafe { dst_buffer.as_ptr().add(dst_offset) } as *mut RelaxedU32;
+                for i in 0..src_capacity {
+                    let src = unsafe { &*src_data.add(i) };
+                    let dst = unsafe { &*dst_data.add(i) };
+                    dst.store(src.load());
+                }
+            }
+            ValueItem::U8 => {
+                let src_data = unsafe { src_buffer.as_ptr().add(src_offset) } as *mut RelaxedU8;
+                let dst_data = unsafe { dst_buffer.as_ptr().add(dst_offset) } as *mut RelaxedU8;
+                for i in 0..src_capacity {
+                    let src = unsafe { &*src_data.add(i) };
+                    let dst = unsafe { &*dst_data.add(i) };
+                    dst.store(src.load());
+                }
+            }
         }
     }
 }
 
 impl MultiValueBuffer {
-    pub fn new(value_items: MultiValue, capacity: usize) -> Self {
-        let allocator = Global;
-        let (layout, offsets) = buffer_layout(&value_items, capacity);
-        let buffer = allocator.allocate(layout).unwrap().cast::<u8>();
+    pub fn new(value_items: MultiValue) -> Self {
         Self {
-            len: AcqRelUsize::new(0),
-            buffer,
-            layout,
-            offsets,
+            capacity: AcqRelUsize::new(0),
+            data: RelaxedAtomicPtr::default(),
             value_items,
-            capacity,
-            allocator,
         }
     }
 
-    pub fn push<T>(&self, row: usize, value: T) {
-        assert!(
-            std::mem::size_of::<T>() == self.value_items().value_items()[row].size
-                && std::mem::align_of::<T>() == self.value_items().value_items()[row].align
-        );
-        let buffer_of_row = self.row::<T>(row);
-        unsafe {
-            ptr::write(buffer_of_row.as_ptr().add(self.len()), value);
+    pub fn expand(&self, capacity: usize, buffer_pool: &MultiValueBufferPool) {
+        let current_capacity = self.capacity.load();
+        let buffer = buffer_pool.allocate(self.multi_value(), capacity);
+        if current_capacity > 0 {
+            let current_buffer = self.data().unwrap();
+            multi_value_buffer_copy(
+                self.multi_value(),
+                current_buffer,
+                current_capacity,
+                buffer,
+                capacity,
+            );
+            self.data.store(buffer.as_ptr());
+            self.capacity.store(capacity);
+            buffer_pool.release(self.multi_value(), current_capacity, current_buffer);
+        } else {
+            self.data.store(buffer.as_ptr());
+            self.capacity.store(capacity);
         }
     }
 
-    pub fn end_push(&self) {
-        self.inc_len();
+    pub fn buffer_layout(&self, capacity: usize) -> (Layout, Box<[usize]>) {
+        self.value_items.buffer_layout(capacity)
     }
 
-    pub fn is_full(&self) -> bool {
-        self.len() == self.capacity
-    }
-
-    pub fn clear(&self) {
-        self.set_len(0);
-    }
-
-    pub fn snapshot(&self) -> MultiValueBuffer {
-        let allocator = Global;
-        let len = self.len();
-        let (layout, offsets) = buffer_layout(&self.value_items, len);
-        let buffer = allocator.allocate(layout).unwrap().cast::<u8>();
-        buffer_copy(
-            &self.value_items,
-            len,
-            self.buffer,
-            &self.offsets,
-            buffer,
-            &offsets,
-        );
-
-        MultiValueBuffer {
-            len: AcqRelUsize::new(len),
-            buffer,
-            layout,
-            offsets,
-            value_items: self.value_items.clone(),
-            capacity: len,
-            allocator,
-        }
-    }
-
-    pub fn value_items(&self) -> &MultiValue {
-        &self.value_items
-    }
-
-    pub fn row_data(&self, row: usize) -> NonNull<u8> {
-        let offest = self.offsets[row];
-        unsafe { NonNull::new_unchecked(self.buffer.as_ptr().add(offest).cast::<u8>()) }
-    }
-
-    pub fn row<T>(&self, row: usize) -> NonNull<T> {
-        assert_eq!(
-            std::mem::size_of::<T>(),
-            self.value_items.value_items()[row].size
-        );
-        assert_eq!(
-            std::mem::align_of::<T>(),
-            self.value_items.value_items()[row].align
-        );
-        self.row_data(row).cast::<T>()
-    }
-
-    pub fn row_slice<T>(&self, row: usize) -> &[T] {
-        let row_data = self.row::<T>(row);
-        unsafe { &*std::ptr::slice_from_raw_parts(row_data.as_ptr(), self.len()) }
+    pub fn data(&self) -> Option<NonNull<u8>> {
+        let data = self.data.load();
+        NonNull::new(data)
     }
 
     pub fn capacity(&self) -> usize {
-        self.capacity
+        self.capacity.load()
     }
 
-    pub fn len(&self) -> usize {
-        self.len.load()
-    }
-
-    pub fn inc_len(&self) {
-        self.len.store(self.len() + 1);
-    }
-
-    pub fn set_len(&self, len: usize) {
-        self.len.store(len);
+    pub fn multi_value(&self) -> &MultiValue {
+        &self.value_items
     }
 }
 
-impl Drop for MultiValueBuffer {
-    fn drop(&mut self) {
+impl MultiValueBufferPool {
+    pub fn new(arena: BumpArena) -> Self {
+        Self {
+            inner: Arc::new(MultiValueBufferPoolInner::new(arena)),
+        }
+    }
+
+    pub fn allocate(&self, multi_value: &MultiValue, capacity: usize) -> NonNull<u8> {
+        let pool = unsafe { &mut *self.inner.pool.as_ptr() };
+        if let Some(buffer) = pool
+            .get_mut(multi_value.value_items())
+            .and_then(|m| m.get_mut(&capacity))
+            .and_then(|v| v.pop())
+        {
+            return buffer;
+        }
+
+        let (layout, offsets) = multi_value.buffer_layout(capacity);
+        let buffer = self
+            .inner
+            .arena
+            .allocate(layout)
+            .unwrap_or_else(|_| handle_alloc_error(layout))
+            .cast::<u8>();
+
         unsafe {
-            self.allocator.deallocate(self.buffer, self.layout);
+            ptr::write(buffer.as_ptr() as *mut usize, capacity);
+            for (&value_item, &offset) in multi_value.value_items().iter().zip(offsets.iter()) {
+                let ptr = buffer.as_ptr().add(offset);
+                match value_item {
+                    ValueItem::U32 => {
+                        let data = ptr as *mut RelaxedU32;
+                        for j in 0..capacity {
+                            ptr::write(data.add(j), RelaxedU32::new(0))
+                        }
+                    }
+                    ValueItem::U8 => {
+                        let data = ptr as *mut RelaxedU8;
+                        for j in 0..capacity {
+                            ptr::write(data.add(j), RelaxedU8::new(0))
+                        }
+                    }
+                }
+            }
+        }
+
+        buffer
+    }
+
+    pub fn release(&self, multi_value: &MultiValue, capacity: usize, data: NonNull<u8>) {
+        let pool = unsafe { &mut *self.inner.pool.as_ptr() };
+        pool.entry(multi_value.value_items().into())
+            .or_insert_with(|| HashMap::new())
+            .entry(capacity)
+            .or_insert_with(|| vec![])
+            .push(data);
+    }
+
+    pub fn len(&self) -> usize {
+        let pool = unsafe { &*self.inner.pool.as_ptr() };
+        pool.len()
+    }
+}
+
+impl MultiValueBufferPoolInner {
+    pub fn new(arena: BumpArena) -> Self {
+        Self {
+            pool: Cell::new(HashMap::new()),
+            arena,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::postings::{copy_decode, copy_encode};
+    use std::alloc::Layout;
 
-    use super::{MultiValue, MultiValueBuffer};
+    use crate::{
+        arena::BumpArena,
+        postings::{MultiValueBuilder, ValueItem},
+        util::atomic::{RelaxedU32, RelaxedU8},
+    };
+
+    use super::{MultiValueBuffer, MultiValueBufferPool};
 
     #[test]
-    fn test_simple() {
-        let mut value_items = MultiValue::new();
-        value_items.add_value::<i8>(copy_encode, copy_decode);
-        value_items.add_value::<i64>(copy_encode, copy_decode);
-        value_items.add_value::<i32>(copy_encode, copy_decode);
+    fn test_multi_value() {
+        let multi_value = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .add_value_item(ValueItem::U8)
+            .build();
+        assert_eq!(multi_value.item_count(), 3);
+        let layout_u8 = Layout::new::<RelaxedU8>();
+        let layout_u32 = Layout::new::<RelaxedU32>();
+        assert_eq!(multi_value.item_layout(0), layout_u8);
+        assert_eq!(multi_value.item_layout(1), layout_u32);
+        assert_eq!(multi_value.item_layout(2), layout_u8);
+        let (layout, offsets) = multi_value.buffer_layout(3);
+        assert_eq!(layout.size(), 32);
+        assert_eq!(layout.align(), 8); // <- usize header align
+        assert_eq!(offsets.len(), 3);
+        assert_eq!(offsets[0], 8); // <- usize header
+        assert_eq!(offsets[1], 12);
+        assert_eq!(offsets[2], 24);
+    }
+    #[test]
+    fn test_buffer_pool() {
+        let multi_value1 = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .add_value_item(ValueItem::U8)
+            .build();
+        let multi_value1_1 = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .add_value_item(ValueItem::U8)
+            .build();
+        let multi_value2 = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .build();
 
+        let arena = BumpArena::new();
+        let pool = MultiValueBufferPool::new(arena.clone());
+
+        let buf1 = pool.allocate(&multi_value1, 2);
+        let buf2 = pool.allocate(&multi_value1, 2);
+        pool.release(&multi_value1, 2, buf1);
+        pool.release(&multi_value1, 2, buf2);
+        let buf3 = pool.allocate(&multi_value1_1, 2);
+        assert_eq!(buf2, buf3);
+        pool.release(&multi_value1, 2, buf3);
+        let buf4 = pool.allocate(&multi_value1, 2);
+        assert_eq!(buf2, buf4);
+        let buf5 = pool.allocate(&multi_value1, 2);
+        assert_eq!(buf1, buf5);
+        pool.release(&multi_value1, 2, buf5);
+        let buf6 = pool.allocate(&multi_value2, 2);
+        assert_ne!(buf1, buf6);
+        let buf7 = pool.allocate(&multi_value1, 4);
+        assert_ne!(buf1, buf7);
+        let buf8 = pool.allocate(&multi_value1, 2);
+        assert_eq!(buf1, buf8);
+    }
+
+    #[test]
+    fn test_multi_value_buffer() {
+        let multi_value = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .add_value_item(ValueItem::U8)
+            .build();
+        let multi_value_buffer = MultiValueBuffer::new(multi_value);
+        assert_eq!(multi_value_buffer.capacity(), 0);
+        assert_eq!(multi_value_buffer.data(), None);
+
+        let arena = BumpArena::new();
+        let pool = MultiValueBufferPool::new(arena.clone());
+
+        let capacity = 2;
+        multi_value_buffer.expand(capacity, &pool);
+        assert_eq!(pool.len(), 0);
+        let (_, offsets) = multi_value_buffer.buffer_layout(capacity);
+        assert_eq!(multi_value_buffer.capacity(), capacity);
+        let data = multi_value_buffer.data().unwrap();
+        let first_buffer = data;
+        unsafe {
+            let data0 = data.as_ptr().add(offsets[0]) as *mut RelaxedU8;
+            (&*data0.add(0)).store(1);
+            (&*data0.add(1)).store(2);
+
+            let data1 = data.as_ptr().add(offsets[1]) as *mut RelaxedU32;
+            (&*data1.add(0)).store(3);
+            (&*data1.add(1)).store(4);
+
+            let data2 = data.as_ptr().add(offsets[2]) as *mut RelaxedU8;
+            (&*data2.add(0)).store(5);
+            (&*data2.add(1)).store(6);
+        }
         let capacity = 4;
-        let mbuffer = MultiValueBuffer::new(value_items, capacity);
+        multi_value_buffer.expand(capacity, &pool);
+        assert_eq!(pool.len(), 1);
+        assert_eq!(multi_value_buffer.capacity(), 4);
+        let data = multi_value_buffer.data().unwrap();
+        assert_ne!(first_buffer, data);
+        let (_, offsets) = multi_value_buffer.buffer_layout(capacity);
+        unsafe {
+            let data0 = data.as_ptr().add(offsets[0]) as *mut RelaxedU8;
+            assert_eq!((&*data0.add(0)).load(), 1);
+            assert_eq!((&*data0.add(1)).load(), 2);
+            assert_eq!((&*data0.add(2)).load(), 0);
+            assert_eq!((&*data0.add(3)).load(), 0);
 
-        assert_eq!(mbuffer.capacity(), capacity);
-        assert_eq!(mbuffer.len(), 0);
-        assert!(!mbuffer.is_full());
+            let data1 = data.as_ptr().add(offsets[1]) as *mut RelaxedU32;
+            assert_eq!((&*data1.add(0)).load(), 3);
+            assert_eq!((&*data1.add(1)).load(), 4);
+            assert_eq!((&*data1.add(2)).load(), 0);
+            assert_eq!((&*data1.add(3)).load(), 0);
 
-        mbuffer.push::<i8>(0, 1);
-        mbuffer.push::<i64>(1, 1001);
-        mbuffer.push::<i32>(2, 2001);
-        assert_eq!(mbuffer.len(), 0);
-        mbuffer.end_push();
-        assert_eq!(mbuffer.len(), 1);
-        assert!(!mbuffer.is_full());
-        assert_eq!(mbuffer.row_slice::<i8>(0), &[1]);
-        assert_eq!(mbuffer.row_slice::<i64>(1), &[1001]);
-        assert_eq!(mbuffer.row_slice::<i32>(2), &[2001]);
+            let data2 = data.as_ptr().add(offsets[2]) as *mut RelaxedU8;
+            assert_eq!((&*data2.add(0)).load(), 5);
+            assert_eq!((&*data2.add(1)).load(), 6);
+            assert_eq!((&*data2.add(2)).load(), 0);
+            assert_eq!((&*data2.add(3)).load(), 0);
+        }
 
-        mbuffer.push::<i8>(0, 2);
-        mbuffer.push::<i64>(1, 1002);
-        mbuffer.push::<i32>(2, 2002);
-        mbuffer.end_push();
-        assert_eq!(mbuffer.len(), 2);
-        assert!(!mbuffer.is_full());
-        assert_eq!(mbuffer.row_slice::<i8>(0), &[1, 2]);
-        assert_eq!(mbuffer.row_slice::<i64>(1), &[1001, 1002]);
-        assert_eq!(mbuffer.row_slice::<i32>(2), &[2001, 2002]);
+        let multi_value2 = MultiValueBuilder::new()
+            .add_value_item(ValueItem::U8)
+            .add_value_item(ValueItem::U32)
+            .add_value_item(ValueItem::U8)
+            .build();
+        let multi_value_buffer2 = MultiValueBuffer::new(multi_value2);
+        assert_eq!(multi_value_buffer2.capacity(), 0);
+        assert_eq!(multi_value_buffer2.data(), None);
 
-        mbuffer.push::<i8>(0, 3);
-        mbuffer.push::<i64>(1, 1003);
-        mbuffer.push::<i32>(2, 2003);
-        mbuffer.end_push();
-        assert_eq!(mbuffer.len(), 3);
-        assert!(!mbuffer.is_full());
-        assert_eq!(mbuffer.row_slice::<i8>(0), &[1, 2, 3]);
-        assert_eq!(mbuffer.row_slice::<i64>(1), &[1001, 1002, 1003]);
-        assert_eq!(mbuffer.row_slice::<i32>(2), &[2001, 2002, 2003]);
-
-        let snapshot = mbuffer.snapshot();
-        assert_eq!(snapshot.capacity(), 3);
-        assert_eq!(snapshot.len(), 3);
-        assert!(snapshot.is_full());
-        assert_eq!(snapshot.row_slice::<i8>(0), &[1, 2, 3]);
-        assert_eq!(snapshot.row_slice::<i64>(1), &[1001, 1002, 1003]);
-        assert_eq!(snapshot.row_slice::<i32>(2), &[2001, 2002, 2003]);
-
-        mbuffer.push::<i8>(0, 4);
-        mbuffer.push::<i64>(1, 1004);
-        mbuffer.push::<i32>(2, 2004);
-        mbuffer.end_push();
-        assert_eq!(mbuffer.len(), 4);
-        assert!(mbuffer.is_full());
-        assert_eq!(mbuffer.row_slice::<i8>(0), &[1, 2, 3, 4]);
-        assert_eq!(mbuffer.row_slice::<i64>(1), &[1001, 1002, 1003, 1004]);
-        assert_eq!(mbuffer.row_slice::<i32>(2), &[2001, 2002, 2003, 2004]);
-
-        // snapshot remain unchanged
-        assert_eq!(snapshot.capacity(), 3);
-        assert_eq!(snapshot.len(), 3);
-        assert!(snapshot.is_full());
-        assert_eq!(snapshot.row_slice::<i8>(0), &[1, 2, 3]);
-        assert_eq!(snapshot.row_slice::<i64>(1), &[1001, 1002, 1003]);
-        assert_eq!(snapshot.row_slice::<i32>(2), &[2001, 2002, 2003]);
-
-        let snapshot = mbuffer.snapshot();
-        assert_eq!(snapshot.capacity(), 4);
-        assert_eq!(snapshot.len(), 4);
-        assert!(snapshot.is_full());
-        assert_eq!(snapshot.row_slice::<i8>(0), &[1, 2, 3, 4]);
-        assert_eq!(snapshot.row_slice::<i64>(1), &[1001, 1002, 1003, 1004]);
-        assert_eq!(snapshot.row_slice::<i32>(2), &[2001, 2002, 2003, 2004]);
-
-        mbuffer.clear();
-        assert_eq!(mbuffer.len(), 0);
-        assert!(!mbuffer.is_full());
-
-        mbuffer.push::<i8>(0, 4);
-        mbuffer.push::<i64>(1, 5);
-        mbuffer.push::<i32>(2, 6);
-        mbuffer.end_push();
-        assert_eq!(mbuffer.len(), 1);
-        assert_eq!(mbuffer.row_slice::<i8>(0), &[4]);
-        assert_eq!(mbuffer.row_slice::<i64>(1), &[5]);
-        assert_eq!(mbuffer.row_slice::<i32>(2), &[6]);
+        let capacity = 2;
+        multi_value_buffer2.expand(capacity, &pool);
+        assert_eq!(multi_value_buffer2.capacity(), capacity);
+        let buffer2 = multi_value_buffer2.data().unwrap();
+        assert_eq!(first_buffer, buffer2);
     }
 }
