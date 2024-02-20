@@ -1,6 +1,8 @@
-use std::{fs::File, sync::Arc};
+use std::sync::Arc;
 
-use crate::{index::IndexSerializer, schema::IndexRef};
+use tantivy_common::TerminatingWrite;
+
+use crate::{index::IndexSerializer, schema::IndexRef, Directory};
 
 use super::{PrimaryKeyBuildingSegmentData, PrimaryKeyDictBuilder};
 
@@ -19,7 +21,7 @@ impl PrimaryKeySerializer {
 }
 
 impl IndexSerializer for PrimaryKeySerializer {
-    fn serialize(&self, directory: &std::path::Path) {
+    fn serialize(&self, directory: &dyn Directory, index_directory: &std::path::Path) {
         let mut keys: Vec<_> = self
             .index_data
             .keys
@@ -27,15 +29,19 @@ impl IndexSerializer for PrimaryKeySerializer {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         keys.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
-        let index_path = directory.join(&self.index_name);
-        let index_file = File::create(index_path).unwrap();
-        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_file);
+        let index_path = index_directory.join(&self.index_name);
+        let index_writer = directory.open_write(&index_path).unwrap();
+        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_writer);
         for (key, docid) in keys.iter() {
             primary_key_dict_writer
                 .insert(key.to_be_bytes(), docid)
                 .unwrap();
         }
-        primary_key_dict_writer.finish().unwrap();
+        primary_key_dict_writer
+            .finish()
+            .unwrap()
+            .terminate()
+            .unwrap();
     }
 }
 

@@ -1,8 +1,8 @@
-use std::{collections::HashSet, fs, path::Path};
+use std::{collections::HashSet, path::PathBuf};
 
 use crate::{
     column::ColumnMergerFactory, deletionmap::DeletionMap, index::IndexMergerFactory,
-    schema::SchemaRef, table::Version, DocId,
+    schema::SchemaRef, table::Version, Directory, DocId,
 };
 
 use super::{PersistentSegmentData, SegmentId, SegmentMetaData};
@@ -11,15 +11,12 @@ use super::{PersistentSegmentData, SegmentId, SegmentMetaData};
 pub struct SegmentMerger {}
 
 impl SegmentMerger {
-    pub fn merge(&self, directory: impl AsRef<Path>, schema: &SchemaRef, version: &mut Version) {
-        let directory = directory.as_ref();
-        let segment_directory = directory.join("segments");
+    pub fn merge(&self, directory: &dyn Directory, schema: &SchemaRef, version: &mut Version) {
+        let segment_directory = PathBuf::from("segments");
         let segments: Vec<_> = version
             .segments()
             .iter()
-            .map(|segment_id| {
-                PersistentSegmentData::open(segment_id.clone(), schema, &segment_directory)
-            })
+            .map(|segment_id| PersistentSegmentData::open(directory, segment_id.clone(), schema))
             .collect();
 
         let segment_id = SegmentId::new();
@@ -44,7 +41,6 @@ impl SegmentMerger {
         }
 
         let column_directory = segment_directory.join("column");
-        fs::create_dir_all(&column_directory).unwrap();
         let column_merger_factory = ColumnMergerFactory::default();
         for field in schema.columns() {
             let column_merger = column_merger_factory.create(field);
@@ -52,11 +48,16 @@ impl SegmentMerger {
                 .iter()
                 .map(|seg| seg.column_data(field.name()).as_ref())
                 .collect();
-            column_merger.merge(&column_directory, field, &column_data, &docid_mappings);
+            column_merger.merge(
+                directory,
+                &column_directory,
+                field,
+                &column_data,
+                &docid_mappings,
+            );
         }
 
         let index_directory = segment_directory.join("index");
-        fs::create_dir_all(&index_directory).unwrap();
         let index_merger_factory = IndexMergerFactory::default();
         for index in schema.indexes() {
             let index_merger = index_merger_factory.create(index);
@@ -64,7 +65,13 @@ impl SegmentMerger {
                 .iter()
                 .map(|seg| seg.index_data(index.name()))
                 .collect();
-            index_merger.merge(&index_directory, index, &index_data, &docid_mappings);
+            index_merger.merge(
+                directory,
+                &index_directory,
+                index,
+                &index_data,
+                &docid_mappings,
+            );
         }
 
         let deletionmaps: Vec<_> = segments
@@ -82,7 +89,7 @@ impl SegmentMerger {
             let deletionmap_refined = deletionmap.remove_segments_cloned(&segment_ids);
             if !deletionmap_refined.is_empty() {
                 let deletionmap_path = segment_directory.join("deletionmap");
-                deletionmap_refined.save(deletionmap_path);
+                deletionmap_refined.save(directory, deletionmap_path);
             }
         }
 
@@ -92,7 +99,7 @@ impl SegmentMerger {
             .filter(|&docid| docid.is_some())
             .count();
         let meta = SegmentMetaData::new(doc_count);
-        meta.save(segment_directory.join("meta.json"));
+        meta.save(directory, segment_directory.join("meta.json"));
 
         for segment in segments.iter() {
             version.remove_segment(segment.segment_id());

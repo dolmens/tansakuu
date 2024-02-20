@@ -1,7 +1,8 @@
-use std::{path::Path, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    column::ColumnSegmentData, deletionmap::DeletionMap, index::IndexSegmentData, schema::SchemaRef,
+    column::ColumnSegmentData, deletionmap::DeletionMap, index::IndexSegmentData,
+    schema::SchemaRef, Directory,
 };
 
 use super::{
@@ -38,20 +39,21 @@ impl PersistentSegment {
 }
 
 impl PersistentSegmentData {
-    pub fn open(segment_id: SegmentId, schema: &SchemaRef, directory: impl AsRef<Path>) -> Self {
-        let directory = directory.as_ref();
-        let segment_directory = directory.join(segment_id.as_str());
-        let meta = SegmentMetaData::load(segment_directory.join("meta.json"));
+    pub fn open(directory: &dyn Directory, segment_id: SegmentId, schema: &SchemaRef) -> Self {
+        let mut segment_directory = PathBuf::from("segments");
+        segment_directory.push(segment_id.as_str());
+
+        let meta = SegmentMetaData::load(directory, segment_directory.join("meta.json"));
 
         let index_directory = segment_directory.join("index");
-        let index_data = PersistentSegmentIndexData::open(index_directory, schema);
+        let index_data = PersistentSegmentIndexData::open(directory, index_directory, schema);
 
         let column_directory = segment_directory.join("column");
-        let column_data = PersistentSegmentColumnData::open(column_directory, schema);
+        let column_data = PersistentSegmentColumnData::open(directory, column_directory, schema);
 
         let deletionmap_path = segment_directory.join("deletionmap");
-        let deletionmap = if deletionmap_path.exists() {
-            Some(Arc::new(DeletionMap::load(deletionmap_path)))
+        let deletionmap = if directory.exists(&deletionmap_path).unwrap() {
+            Some(Arc::new(DeletionMap::load(directory, deletionmap_path)))
         } else {
             None
         };

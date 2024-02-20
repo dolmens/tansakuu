@@ -1,12 +1,10 @@
-use tantivy_common::file_slice::{FileSlice, WrapFile};
+use tantivy_common::TerminatingWrite;
 
-use crate::{table::SegmentId, DocId};
+use crate::{table::SegmentId, Directory, DocId};
 
 use std::{
     collections::{BTreeSet, HashSet},
-    fs::File,
     path::Path,
-    sync::Arc,
 };
 
 use super::{DeletionDict, DeletionDictBuilder};
@@ -16,22 +14,21 @@ pub struct DeletionMap {
 }
 
 impl DeletionMap {
-    pub fn load(path: impl AsRef<Path>) -> Self {
+    pub fn load(directory: &dyn Directory, path: impl AsRef<Path>) -> Self {
         let path = path.as_ref();
-        let file = File::open(path).unwrap();
-        let data = FileSlice::new(Arc::new(WrapFile::new(file).unwrap()));
+        let data = directory.open_read(path).unwrap();
         let dict = DeletionDict::open(data).unwrap();
 
         Self { dict }
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) {
-        let file = File::create(path).unwrap();
-        let mut dict_builder = DeletionDictBuilder::new(file);
+    pub fn save(&self, directory: &dyn Directory, path: impl AsRef<Path>) {
+        let writer = directory.open_write(path.as_ref()).unwrap();
+        let mut dict_builder = DeletionDictBuilder::new(writer);
         for item in self.dict.iter() {
             dict_builder.insert(item).unwrap();
         }
-        dict_builder.finish().unwrap();
+        dict_builder.finish().unwrap().terminate().unwrap();
     }
 
     pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {

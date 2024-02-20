@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, fs::File, sync::Arc};
+use std::{collections::BTreeSet, io::Write, sync::Arc};
+
+use tantivy_common::TerminatingWrite;
 
 use crate::{
     index::IndexMerger,
@@ -8,7 +10,7 @@ use crate::{
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
     schema::IndexType,
-    DocId, END_DOCID, END_POSITION,
+    Directory, DocId, END_DOCID, END_POSITION,
 };
 
 use super::{InvertedIndexPersistentSegmentData, InvertedIndexPersistentSegmentReader};
@@ -19,7 +21,8 @@ pub struct InvertedIndexMerger {}
 impl IndexMerger for InvertedIndexMerger {
     fn merge(
         &self,
-        directory: &std::path::Path,
+        directory: &dyn Directory,
+        index_directory: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
@@ -43,25 +46,25 @@ impl IndexMerger for InvertedIndexMerger {
         };
         let doc_list_format = posting_format.doc_list_format().clone();
 
-        let dict_path = directory.join(index.name().to_string() + ".dict");
-        let dict_output_writer = File::create(dict_path).unwrap();
+        let dict_path = index_directory.join(index.name().to_string() + ".dict");
+        let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let mut term_dict_writer = TermDictBuilder::new(dict_output_writer);
 
-        let skip_list_path = directory.join(index.name().to_string() + ".skiplist");
-        let skip_list_output_writer = File::create(skip_list_path).unwrap();
-        let posting_path = directory.join(index.name().to_string() + ".posting");
-        let posting_output_writer = File::create(posting_path).unwrap();
+        let skip_list_path = index_directory.join(index.name().to_string() + ".skiplist");
+        let mut skip_list_output_writer = directory.open_write(&skip_list_path).unwrap();
+        let posting_path = index_directory.join(index.name().to_string() + ".posting");
+        let mut posting_output_writer = directory.open_write(&posting_path).unwrap();
 
-        let position_skip_list_output_writer = if posting_format.has_position_list() {
+        let mut position_skip_list_output_writer = if posting_format.has_position_list() {
             let position_skip_list_path =
-                directory.join(index.name().to_string() + ".positions.skiplist");
-            Some(File::create(position_skip_list_path).unwrap())
+                index_directory.join(index.name().to_string() + ".positions.skiplist");
+            Some(directory.open_write(&position_skip_list_path).unwrap())
         } else {
             None
         };
-        let position_list_output_writer = if posting_format.has_position_list() {
-            let position_list_path = directory.join(index.name().to_string() + ".positions");
-            Some(File::create(position_list_path).unwrap())
+        let mut position_list_output_writer = if posting_format.has_position_list() {
+            let position_list_path = index_directory.join(index.name().to_string() + ".positions");
+            Some(directory.open_write(&position_list_path).unwrap())
         } else {
             None
         };
@@ -80,16 +83,24 @@ impl IndexMerger for InvertedIndexMerger {
                 continue;
             }
             let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
-                .with_writer(&posting_output_writer)
-                .with_skip_list_output_writer(&skip_list_output_writer)
+                .with_writer(posting_output_writer.by_ref())
+                .with_skip_list_output_writer(skip_list_output_writer.by_ref())
                 .build();
 
             let position_list_encoder = if posting_format.has_position_list() {
                 Some(
                     position_list_encoder_builder()
-                        .with_writer(position_list_output_writer.as_ref().unwrap())
+                        .with_writer(
+                            position_list_output_writer
+                                .as_mut()
+                                .map(|w| w.by_ref())
+                                .unwrap(),
+                        )
                         .with_skip_list_output_writer(
-                            position_skip_list_output_writer.as_ref().unwrap(),
+                            position_skip_list_output_writer
+                                .as_mut()
+                                .map(|w| w.by_ref())
+                                .unwrap(),
                         )
                         .build(),
                 )
@@ -192,6 +203,11 @@ impl IndexMerger for InvertedIndexMerger {
             term_dict_writer.insert(term, &term_info).unwrap();
         }
 
-        term_dict_writer.finish().unwrap();
+        skip_list_output_writer.terminate().unwrap();
+        posting_output_writer.terminate().unwrap();
+        position_skip_list_output_writer.map(|w| w.terminate().unwrap());
+        position_list_output_writer.map(|w| w.terminate().unwrap());
+
+        term_dict_writer.finish().unwrap().terminate().unwrap();
     }
 }

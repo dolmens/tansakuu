@@ -1,11 +1,11 @@
-use std::{collections::HashMap, fs, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
     column::ColumnSerializerFactory,
     index::IndexSerializerFactory,
     schema::SchemaRef,
     table::{segment::SegmentMetaData, SegmentStat},
-    DocId, END_DOCID,
+    Directory, DocId, END_DOCID,
 };
 
 use super::{
@@ -22,7 +22,7 @@ pub struct TableData {
     persistent_segments: Vec<PersistentSegment>,
     recent_segment_stat: Option<Arc<SegmentStat>>,
     version: Version,
-    directory: PathBuf,
+    directory: Box<dyn Directory>,
     schema: SchemaRef,
     settings: TableSettingsRef,
 }
@@ -30,16 +30,20 @@ pub struct TableData {
 pub type TableDataRef = Arc<TableData>;
 
 impl TableData {
-    pub fn open(directory: PathBuf, schema: SchemaRef, settings: TableSettingsRef) -> Self {
-        let version = Version::load_lastest(&directory);
-        let segment_directory = directory.join("segments");
+    pub fn open<D: Into<Box<dyn Directory>>>(
+        directory: D,
+        schema: SchemaRef,
+        settings: TableSettingsRef,
+    ) -> Self {
+        let directory: Box<dyn Directory> = directory.into();
+        let version = Version::load_lastest(directory.as_ref()).unwrap();
         let mut persistent_segments = vec![];
         let mut base_docid = 0;
         for segment_id in version.segments() {
             let segment = Arc::new(PersistentSegmentData::open(
+                directory.as_ref(),
                 segment_id.clone(),
                 &schema,
-                &segment_directory,
             ));
             let doc_count = segment.doc_count();
             let meta = SegmentMeta::new(segment.segment_id().clone(), base_docid, doc_count);
@@ -59,9 +63,8 @@ impl TableData {
     }
 
     pub fn reload(&mut self) {
-        let version = Version::load_lastest(&self.directory);
+        let version = Version::load_lastest(self.directory.as_ref()).unwrap();
         if self.version != version {
-            let segment_directory = self.directory.join("segments");
             let current_segments_map: HashMap<_, _> = self
                 .persistent_segments
                 .iter()
@@ -74,9 +77,9 @@ impl TableData {
                     segment.clone()
                 } else {
                     Arc::new(PersistentSegmentData::open(
+                        self.directory.as_ref(),
                         segment_id.clone(),
                         &self.schema,
-                        &segment_directory,
                     ))
                 };
 
@@ -131,12 +134,9 @@ impl TableData {
         building_segment
             .meta_mut()
             .set_doc_count(building_segment_data.doc_count());
-        let segment_directory = self
-            .directory
-            .join("segments")
-            .join(building_segment_data.segment_id().as_str());
+        let segment_directory =
+            PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
         let column_directory = segment_directory.join("column");
-        fs::create_dir_all(&column_directory).unwrap();
         let column_serializer_factory = ColumnSerializerFactory::default();
         for field in self.schema.columns() {
             let column_data = building_segment_data
@@ -145,11 +145,10 @@ impl TableData {
                 .unwrap()
                 .clone();
             let column_serializer = column_serializer_factory.create(field, column_data);
-            column_serializer.serialize(&column_directory);
+            column_serializer.serialize(self.directory.as_ref(), &column_directory);
         }
 
         let index_directory = segment_directory.join("index");
-        fs::create_dir_all(&index_directory).unwrap();
         let index_serializer_factory = IndexSerializerFactory::default();
         for index in self.schema.indexes() {
             let index_data = building_segment_data
@@ -158,19 +157,22 @@ impl TableData {
                 .unwrap()
                 .clone();
             let index_serializer = index_serializer_factory.create(index, index_data);
-            index_serializer.serialize(&index_directory);
+            index_serializer.serialize(self.directory.as_ref(), &index_directory);
         }
 
         if !building_segment_data.deletionmap().is_empty() {
             let path = segment_directory.join("deletionmap");
-            building_segment_data.deletionmap().save(path);
+            building_segment_data
+                .deletionmap()
+                .save(self.directory.as_ref(), path);
         }
 
         let meta = SegmentMetaData::new(building_segment_data.doc_count());
-        meta.save(segment_directory.join("meta.json"));
+        let meta_path = segment_directory.join("meta.json");
+        meta.save(self.directory.as_ref(), &meta_path);
         let mut version = self.version.next_version();
         version.add_segment(building_segment_data.segment_id().clone());
-        version.save(&self.directory);
+        version.save(self.directory.as_ref());
 
         self.remove_building_segment(building_segment_data);
         self.reload();
@@ -188,7 +190,7 @@ impl TableData {
 
     pub fn merge_segments(&mut self, version: &mut Version) {
         let segment_merger = SegmentMerger::default();
-        segment_merger.merge(&self.directory, &self.schema, version);
+        segment_merger.merge(self.directory.as_ref(), &self.schema, version);
 
         self.reload();
     }

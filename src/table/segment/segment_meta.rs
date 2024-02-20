@@ -1,8 +1,8 @@
-use std::{fs, path::Path};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::DocId;
+use crate::{Directory, DocId};
 
 use super::SegmentId;
 
@@ -23,14 +23,16 @@ impl SegmentMetaData {
         Self { doc_count }
     }
 
-    pub fn load(path: impl AsRef<Path>) -> Self {
-        let json = fs::read_to_string(path.as_ref()).unwrap();
-        serde_json::from_str(&json).unwrap()
+    pub fn load(directory: &dyn Directory, path: impl AsRef<Path>) -> Self {
+        let json_data = directory.atomic_read(path.as_ref()).unwrap();
+        serde_json::from_slice(&json_data).unwrap()
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) {
+    pub fn save(&self, directory: &dyn Directory, path: impl AsRef<Path>) {
         let json = serde_json::to_string_pretty(self).unwrap();
-        fs::write(path, json).unwrap();
+        directory
+            .atomic_write(path.as_ref(), json.as_bytes())
+            .unwrap()
     }
 
     pub fn doc_count(&self) -> usize {

@@ -1,6 +1,8 @@
-use crate::{table::SegmentId, util::layered_hashmap::LayeredHashMap, DocId};
+use tantivy_common::TerminatingWrite;
 
-use std::{fs::File, path::Path};
+use crate::{table::SegmentId, util::layered_hashmap::LayeredHashMap, Directory, DocId};
+
+use std::path::Path;
 
 use super::DeletionDictBuilder;
 
@@ -24,9 +26,9 @@ impl BuildingDeletionMap {
         self.deleted.is_empty()
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) {
-        let file = File::create(path).unwrap();
-        let mut dict_builder = DeletionDictBuilder::new(file);
+    pub fn save(&self, directory: &dyn Directory, path: impl AsRef<Path>) {
+        let writer = directory.open_write(path.as_ref()).unwrap();
+        let mut dict_builder = DeletionDictBuilder::new(writer);
         let mut keybuf = [0_u8; 36];
         for (seg, docs) in self.deleted.iter() {
             keybuf[..32].copy_from_slice(seg.as_bytes());
@@ -35,6 +37,6 @@ impl BuildingDeletionMap {
                 dict_builder.insert(&keybuf).unwrap();
             }
         }
-        dict_builder.finish().unwrap();
+        dict_builder.finish().unwrap().terminate().unwrap();
     }
 }

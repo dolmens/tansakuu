@@ -1,9 +1,10 @@
 use std::{
-    fs::File,
     io::{BufRead, BufReader},
     marker::PhantomData,
     str::FromStr,
 };
+
+use crate::Directory;
 
 use super::{ColumnSegmentDataBuilder, GenericColumnPersistentSegmentData};
 
@@ -23,12 +24,14 @@ impl<T: FromStr + Send + Sync + 'static> ColumnSegmentDataBuilder
     fn build(
         &self,
         field: &crate::schema::Field,
+        directory: &dyn Directory,
         path: &std::path::Path,
     ) -> Box<dyn super::ColumnSegmentData> {
         let _ = field;
         let mut values = vec![];
-        let file = File::open(path).unwrap();
-        let file_reader = BufReader::new(file);
+        let file = directory.open_read(path).unwrap();
+        let data = file.read_bytes().unwrap();
+        let file_reader = BufReader::new(data);
         for line in file_reader.lines() {
             let line = line.unwrap();
             values.push(T::from_str(&line).ok().unwrap());

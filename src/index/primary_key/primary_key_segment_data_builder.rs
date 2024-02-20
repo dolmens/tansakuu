@@ -1,8 +1,4 @@
-use std::{fs::File, sync::Arc};
-
-use tantivy_common::file_slice::{FileSlice, WrapFile};
-
-use crate::{index::IndexSegmentDataBuilder, schema::Index};
+use crate::{index::IndexSegmentDataBuilder, schema::Index, Directory};
 
 use super::{PrimaryKeyDict, PrimaryKeyPersistentSegmentData};
 
@@ -18,11 +14,11 @@ impl IndexSegmentDataBuilder for PrimaryKeySegmentDataBuilder {
     fn build(
         &self,
         index: &Index,
-        directory: &std::path::Path,
+        directory: &dyn Directory,
+        index_directory: &std::path::Path,
     ) -> Box<dyn crate::index::IndexSegmentData> {
-        let index_path = directory.join(index.name());
-        let index_file = File::open(index_path).unwrap();
-        let index_data = FileSlice::new(Arc::new(WrapFile::new(index_file).unwrap()));
+        let index_path = index_directory.join(index.name());
+        let index_data = directory.open_read(&index_path).unwrap();
         let keys = PrimaryKeyDict::open(index_data).unwrap();
 
         Box::new(PrimaryKeyPersistentSegmentData::new(keys))

@@ -1,19 +1,28 @@
-use std::{fs::File, io::Write, marker::PhantomData, path::Path};
+use std::{
+    io::{self, Write},
+    marker::PhantomData,
+};
+
+use crate::directory::WritePtr;
 
 pub struct GenericColumnSerializerWriter<T> {
-    file: File,
+    writer: WritePtr,
     _marker: PhantomData<T>,
 }
 
 impl<T: ToString> GenericColumnSerializerWriter<T> {
-    pub fn new(path: impl AsRef<Path>) -> Self {
+    pub fn new(writer: WritePtr) -> Self {
         Self {
-            file: File::create(path).unwrap(),
+            writer,
             _marker: PhantomData,
         }
     }
 
     pub fn write(&mut self, value: T) {
-        writeln!(self.file, "{}", value.to_string()).unwrap();
+        writeln!(&mut self.writer, "{}", value.to_string()).unwrap();
+    }
+
+    pub fn finish(self) -> io::Result<WritePtr> {
+        Ok(self.writer)
     }
 }

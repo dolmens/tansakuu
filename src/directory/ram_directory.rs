@@ -6,9 +6,7 @@ use std::{fmt, result};
 
 use tantivy_common::HasLen;
 
-use super::error::{CreateDirectoryError, OpenDirectoryError};
 use super::{FileHandle, META_FILEPATH};
-// use crate::core::META_FILEPATH;
 use crate::directory::error::{DeleteError, OpenReadError, OpenWriteError};
 use crate::directory::{
     AntiCallToken, Directory, FileSlice, TerminatingWrite, WatchCallback, WatchCallbackList,
@@ -72,76 +70,21 @@ impl TerminatingWrite for VecWriter {
 
 #[derive(Default)]
 struct InnerDirectory {
-    fs: HashMap<PathBuf, DirectoryEntry>,
+    fs: HashMap<PathBuf, FileSlice>,
     watch_router: WatchCallbackList,
 }
 
-#[derive(Clone)]
-enum DirectoryEntry {
-    Directory(RamDirectory),
-    File(FileSlice),
-}
-
-impl DirectoryEntry {
-    fn mem_usage(&self) -> usize {
-        match self {
-            Self::Directory(directory) => directory.total_mem_usage(),
-            Self::File(file) => file.len(),
-        }
-    }
-}
-
 impl InnerDirectory {
-    fn create_directory(
-        &mut self,
-        path: &Path,
-    ) -> Result<RamDirectory, super::error::CreateDirectoryError> {
-        if let Some(_) = self.fs.get(path) {
-            return Err(CreateDirectoryError::FileAlreadyExists(PathBuf::from(path)));
-        }
-
-        let path_buf = PathBuf::from(path);
-        let subdirectory = RamDirectory::create();
-        let directory_entry = DirectoryEntry::Directory(subdirectory.clone());
-        self.fs.insert(path_buf, directory_entry);
-
-        Ok(subdirectory)
-    }
-
-    fn open_directory(&self, path: &Path) -> Result<RamDirectory, OpenDirectoryError> {
-        match self
-            .fs
-            .get(path)
-            .ok_or_else(|| OpenDirectoryError::DoesNotExist(PathBuf::from(path)))?
-        {
-            DirectoryEntry::Directory(directory) => Ok(directory.clone()),
-            DirectoryEntry::File(_) => Err(OpenDirectoryError::NotADirectory(PathBuf::from(path))),
-        }
-    }
-
     fn write(&mut self, path: PathBuf, data: &[u8]) -> bool {
-        if let Some(entry) = self.fs.get(&path) {
-            match entry {
-                DirectoryEntry::File(_) => {}
-                DirectoryEntry::Directory(_) => {
-                    panic!("write data to a directory: {:?}.", path.to_str());
-                }
-            }
-        }
         let data = FileSlice::from(data.to_vec());
-        let directory_entry = DirectoryEntry::File(data);
-        self.fs.insert(path, directory_entry).is_some()
+        self.fs.insert(path, data).is_some()
     }
 
     fn open_read(&self, path: &Path) -> Result<FileSlice, OpenReadError> {
-        match self
-            .fs
+        self.fs
             .get(path)
-            .ok_or_else(|| OpenReadError::FileDoesNotExist(PathBuf::from(path)))?
-        {
-            DirectoryEntry::File(slice) => Ok(slice.clone()),
-            _ => Err(OpenReadError::NotAFile(PathBuf::from(path))),
-        }
+            .ok_or_else(|| OpenReadError::FileDoesNotExist(PathBuf::from(path)))
+            .cloned()
     }
 
     fn delete(&mut self, path: &Path) -> result::Result<(), DeleteError> {
@@ -160,7 +103,7 @@ impl InnerDirectory {
     }
 
     fn total_mem_usage(&self) -> usize {
-        self.fs.values().map(|f| f.mem_usage()).sum()
+        self.fs.values().map(|f| f.len()).sum()
     }
 }
 
@@ -211,29 +154,20 @@ impl RamDirectory {
     /// written using the [`Directory::atomic_write()`] api.
     ///
     /// If an error is encountered, files may be persisted partially.
-    pub fn dump(&self, _dest: &dyn Directory) -> crate::Result<()> {
-        // let wlock = self.fs.write().unwrap();
-        // for (path, file) in wlock.fs.iter() {
-        //     let mut dest_wrt = dest.open_write(path)?;
-        //     dest_wrt.write_all(file.read_bytes()?.as_slice())?;
-        //     dest_wrt.terminate()?;
-        // }
+    pub fn persist(&self, dest: &dyn Directory) -> crate::Result<()> {
+        let wlock = self.fs.write().unwrap();
+        for (path, file) in wlock.fs.iter() {
+            let mut dest_wrt = dest.open_write(path)?;
+            dest_wrt.write_all(file.read_bytes()?.as_slice())?;
+            dest_wrt.terminate()?;
+        }
         Ok(())
     }
 }
 
 impl Directory for RamDirectory {
-    fn create_directory(
-        &self,
-        path: &Path,
-    ) -> Result<Box<dyn Directory>, super::error::CreateDirectoryError> {
-        let subdirectory = self.fs.write().unwrap().create_directory(path)?;
-        Ok(Box::new(subdirectory))
-    }
-
-    fn open_directory(&self, path: &Path) -> Result<Box<dyn Directory>, OpenDirectoryError> {
-        let subdirectory = self.fs.read().unwrap().open_directory(path)?;
-        Ok(Box::new(subdirectory))
+    fn list_files(&self) -> io::Result<Vec<PathBuf>> {
+        Ok(self.fs.read().unwrap().fs.keys().cloned().collect())
     }
 
     fn get_file_handle(&self, path: &Path) -> Result<Arc<dyn FileHandle>, OpenReadError> {
@@ -308,58 +242,30 @@ impl Directory for RamDirectory {
     }
 }
 
-#[macro_export]
-/// Enable fail_point if feature is enabled.
-macro_rules! fail_point {
-    ($name:expr) => {{
-        #[cfg(feature = "failpoints")]
-        {
-            fail::eval($name, |_| {
-                panic!("Return is not supported for the fail point \"{}\"", $name);
-            });
-        }
-    }};
-    ($name:expr, $e:expr) => {{
-        #[cfg(feature = "failpoints")]
-        {
-            if let Some(res) = fail::eval($name, $e) {
-                return res;
-            }
-        }
-    }};
-    ($name:expr, $cond:expr, $e:expr) => {{
-        #[cfg(feature = "failpoints")]
-        {
-            if $cond {
-                fail::fail_point!($name, $e);
-            }
-        }
-    }};
-}
-
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
     use std::path::Path;
 
     use super::RamDirectory;
     use crate::Directory;
 
-    // #[test]
-    // fn test_persist() {
-    //     let msg_atomic: &'static [u8] = b"atomic is the way";
-    //     let msg_seq: &'static [u8] = b"sequential is the way";
-    //     let path_atomic: &'static Path = Path::new("atomic");
-    //     let path_seq: &'static Path = Path::new("seq");
-    //     let directory = RamDirectory::create();
-    //     assert!(directory.atomic_write(path_atomic, msg_atomic).is_ok());
-    //     let mut wrt = directory.open_write(path_seq).unwrap();
-    //     assert!(wrt.write_all(msg_seq).is_ok());
-    //     assert!(wrt.flush().is_ok());
-    //     let directory_copy = RamDirectory::create();
-    //     assert!(directory.dump(&directory_copy).is_ok());
-    //     assert_eq!(directory_copy.atomic_read(path_atomic).unwrap(), msg_atomic);
-    //     assert_eq!(directory_copy.atomic_read(path_seq).unwrap(), msg_seq);
-    // }
+    #[test]
+    fn test_persist() {
+        let msg_atomic: &'static [u8] = b"atomic is the way";
+        let msg_seq: &'static [u8] = b"sequential is the way";
+        let path_atomic: &'static Path = Path::new("atomic");
+        let path_seq: &'static Path = Path::new("seq");
+        let directory = RamDirectory::create();
+        assert!(directory.atomic_write(path_atomic, msg_atomic).is_ok());
+        let mut wrt = directory.open_write(path_seq).unwrap();
+        assert!(wrt.write_all(msg_seq).is_ok());
+        assert!(wrt.flush().is_ok());
+        let directory_copy = RamDirectory::create();
+        assert!(directory.persist(&directory_copy).is_ok());
+        assert_eq!(directory_copy.atomic_read(path_atomic).unwrap(), msg_atomic);
+        assert_eq!(directory_copy.atomic_read(path_seq).unwrap(), msg_seq);
+    }
 
     #[test]
     fn test_ram_directory_deep_clone() {

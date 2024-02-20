@@ -1,4 +1,6 @@
-use std::{fs::File, sync::Arc};
+use std::{io::Write, sync::Arc};
+
+use tantivy_common::TerminatingWrite;
 
 use crate::{
     index::IndexSerializer,
@@ -8,7 +10,7 @@ use crate::{
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
     schema::{IndexRef, IndexType},
-    END_DOCID, END_POSITION,
+    Directory, END_DOCID, END_POSITION,
 };
 
 use super::InvertedIndexBuildingSegmentData;
@@ -30,7 +32,7 @@ impl InvertedIndexSerializer {
 }
 
 impl IndexSerializer for InvertedIndexSerializer {
-    fn serialize(&self, directory: &std::path::Path) {
+    fn serialize(&self, directory: &dyn Directory, index_directory: &std::path::Path) {
         let posting_format = if let IndexType::Text(text_index_options) = self.index.index_type() {
             PostingFormat::builder()
                 .with_text_index_options(text_index_options)
@@ -40,26 +42,26 @@ impl IndexSerializer for InvertedIndexSerializer {
         };
         let doc_list_format = posting_format.doc_list_format().clone();
 
-        let dict_path = directory.join(self.index_name.clone() + ".dict");
-        let dict_output_writer = File::create(dict_path).unwrap();
+        let dict_path = index_directory.join(self.index_name.clone() + ".dict");
+        let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let mut term_dict_writer = TermDictBuilder::new(dict_output_writer);
 
-        let skip_list_path = directory.join(self.index_name.clone() + ".skiplist");
-        let skip_list_output_writer = File::create(skip_list_path).unwrap();
-        let posting_path = directory.join(self.index_name.clone() + ".posting");
-        let posting_output_writer = File::create(posting_path).unwrap();
+        let skip_list_path = index_directory.join(self.index_name.clone() + ".skiplist");
+        let mut skip_list_output_writer = directory.open_write(&skip_list_path).unwrap();
+        let posting_path = index_directory.join(self.index_name.clone() + ".posting");
+        let mut posting_output_writer = directory.open_write(&posting_path).unwrap();
 
-        let position_skip_list_output_writer = if posting_format.has_position_list() {
+        let mut position_skip_list_output_writer = if posting_format.has_position_list() {
             let position_skip_list_path =
-                directory.join(self.index_name.clone() + ".positions.skiplist");
-            Some(File::create(position_skip_list_path).unwrap())
+                index_directory.join(self.index_name.clone() + ".positions.skiplist");
+            Some(directory.open_write(&position_skip_list_path).unwrap())
         } else {
             None
         };
 
-        let position_list_output_writer = if posting_format.has_position_list() {
-            let position_list_path = directory.join(self.index_name.clone() + ".positions");
-            Some(File::create(position_list_path).unwrap())
+        let mut position_list_output_writer = if posting_format.has_position_list() {
+            let position_list_path = index_directory.join(self.index_name.clone() + ".positions");
+            Some(directory.open_write(&position_list_path).unwrap())
         } else {
             None
         };
@@ -81,16 +83,24 @@ impl IndexSerializer for InvertedIndexSerializer {
             let mut posting_iterator = PostingIterator::open_building_posting_list(posting);
 
             let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
-                .with_writer(&posting_output_writer)
-                .with_skip_list_output_writer(&skip_list_output_writer)
+                .with_writer(posting_output_writer.by_ref())
+                .with_skip_list_output_writer(skip_list_output_writer.by_ref())
                 .build();
 
             let position_list_encoder = if posting_format.has_position_list() {
                 Some(
                     position_list_encoder_builder()
-                        .with_writer(position_list_output_writer.as_ref().unwrap())
+                        .with_writer(
+                            position_list_output_writer
+                                .as_mut()
+                                .map(|w| w.by_ref())
+                                .unwrap(),
+                        )
                         .with_skip_list_output_writer(
-                            position_skip_list_output_writer.as_ref().unwrap(),
+                            position_skip_list_output_writer
+                                .as_mut()
+                                .map(|w| w.by_ref())
+                                .unwrap(),
                         )
                         .build(),
                 )
@@ -180,6 +190,11 @@ impl IndexSerializer for InvertedIndexSerializer {
                 .unwrap();
         }
 
-        term_dict_writer.finish().unwrap();
+        skip_list_output_writer.terminate().unwrap();
+        posting_output_writer.terminate().unwrap();
+        position_skip_list_output_writer.map(|w| w.terminate().unwrap());
+        position_list_output_writer.map(|w| w.terminate().unwrap());
+
+        term_dict_writer.finish().unwrap().terminate().unwrap();
     }
 }

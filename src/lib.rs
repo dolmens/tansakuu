@@ -112,3 +112,32 @@ pub fn version() -> &'static Version {
 pub fn version_string() -> &'static str {
     VERSION_STRING.as_str()
 }
+
+#[macro_export]
+/// Enable fail_point if feature is enabled.
+macro_rules! fail_point {
+    ($name:expr) => {{
+        #[cfg(feature = "failpoints")]
+        {
+            fail::eval($name, |_| {
+                panic!("Return is not supported for the fail point \"{}\"", $name);
+            });
+        }
+    }};
+    ($name:expr, $e:expr) => {{
+        #[cfg(feature = "failpoints")]
+        {
+            if let Some(res) = fail::eval($name, $e) {
+                return res;
+            }
+        }
+    }};
+    ($name:expr, $cond:expr, $e:expr) => {{
+        #[cfg(feature = "failpoints")]
+        {
+            if $cond {
+                fail::fail_point!($name, $e);
+            }
+        }
+    }};
+}

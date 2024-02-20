@@ -1,11 +1,12 @@
-use std::{
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use arc_swap::ArcSwap;
 
-use crate::schema::{Schema, SchemaRef};
+use crate::{
+    directory::RamDirectory,
+    schema::{Schema, SchemaRef},
+    Directory,
+};
 
 use super::{
     segment::BuildingSegmentData, SegmentStat, TableData, TableReader, TableSettings,
@@ -23,16 +24,19 @@ pub type TableRef = Arc<Table>;
 
 impl Table {
     pub fn create(schema: Schema, settings: TableSettings) -> Self {
-        let tempdir = tempfile::Builder::new().tempdir().unwrap();
-        Self::open(schema, settings, tempdir)
+        Self::open(RamDirectory::create(), schema, settings)
     }
 
-    pub fn open<P: AsRef<Path>>(schema: Schema, settings: TableSettings, directory: P) -> Self {
+    pub fn open<D: Into<Box<dyn Directory>>>(
+        directory: D,
+        schema: Schema,
+        settings: TableSettings,
+    ) -> Self {
         let schema = Arc::new(schema);
         let settings = Arc::new(settings);
-        let directory = directory.as_ref().to_owned();
-        let table_data = TableData::open(directory.clone(), schema.clone(), settings.clone());
+        let table_data = TableData::open(directory, schema.clone(), settings.clone());
         let reader = ArcSwap::from(Arc::new(TableReader::new(table_data.clone())));
+
         Self {
             reader,
             table_data: Mutex::new(table_data),

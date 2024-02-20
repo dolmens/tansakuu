@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use crate::{
     index::{IndexSegmentData, IndexSegmentDataFactory},
     schema::SchemaRef,
+    Directory,
 };
 
 pub struct PersistentSegmentIndexData {
@@ -10,13 +11,18 @@ pub struct PersistentSegmentIndexData {
 }
 
 impl PersistentSegmentIndexData {
-    pub fn open(directory: impl AsRef<Path>, schema: &SchemaRef) -> Self {
-        let directory = directory.as_ref();
+    pub fn open(
+        directory: &dyn Directory,
+        index_directory: impl AsRef<Path>,
+        schema: &SchemaRef,
+    ) -> Self {
+        let index_directory = index_directory.as_ref();
         let mut indexes = HashMap::new();
         let index_segment_data_factory = IndexSegmentDataFactory::default();
         for index in schema.indexes() {
             let index_segment_data_builder = index_segment_data_factory.create_builder(index);
-            let index_segment_data = index_segment_data_builder.build(index, directory);
+            let index_segment_data =
+                index_segment_data_builder.build(index, directory, index_directory);
             indexes.insert(index.name().to_string(), index_segment_data.into());
         }
 

@@ -1,6 +1,8 @@
 use std::{path::Path, sync::Arc};
 
-use crate::schema::Field;
+use tantivy_common::TerminatingWrite;
+
+use crate::{schema::Field, Directory};
 
 use super::{
     column_serializer::ColumnSerializer, GenericColumnBuildingSegmentData,
@@ -22,12 +24,14 @@ impl<T> GenericColumnSerializer<T> {
 }
 
 impl<T: Clone + ToString> ColumnSerializer for GenericColumnSerializer<T> {
-    fn serialize(&self, directory: &Path) {
-        let path = directory.join(&self.field_name);
-        let mut writer = GenericColumnSerializerWriter::<T>::new(path);
+    fn serialize(&self, directory: &dyn Directory, column_directory: &Path) {
+        let path = column_directory.join(&self.field_name);
+        let writer = directory.open_write(&path).unwrap();
+        let mut writer = GenericColumnSerializerWriter::<T>::new(writer);
         let values = &self.column_data.values;
         for value in values.iter() {
             writer.write(value.clone());
         }
+        writer.finish().unwrap().terminate().unwrap();
     }
 }

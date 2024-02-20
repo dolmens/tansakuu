@@ -1,10 +1,9 @@
 use std::{
-    fs,
-    path::Path,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::VersionId;
+use crate::{Directory, VersionId};
 
 use serde::{Deserialize, Serialize};
 
@@ -17,36 +16,32 @@ pub struct Version {
 }
 
 impl Version {
-    pub fn load_lastest(directory: impl AsRef<Path>) -> Self {
-        let directory = directory.as_ref();
-        let entries = fs::read_dir(directory).unwrap();
-        let mut versions: Vec<_> = entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry.path().is_file()
-                    && entry
-                        .file_name()
-                        .to_str()
-                        .map_or(false, |name| name.starts_with("version."))
-            })
-            .filter_map(|entry| {
-                entry
-                    .file_name()
-                    .to_str()
-                    .unwrap()
-                    .trim_start_matches("version.")
-                    .parse::<VersionId>()
-                    .ok()
+    pub fn load_lastest(directory: &dyn Directory) -> crate::Result<Self> {
+        let mut versions: Vec<_> = directory
+            .list_files()?
+            .into_iter()
+            .filter(|path| {
+                if let Some(file_name) = path.file_name() {
+                    if let Some(file_name) = file_name.to_str() {
+                        return file_name.starts_with("Version.");
+                    }
+                }
+                false
             })
             .collect();
+
+        if versions.is_empty() {
+            return Ok(Version::default());
+        }
+
         versions.sort();
-        versions.last().map_or(Version::default(), |&version_id| {
-            let version_file = directory.join(format!("version.{}", version_id));
-            let version_data = fs::read_to_string(version_file).unwrap();
-            serde_json::from_str(&version_data).unwrap()
-        })
+
+        let path = versions.last().unwrap();
+        let version_data = directory.atomic_read(path).unwrap();
+        Ok(serde_json::from_slice(&version_data).unwrap())
     }
 
+    #[cfg(not(miri))]
     pub fn next_version(&self) -> Self {
         let version_id = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -60,12 +55,20 @@ impl Version {
         }
     }
 
-    pub fn save(&self, directory: impl AsRef<Path>) {
-        let version_file_path = directory
-            .as_ref()
-            .join(format!("version.{}", self.version_id));
+    #[cfg(miri)]
+    pub fn next_version(&self) -> Self {
+        let version_id = self.version_id + 1;
+
+        Self {
+            version_id,
+            segments: self.segments.clone(),
+        }
+    }
+
+    pub fn save(&self, directory: &dyn Directory) {
+        let path = PathBuf::from(format!("Version.{}", self.version_id));
         let json = serde_json::to_string_pretty(self).unwrap();
-        fs::write(version_file_path, json).unwrap();
+        directory.atomic_write(&path, json.as_bytes()).unwrap();
     }
 
     pub fn version_id(&self) -> VersionId {

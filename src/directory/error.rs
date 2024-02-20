@@ -29,22 +29,6 @@ impl LockError {
     }
 }
 
-#[derive(Debug, Clone, Error)]
-pub enum CreateDirectoryError {
-    /// Our directory is WORM, writing an existing file is forbidden.
-    /// Checkout the `Directory` documentation.
-    #[error("File already exists: '{0}'")]
-    FileAlreadyExists(PathBuf),
-    /// IoError
-    #[error("IoError '{io_error:?}' while create directory in: '{directory_path:?}'.")]
-    IoError {
-        /// underlying io Error.
-        io_error: Arc<io::Error>,
-        /// directory we tried to open.
-        directory_path: PathBuf,
-    },
-}
-
 /// Error that may occur when opening a directory
 #[derive(Debug, Clone, Error)]
 pub enum OpenDirectoryError {
@@ -170,9 +154,6 @@ pub enum OpenReadError {
     /// The file does not exist.
     #[error("Files does not exist: {0:?}")]
     FileDoesNotExist(PathBuf),
-    /// Not a file.
-    #[error("The entry is not a file: {0:?}")]
-    NotAFile(PathBuf),
     /// Any kind of io::Error.
     #[error(
         "IoError: '{io_error:?}' happened while opening the following file for Read: {filepath}."

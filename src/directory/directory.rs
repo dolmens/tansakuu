@@ -6,12 +6,8 @@ use std::time::Duration;
 use std::{fmt, io, thread};
 
 use crate::directory::directory_lock::Lock;
-use crate::directory::error::{
-    CreateDirectoryError, DeleteError, LockError, OpenReadError, OpenWriteError,
-};
+use crate::directory::error::{DeleteError, LockError, OpenReadError, OpenWriteError};
 use crate::directory::{FileHandle, FileSlice, WatchCallback, WatchHandle, WritePtr};
-
-use super::error::OpenDirectoryError;
 
 /// Retry the logic of acquiring locks is pretty simple.
 /// We just retry `n` times after a given `duratio`, both
@@ -112,9 +108,8 @@ fn retry_policy(is_blocking: bool) -> RetryPolicy {
 /// - The [`RamDirectory`][crate::directory::RamDirectory], which
 /// should be used mostly for tests.
 pub trait Directory: DirectoryClone + fmt::Debug + Send + Sync + 'static {
-    fn create_directory(&self, path: &Path) -> Result<Box<dyn Directory>, CreateDirectoryError>;
-
-    fn open_directory(&self, path: &Path) -> Result<Box<dyn Directory>, OpenDirectoryError>;
+    /// List all files.
+    fn list_files(&self) -> io::Result<Vec<PathBuf>>;
 
     /// Opens a file and returns a boxed `FileHandle`.
     ///

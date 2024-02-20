@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use crate::DocId;
+use tantivy_common::TerminatingWrite;
+
+use crate::{Directory, DocId};
 
 use super::{ColumnMerger, GenericColumnPersistentSegmentData, GenericColumnSerializerWriter};
 
@@ -12,13 +14,15 @@ pub struct GenericColumnMerger<T> {
 impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumnMerger<T> {
     fn merge(
         &self,
-        directory: &std::path::Path,
+        directory: &dyn Directory,
+        segment_directory: &std::path::Path,
         field: &crate::schema::Field,
         segments: &[&dyn super::ColumnSegmentData],
         docid_mappings: &[Vec<Option<DocId>>],
     ) {
-        let path = directory.join(field.name());
-        let mut writer = GenericColumnSerializerWriter::<T>::new(path);
+        let path = segment_directory.join(field.name());
+        let writer = directory.open_write(&path).unwrap();
+        let mut writer = GenericColumnSerializerWriter::<T>::new(writer);
 
         for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
@@ -30,5 +34,6 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
                 }
             }
         }
+        writer.finish().unwrap().terminate().unwrap();
     }
 }

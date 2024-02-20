@@ -1,6 +1,8 @@
-use std::{collections::HashMap, fs::File, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{index::IndexMerger, DocId};
+use tantivy_common::TerminatingWrite;
+
+use crate::{index::IndexMerger, Directory, DocId};
 
 use super::{PrimaryKeyDictBuilder, PrimaryKeyPersistentSegmentData};
 
@@ -10,7 +12,8 @@ pub struct PrimaryKeyMerger {}
 impl IndexMerger for PrimaryKeyMerger {
     fn merge(
         &self,
-        directory: &std::path::Path,
+        directory: &dyn Directory,
+        index_directory: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
@@ -30,12 +33,16 @@ impl IndexMerger for PrimaryKeyMerger {
         let mut keys: Vec<_> = keys.iter().collect();
         keys.sort_by(|a, b| a.0.cmp(b.0));
 
-        let index_path = directory.join(index.name());
-        let index_file = File::create(index_path).unwrap();
-        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_file);
+        let index_path = index_directory.join(index.name());
+        let writer = directory.open_write(&index_path).unwrap();
+        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(writer);
         for (key, docid) in keys.iter() {
             primary_key_dict_writer.insert(key, docid).unwrap();
         }
-        primary_key_dict_writer.finish().unwrap();
+        primary_key_dict_writer
+            .finish()
+            .unwrap()
+            .terminate()
+            .unwrap();
     }
 }
