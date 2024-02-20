@@ -427,6 +427,18 @@ impl<K, V> Layer<K, V> {
     }
 }
 
+impl<K, V> Drop for Layer<K, V> {
+    fn drop(&mut self) {
+        for i in 0..self.elements.len() {
+            if self.bitset.contains(i) {
+                unsafe {
+                    self.elements[i].drop();
+                }
+            }
+        }
+    }
+}
+
 impl<K, V> Element<K, V> {
     fn new(key: K, value: V) -> Self {
         Self { key, value }
