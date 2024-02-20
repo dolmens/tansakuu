@@ -2,23 +2,26 @@ use std::sync::Arc;
 
 use super::atomic::AcqRelU64;
 
+type AtomicWord = AcqRelU64;
+const BITS: usize = std::mem::size_of::<AtomicWord>() * 8;
+
 pub struct BitsetWriter {
-    data: Arc<[AcqRelU64]>,
+    data: Arc<[AtomicWord]>,
 }
 
 #[derive(Clone)]
 pub struct Bitset {
-    data: Arc<[AcqRelU64]>,
+    data: Arc<[AtomicWord]>,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
-    (index / 64, index % 64)
+    (index / BITS, index % BITS)
 }
 
 impl BitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
-        let len = (capacity + 63) / 64;
-        let vec: Vec<_> = (0..len).map(|_| AcqRelU64::new(0)).collect();
+        let len = (capacity + BITS - 1) / BITS;
+        let vec: Vec<_> = (0..len).map(|_| AtomicWord::new(0)).collect();
         let data = Arc::from(vec.into_boxed_slice());
         Self { data }
     }
@@ -38,6 +41,16 @@ impl BitsetWriter {
         }
     }
 
+    pub fn union_with(&mut self, other: &Bitset) {
+        if self.capacity() != other.capacity() {
+            return;
+        }
+
+        for (l, r) in self.data.iter().zip(other.data.iter()) {
+            l.store(l.load() | r.load());
+        }
+    }
+
     pub fn contains(&self, index: usize) -> bool {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
@@ -49,7 +62,7 @@ impl BitsetWriter {
     }
 
     pub fn capacity(&self) -> usize {
-        self.data.len() * 64
+        self.data.len() * BITS
     }
 }
 
@@ -65,7 +78,7 @@ impl Bitset {
     }
 
     pub fn capacity(&self) -> usize {
-        self.data.len() * 64
+        self.data.len() * BITS
     }
 }
 
@@ -73,7 +86,13 @@ impl Bitset {
 mod tests {
     use std::{thread, time::Duration};
 
+    use super::BITS;
     use crate::util::bitset::BitsetWriter;
+
+    #[test]
+    fn test_bits() {
+        assert_eq!(BITS, 64);
+    }
 
     #[test]
     fn test_simple() {
@@ -116,6 +135,29 @@ mod tests {
                 assert!(!bitset.contains(i));
             }
         }
+    }
+
+    #[test]
+    fn test_union_with() {
+        let mut w1 = BitsetWriter::with_capacity(BITS * 3);
+        let mut w2 = BitsetWriter::with_capacity(BITS * 3);
+
+        w1.insert(0);
+        w1.insert(1);
+        w1.insert(63);
+        w1.insert(150);
+
+        w2.insert(1);
+        w2.insert(60);
+
+        w1.union_with(&w2.bitset());
+        let bitset = w1.bitset();
+
+        assert!(bitset.contains(0));
+        assert!(bitset.contains(1));
+        assert!(bitset.contains(60));
+        assert!(bitset.contains(63));
+        assert!(bitset.contains(150));
     }
 
     #[test]
