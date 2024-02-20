@@ -1,7 +1,7 @@
 pub mod atomic;
-pub mod bitset;
 pub mod capacity_policy;
 pub mod chunked_vec;
+pub mod fixed_capacity_bitset;
 pub mod fractional_capacity_policy;
 pub mod ha3_capacity_policy;
 pub mod hash;

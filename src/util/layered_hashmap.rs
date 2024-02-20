@@ -8,8 +8,8 @@ use std::{
 
 use super::{
     atomic::{AcqRelAtomicPtr, AcqRelUsize},
-    bitset::{Bitset, BitsetWriter},
     capacity_policy::{CapacityPolicy, FixedCapacityPolicy},
+    fixed_capacity_bitset::{FixedCapacityBitset, FixedCapacityBitsetWriter},
     raw::Raw,
 };
 
@@ -48,13 +48,13 @@ struct LayeredHashMapData<K, V, S: BuildHasher> {
 
 struct LayerWriter<K, V> {
     capacity: usize,
-    bitset: BitsetWriter,
+    bitset: FixedCapacityBitsetWriter,
     layer: NonNull<Layer<K, V>>,
 }
 
 struct Layer<K, V> {
     next: Option<NonNull<Layer<K, V>>>,
-    bitset: Bitset,
+    bitset: FixedCapacityBitset,
     elements: Box<[Raw<Element<K, V>>]>,
 }
 
@@ -70,7 +70,7 @@ pub struct Iter<'a, K, V> {
 
 struct LayerInnerIter<'a, K, V> {
     cursor: usize,
-    bitset: &'a Bitset,
+    bitset: &'a FixedCapacityBitset,
     elements: &'a [Raw<Element<K, V>>],
 }
 
@@ -308,7 +308,7 @@ impl<K, V, S: BuildHasher> Drop for LayeredHashMapData<K, V, S> {
 
 impl<K, V> LayerWriter<K, V> {
     fn with_capacity(capacity: usize) -> Self {
-        let bitset = BitsetWriter::with_capacity(capacity);
+        let bitset = FixedCapacityBitsetWriter::with_capacity(capacity);
         let layer = unsafe {
             NonNull::new_unchecked(Box::into_raw(Box::new(Layer::with_capacity(
                 capacity,
@@ -363,7 +363,7 @@ impl<K, V> LayerWriter<K, V> {
 }
 
 impl<K, V> Layer<K, V> {
-    fn with_capacity(capacity: usize, bitset: Bitset) -> Self {
+    fn with_capacity(capacity: usize, bitset: FixedCapacityBitset) -> Self {
         let elements: Vec<_> = (0..capacity).map(|_| Raw::new()).collect();
         Self {
             next: None,
