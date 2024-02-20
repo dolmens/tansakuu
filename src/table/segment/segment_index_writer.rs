@@ -36,16 +36,16 @@ impl SegmentIndexWriter {
         let mut indexes = BTreeSet::new();
         for (field, value) in doc.iter_fields_and_values() {
             if let Some(field) = self.schema.field(field) {
-                for index in field.indexes() {
+                for index in field.indexes().iter().map(|index| index.upgrade().unwrap()) {
                     let index_writer = self.indexes.get_mut(index.name()).unwrap();
                     index_writer.add_field(field.name(), value.clone().into());
-                    indexes.insert(index.name());
+                    indexes.insert(index.name().to_string());
                 }
             }
         }
 
         for index in indexes {
-            let index_writer = self.indexes.get_mut(index).unwrap();
+            let index_writer = self.indexes.get_mut(&index).unwrap();
             index_writer.end_document(docid);
         }
     }

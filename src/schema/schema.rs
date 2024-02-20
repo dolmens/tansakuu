@@ -1,4 +1,9 @@
-use std::{cell::Cell, collections::HashMap, ops::BitOr, sync::Arc};
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    ops::BitOr,
+    sync::{Arc, Weak},
+};
 
 #[derive(Default)]
 pub struct SchemaBuilder {
@@ -28,7 +33,7 @@ pub struct Field {
     multi: bool,
     column: bool,
     stored: bool,
-    indexes: Cell<Vec<IndexRef>>,
+    indexes: Cell<Vec<IndexWeakRef>>,
 }
 
 unsafe impl Send for Field {}
@@ -57,6 +62,7 @@ pub struct Index {
 }
 
 pub type IndexRef = Arc<Index>;
+pub type IndexWeakRef = Weak<Index>;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
@@ -183,7 +189,7 @@ impl SchemaBuilder {
         for field_name in fields {
             let field = self.schema.field(field_name).unwrap();
             let field_indexes = unsafe { &mut *field.indexes.as_ptr() };
-            field_indexes.push(index.clone())
+            field_indexes.push(Arc::downgrade(&index));
         }
 
         if index.index_type == IndexType::PrimaryKey {
@@ -278,7 +284,7 @@ impl Field {
         self.stored
     }
 
-    pub fn indexes(&self) -> &[IndexRef] {
+    pub fn indexes(&self) -> &[IndexWeakRef] {
         unsafe { &*self.indexes.as_ptr() }
     }
 }
