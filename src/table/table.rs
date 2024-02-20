@@ -62,7 +62,7 @@ impl Table {
     }
 
     pub fn recent_segment_stat(&self) -> Option<Arc<SegmentStat>> {
-        let mut table_data = self.table_data.lock().unwrap();
+        let table_data = self.table_data.lock().unwrap();
         table_data.recent_segment_stat().map(|stat| stat.clone())
     }
 

@@ -1,7 +1,7 @@
 use std::{
     alloc::{handle_alloc_error, Layout},
     marker::PhantomData,
-    ptr::NonNull,
+    ptr::{self, NonNull},
     sync::Arc,
 };
 
@@ -277,7 +277,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         node_ptr
     }
 
-    fn drop_node(&self, node: NonNull<RadixTreeNode<T>>) {
+    fn drop_node(&self, node: NonNull<RadixTreeNode<T>>, mut element_count: usize) {
         let node_ref = unsafe { node.as_ref() };
         let layout = self.node_layout();
         let chunk_layout = self.chunk_layout();
@@ -288,13 +288,21 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
                 break;
             }
             if node_ref.height == 0 {
-                let chunk = unsafe { NonNull::new_unchecked(slot) }.cast();
+                let chunk = unsafe { NonNull::new_unchecked(slot) };
+                let data = chunk.as_ptr().cast::<T>();
+                let count = std::cmp::min(element_count, 1 << self.chunk_exponent);
+                for d in 0..count {
+                    element_count -= 1;
+                    unsafe {
+                        ptr::drop_in_place(data.add(d));
+                    }
+                }
                 unsafe {
                     self.allocator.deallocate(chunk, chunk_layout);
                 }
             } else {
                 let child_node = unsafe { NonNull::new_unchecked(slot) }.cast();
-                self.drop_node(child_node);
+                self.drop_node(child_node, element_count);
             }
         }
         unsafe {
@@ -323,8 +331,9 @@ impl<T, A: Allocator> Drop for RadixTreeData<T, A> {
     fn drop(&mut self) {
         let root = self.root.load();
         if !root.is_null() {
+            let element_count = self.element_count.load();
             let node = unsafe { NonNull::new_unchecked(root) };
-            self.drop_node(node);
+            self.drop_node(node, element_count);
         }
     }
 }
@@ -398,6 +407,19 @@ mod tests {
         for (i, &v) in tree.iter().enumerate() {
             assert_eq!(i * 10, v);
         }
+    }
+
+    #[test]
+    fn test_non_trivial_type() {
+        let mut writer: RadixTreeWriter<_> = RadixTreeWriter::new(8, 4);
+        let tree = writer.reader();
+        let hello = "hello".to_string();
+        let world = "world".to_string();
+        writer.push(hello.clone());
+        writer.push(world.clone());
+
+        assert_eq!(tree.get(0).unwrap(), &hello);
+        assert_eq!(tree.get(1).unwrap(), &world);
     }
 
     #[test]
