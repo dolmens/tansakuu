@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    arena::BumpArena,
+    arena::{Arena, BumpArena},
     util::atomic::{AcqRelUsize, RelaxedAtomicPtr, RelaxedU32, RelaxedU8},
 };
 
