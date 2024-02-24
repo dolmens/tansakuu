@@ -25,10 +25,10 @@ impl SegmentColumnWriter {
         Self { columns }
     }
 
-    pub fn add_doc<D: Document>(&mut self, doc: &D, _docid: DocId) {
+    pub fn add_document<D: Document>(&mut self, doc: &D, _docid: DocId) {
         for (name, value) in doc.iter_fields_and_values() {
             if let Some(writer) = self.columns.get_mut(name) {
-                writer.add_doc(value.into());
+                writer.add_document(value.into());
             }
         }
     }

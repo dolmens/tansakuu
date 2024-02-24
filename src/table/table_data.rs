@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
     column::ColumnSerializerFactory,
+    deletionmap::{DeletionMap, ImmutableDeletionMap, MutableDeletionMap},
     index::IndexSerializerFactory,
     schema::SchemaRef,
     table::{segment::SegmentMetaData, SegmentStat},
@@ -21,6 +22,7 @@ pub struct TableData {
     building_segments: Vec<BuildingSegment>,
     persistent_segments: Vec<PersistentSegment>,
     recent_segment_stat: Option<Arc<SegmentStat>>,
+    deletionmap: DeletionMap,
     version: Version,
     directory: Box<dyn Directory>,
     schema: SchemaRef,
@@ -39,6 +41,7 @@ impl TableData {
         let version = Version::load_lastest(directory.as_ref()).unwrap();
         let mut persistent_segments = vec![];
         let mut base_docid = 0;
+        let mut total_doc_count = 0;
         for segment_id in version.segments() {
             let segment = Arc::new(PersistentSegmentData::open(
                 directory.as_ref(),
@@ -49,12 +52,24 @@ impl TableData {
             let meta = SegmentMeta::new(segment.segment_id().clone(), base_docid, doc_count);
             persistent_segments.push(PersistentSegment::new(meta, segment));
             base_docid += doc_count as DocId;
+            total_doc_count += doc_count;
         }
+
+        let mut deletionmap = MutableDeletionMap::with_capacity(total_doc_count);
+        for seg in &persistent_segments {
+            deletionmap.copy_immutable_at(
+                seg.data().deletionmap(),
+                seg.meta().base_docid(),
+                seg.meta().doc_count(),
+            );
+        }
+        let immutable_deletionmap: ImmutableDeletionMap = deletionmap.into();
 
         Self {
             building_segments: vec![],
             persistent_segments,
             recent_segment_stat: None,
+            deletionmap: immutable_deletionmap.into(),
             version,
             directory,
             schema,
@@ -96,13 +111,27 @@ impl TableData {
         }
     }
 
+    pub fn fixed_doc_count(&self) -> usize {
+        self.persistent_segments
+            .iter()
+            .map(|seg| seg.meta().doc_count())
+            .chain(
+                self.building_segments
+                    .iter()
+                    .filter(|seg| seg.is_dumping())
+                    .map(|seg| seg.meta().doc_count()),
+            )
+            .sum()
+    }
+
     pub fn recent_segment_stat(&self) -> Option<&Arc<SegmentStat>> {
         self.recent_segment_stat.as_ref()
     }
 
     pub fn add_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {
+        // TODO: first dumping then add
         if let Some(building_segment) = self.building_segments.last() {
-            if !building_segment.data().dumping() {
+            if !building_segment.data().is_dumping() {
                 let building_segment = building_segment.data().clone();
                 self.dump_building_segment(building_segment)
             }
@@ -128,12 +157,16 @@ impl TableData {
             &building_segment_data
         ));
         building_segment_data.set_dumping_start();
+        // TODO: active building segment???
         let building_segment = self.building_segments.last_mut().unwrap();
         let segment_stat = building_segment.collect_segment_stat();
         self.recent_segment_stat = Some(Arc::new(segment_stat));
         building_segment
             .meta_mut()
             .set_doc_count(building_segment_data.doc_count());
+        let deletionmap = building_segment.data().deletionmap();
+        // TODO: What to do if all deleted
+        let doc_count = building_segment_data.doc_count() - deletionmap.deleted_doc_count();
         let segment_directory =
             PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
         let column_directory = segment_directory.join("column");
@@ -145,7 +178,7 @@ impl TableData {
                 .unwrap()
                 .clone();
             let column_serializer = column_serializer_factory.create(field, column_data);
-            column_serializer.serialize(self.directory.as_ref(), &column_directory);
+            column_serializer.serialize(self.directory.as_ref(), &column_directory, deletionmap);
         }
 
         let index_directory = segment_directory.join("index");
@@ -157,17 +190,10 @@ impl TableData {
                 .unwrap()
                 .clone();
             let index_serializer = index_serializer_factory.create(index, index_data);
-            index_serializer.serialize(self.directory.as_ref(), &index_directory);
+            index_serializer.serialize(self.directory.as_ref(), &index_directory, deletionmap);
         }
 
-        if !building_segment_data.deletionmap().is_empty() {
-            let path = segment_directory.join("deletionmap");
-            building_segment_data
-                .deletionmap()
-                .save(self.directory.as_ref(), path);
-        }
-
-        let meta = SegmentMetaData::new(building_segment_data.doc_count());
+        let meta = SegmentMetaData::new(doc_count);
         let meta_path = segment_directory.join("meta.json");
         meta.save(self.directory.as_ref(), &meta_path);
         let mut version = self.version.next_version();
@@ -195,12 +221,38 @@ impl TableData {
         self.reload();
     }
 
+    pub fn set_deletionmap(&mut self, deletionmap: DeletionMap) {
+        self.deletionmap = deletionmap;
+    }
+
+    pub fn deletionmap(&self) -> &DeletionMap {
+        &self.deletionmap
+    }
+
+    pub fn directory(&self) -> &dyn Directory {
+        self.directory.as_ref()
+    }
+
     pub fn persistent_segments(&self) -> impl Iterator<Item = &PersistentSegment> {
         self.persistent_segments.iter()
     }
 
+    pub fn persistent_segments_mut(&mut self) -> impl Iterator<Item = &mut PersistentSegment> {
+        self.persistent_segments.iter_mut()
+    }
+
+    pub fn active_building_segment(&self) -> Option<&BuildingSegment> {
+        self.building_segments
+            .last()
+            .filter(|seg| !seg.is_dumping())
+    }
+
     pub fn building_segments(&self) -> impl Iterator<Item = &BuildingSegment> {
         self.building_segments.iter()
+    }
+
+    pub fn building_segments_mut(&mut self) -> impl Iterator<Item = &mut BuildingSegment> {
+        self.building_segments.iter_mut()
     }
 
     pub fn segment_of_docid(&self, docid: DocId) -> Option<(&SegmentId, DocId)> {

@@ -3,6 +3,7 @@ use std::{io::Write, sync::Arc};
 use tantivy_common::TerminatingWrite;
 
 use crate::{
+    deletionmap::BuildingDeletionMap,
     index::IndexSerializer,
     postings::{
         doc_list_encoder_builder,
@@ -32,7 +33,12 @@ impl InvertedIndexSerializer {
 }
 
 impl IndexSerializer for InvertedIndexSerializer {
-    fn serialize(&self, directory: &dyn Directory, index_directory: &std::path::Path) {
+    fn serialize(
+        &self,
+        directory: &dyn Directory,
+        index_directory: &std::path::Path,
+        deletionmap: &BuildingDeletionMap,
+    ) {
         let posting_format = if let IndexType::Text(text_index_options) = self.index.index_type() {
             PostingFormat::builder()
                 .with_text_index_options(text_index_options)
@@ -119,6 +125,10 @@ impl IndexSerializer for InvertedIndexSerializer {
                 docid = posting_iterator.seek(docid).unwrap();
                 if docid == END_DOCID {
                     break;
+                }
+                if deletionmap.is_deleted(docid) {
+                    docid += 1;
+                    continue;
                 }
                 if posting_format.has_tflist() {
                     if posting_format.has_position_list() {

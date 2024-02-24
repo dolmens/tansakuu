@@ -1,75 +1,105 @@
-use tantivy_common::TerminatingWrite;
+use tantivy_common::HasLen;
 
-use crate::{table::SegmentId, Directory, DocId};
-
-use std::{
-    collections::{BTreeSet, HashSet},
-    path::Path,
+use crate::{
+    table::SegmentId,
+    util::{Bitset, ImmutableBitset, MutableBitset},
+    Directory, DocId,
 };
 
-use super::{DeletionDict, DeletionDictBuilder};
+use std::path::PathBuf;
 
+#[derive(Clone)]
+pub struct ImmutableDeletionMap {
+    bitset: ImmutableBitset,
+}
+
+#[derive(Clone)]
+pub struct MutableDeletionMap {
+    bitset: MutableBitset,
+}
+
+impl Into<ImmutableDeletionMap> for MutableDeletionMap {
+    fn into(self) -> ImmutableDeletionMap {
+        ImmutableDeletionMap {
+            bitset: self.bitset.into(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct DeletionMap {
-    dict: DeletionDict,
+    bitset: Bitset,
+}
+
+impl ImmutableDeletionMap {
+    pub fn load(directory: &dyn Directory, segment_id: SegmentId, doc_count: usize) -> Self {
+        let deletionmap_path = PathBuf::from("deletionmap").join(segment_id.as_str());
+        if directory.exists(&deletionmap_path).unwrap() {
+            let deletionmap_data = directory.open_read(&deletionmap_path).unwrap();
+            if deletionmap_data.len() % 8 != 0 || deletionmap_data.len() * 8 < doc_count {
+                let mut deletionmap_bytes = deletionmap_data.read_bytes().unwrap();
+                let words: Vec<_> = (0..deletionmap_data.len() / 8)
+                    .map(|_| deletionmap_bytes.read_u64())
+                    .collect();
+                let bitset = ImmutableBitset::new(&words);
+                return Self { bitset };
+            } else {
+                warn!(
+                    "Segment `{}` deletionmap data corrupted",
+                    segment_id.as_str()
+                );
+            }
+        }
+
+        let bitset = ImmutableBitset::with_capacity(doc_count);
+        Self { bitset }
+    }
+
+    pub fn bitset(&self) -> &ImmutableBitset {
+        &self.bitset
+    }
+
+    pub fn is_deleted(&self, docid: DocId) -> bool {
+        self.bitset.contains(docid as usize)
+    }
+}
+
+impl MutableDeletionMap {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bitset: MutableBitset::with_capacity(capacity),
+        }
+    }
+
+    pub fn copy_immutable_at(
+        &mut self,
+        immutable: &ImmutableDeletionMap,
+        base_docid: DocId,
+        doc_count: usize,
+    ) {
+        self.bitset
+            .copy_data_at(immutable.bitset.data(), base_docid as usize, doc_count);
+    }
+
+    pub fn bitset(&self) -> &MutableBitset {
+        &self.bitset
+    }
+}
+
+impl From<ImmutableDeletionMap> for DeletionMap {
+    fn from(immutable: ImmutableDeletionMap) -> Self {
+        Self {
+            bitset: immutable.bitset.into(),
+        }
+    }
 }
 
 impl DeletionMap {
-    pub fn load(directory: &dyn Directory, path: impl AsRef<Path>) -> Self {
-        let path = path.as_ref();
-        let data = directory.open_read(path).unwrap();
-        let dict = DeletionDict::open(data).unwrap();
-
-        Self { dict }
+    pub fn new(bitset: Bitset) -> Self {
+        Self { bitset }
     }
 
-    pub fn save(&self, directory: &dyn Directory, path: impl AsRef<Path>) {
-        let writer = directory.open_write(path.as_ref()).unwrap();
-        let mut dict_builder = DeletionDictBuilder::new(writer);
-        for item in self.dict.iter() {
-            dict_builder.insert(item).unwrap();
-        }
-        dict_builder.finish().unwrap().terminate().unwrap();
-    }
-
-    pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {
-        let mut keybuf = [0_u8; 36];
-        keybuf[..32].copy_from_slice(segment_id.as_bytes());
-        keybuf[32..36].copy_from_slice(&docid.to_be_bytes());
-        self.dict.contains(keybuf).unwrap()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.dict.is_empty()
-    }
-
-    pub fn remove_segments_cloned(&self, segments_to_remove: &HashSet<SegmentId>) -> Self {
-        let mut dict_builder = DeletionDictBuilder::new(Vec::new());
-        for item in self.dict.iter() {
-            let segment_id = String::from_utf8_lossy(&item[..32]);
-            if !segments_to_remove.contains(segment_id.as_ref()) {
-                dict_builder.insert(item).unwrap();
-            }
-        }
-        let buf = dict_builder.finish().unwrap();
-        let dict = DeletionDict::open(buf.into()).unwrap();
-
-        Self { dict }
-    }
-
-    pub fn merge(segments: &[&Self]) -> Self {
-        let mut keys = BTreeSet::new();
-        for &seg in segments {
-            for item in seg.dict.iter() {
-                keys.insert(item);
-            }
-        }
-        let mut dict_builder = DeletionDictBuilder::new(Vec::new());
-        for item in keys.into_iter() {
-            dict_builder.insert(item).unwrap();
-        }
-        let buf = dict_builder.finish().unwrap();
-        let dict = DeletionDict::open(buf.into()).unwrap();
-
-        Self { dict }
+    pub fn is_deleted(&self, docid: DocId) -> bool {
+        self.bitset.contains(docid as usize)
     }
 }

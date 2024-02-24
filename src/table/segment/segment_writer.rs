@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
-use crate::{deletionmap::DeletionMapWriter, document::Document, schema::SchemaRef, DocId};
+use crate::{
+    deletionmap::BuildingDeletionMapWriter, document::Document, schema::SchemaRef, DocId,
+    ESTIMATE_SEGMENT_DOC_COUNT, ESTIMATE_SEGMENT_INC_FACTOR,
+};
 
-use super::{BuildingSegmentData, SegmentColumnWriter, SegmentId, SegmentIndexWriter, SegmentStat};
+use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter, SegmentStat};
 
 pub struct SegmentWriter {
     doc_count: usize,
     column_writer: SegmentColumnWriter,
     index_writer: SegmentIndexWriter,
-    deletionmap_writer: DeletionMapWriter,
+    deletionmap_writer: BuildingDeletionMapWriter,
     building_segment: Arc<BuildingSegmentData>,
 }
 
@@ -16,7 +19,14 @@ impl SegmentWriter {
     pub fn new(schema: &SchemaRef, recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
         let column_writer = SegmentColumnWriter::new(schema);
         let index_writer = SegmentIndexWriter::new(schema, recent_segment_stat);
-        let deletionmap_writer = DeletionMapWriter::new();
+        let recent_segment_doc_count = recent_segment_stat.map_or(0, |s| s.doc_count);
+        let estimate_segment_doc_count = if recent_segment_doc_count > 0 {
+            ((recent_segment_doc_count as f64) * ESTIMATE_SEGMENT_INC_FACTOR) as usize
+        } else {
+            ESTIMATE_SEGMENT_DOC_COUNT
+        };
+        let deletionmap_writer =
+            BuildingDeletionMapWriter::with_capacity(estimate_segment_doc_count);
         let building_segment = Arc::new(BuildingSegmentData::new(
             column_writer.column_data(),
             index_writer.index_data(),
@@ -32,17 +42,17 @@ impl SegmentWriter {
         }
     }
 
-    pub fn add_doc<D: Document>(&mut self, doc: &D) {
+    pub fn add_document<D: Document>(&mut self, doc: &D) {
         let docid = self.doc_count as DocId;
         // First column then index, so that indexed documents must be in column.
-        self.column_writer.add_doc(doc, docid);
-        self.index_writer.add_doc(doc, docid);
+        self.column_writer.add_document(doc, docid);
+        self.index_writer.add_document(doc, docid);
         self.doc_count += 1;
         self.building_segment.set_doc_count(self.doc_count);
     }
 
-    pub fn delete_doc(&mut self, segment_id: SegmentId, docid: DocId) {
-        self.deletionmap_writer.delete_doc(segment_id, docid);
+    pub fn delete_document(&mut self, docid: DocId) {
+        self.deletionmap_writer.delete_document(docid);
     }
 
     pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {

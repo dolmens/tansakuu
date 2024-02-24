@@ -38,6 +38,10 @@ impl BuildingSegment {
         &self.data
     }
 
+    pub fn is_dumping(&self) -> bool {
+        self.data.is_dumping()
+    }
+
     pub fn collect_segment_stat(&self) -> SegmentStat {
         let mut segment_stat = SegmentStat::new();
         self.data.collect_segment_stat(&mut segment_stat);
@@ -73,7 +77,7 @@ impl BuildingSegmentData {
         self.doc_count.store(doc_count);
     }
 
-    pub fn dumping(&self) -> bool {
+    pub fn is_dumping(&self) -> bool {
         self.dumping.load(std::sync::atomic::Ordering::Acquire)
     }
 

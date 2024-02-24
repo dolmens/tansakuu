@@ -9,7 +9,7 @@ pub struct TableReader {
     column_reader: TableColumnReader,
     primary_key_reader: Option<PrimaryKeyReader>,
     primary_key_index_reader: Option<Arc<index::PrimaryKeyReader>>,
-    deletionmap_reader: Option<DeletionMapReader>,
+    deletionmap_reader: DeletionMapReader,
     table_data: TableData,
 }
 
@@ -30,10 +30,8 @@ impl TableReader {
             .primary_key()
             .and_then(|(_, primary_key)| index_reader.index_ref(primary_key.name()))
             .and_then(|reader| reader.downcast_arc().ok());
-        let deletionmap_reader = table_data
-            .schema()
-            .primary_key()
-            .map(|_| DeletionMapReader::new(&table_data));
+
+        let deletionmap_reader = DeletionMapReader::new(&table_data);
 
         Self {
             index_reader,
@@ -61,8 +59,8 @@ impl TableReader {
         self.primary_key_index_reader.as_deref()
     }
 
-    pub fn deletionmap_reader(&self) -> Option<&DeletionMapReader> {
-        self.deletionmap_reader.as_ref()
+    pub fn deletionmap_reader(&self) -> &DeletionMapReader {
+        &self.deletionmap_reader
     }
 
     pub fn segment_of_docid(&self, docid: DocId) -> Option<(&SegmentId, DocId)> {

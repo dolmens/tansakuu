@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use tantivy_common::TerminatingWrite;
 
-use crate::{index::IndexSerializer, schema::IndexRef, Directory};
+use crate::{
+    deletionmap::BuildingDeletionMap, index::IndexSerializer, schema::IndexRef, Directory,
+};
 
 use super::{PrimaryKeyBuildingSegmentData, PrimaryKeyDictBuilder};
 
@@ -21,7 +23,12 @@ impl PrimaryKeySerializer {
 }
 
 impl IndexSerializer for PrimaryKeySerializer {
-    fn serialize(&self, directory: &dyn Directory, index_directory: &std::path::Path) {
+    fn serialize(
+        &self,
+        directory: &dyn Directory,
+        index_directory: &std::path::Path,
+        deletionmap: &BuildingDeletionMap,
+    ) {
         let mut keys: Vec<_> = self
             .index_data
             .keys
@@ -33,9 +40,11 @@ impl IndexSerializer for PrimaryKeySerializer {
         let index_writer = directory.open_write(&index_path).unwrap();
         let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_writer);
         for (key, docid) in keys.iter() {
-            primary_key_dict_writer
-                .insert(key.to_be_bytes(), docid)
-                .unwrap();
+            if !deletionmap.is_deleted(*docid) {
+                primary_key_dict_writer
+                    .insert(key.to_be_bytes(), docid)
+                    .unwrap();
+            }
         }
         primary_key_dict_writer
             .finish()

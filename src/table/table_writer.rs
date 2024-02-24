@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
-use crate::{document::Document, query::Term, util::hash::hash_string_64};
+use crate::{deletionmap::DeletionMapWriter, document::Document, query::Term, DocId, END_DOCID};
 
 use super::{
     segment::{BuildingSegmentData, SegmentWriter},
-    Table, TableReader,
+    Table,
 };
 
 pub struct TableWriter<'a> {
+    fixed_doc_count: usize,
     segment_writer: SegmentWriter,
-    table_reader: Arc<TableReader>,
+    deletionmap_writer: DeletionMapWriter,
     table: &'a Table,
 }
 
@@ -18,34 +19,57 @@ impl<'a> TableWriter<'a> {
         let recent_segment_stat = table.recent_segment_stat();
         let segment_writer = SegmentWriter::new(table.schema(), recent_segment_stat.as_ref());
         table.add_building_segment(segment_writer.building_segment().clone());
-        let table_reader = table.reader();
+        let mut table_data = table.data().lock().unwrap();
+        let fixed_doc_count = table_data.fixed_doc_count();
+        let deletionmap_writer = DeletionMapWriter::new(&mut table_data);
+        drop(table_data);
 
         Self {
+            fixed_doc_count,
             segment_writer,
-            table_reader,
+            deletionmap_writer,
             table,
         }
     }
 
-    pub fn add_doc<D: Document>(&mut self, doc: &D) {
-        self.segment_writer.add_doc(doc);
+    pub fn add_document<D: Document>(&mut self, doc: &D) {
+        self.segment_writer.add_document(doc);
     }
 
-    pub fn delete_docs(&mut self, term: &Term) {
-        let hashkey = hash_string_64(term.keyword());
-        self.table_reader
-            .primary_key_index_reader()
-            .and_then(|reader| reader.get_by_hashkey(hashkey))
-            .and_then(|docid| self.table_reader.segment_of_docid(docid))
-            .map(|(segment_id, docid)| self.segment_writer.delete_doc(segment_id.clone(), docid));
+    pub fn delete_documents(&mut self, term: &Term) {
+        let table_reader = self.table.reader();
+        let mut posting_iter = table_reader.index_reader().lookup(term).unwrap();
+        let mut docid = 0;
+        loop {
+            docid = posting_iter.seek(docid).unwrap();
+            if docid == END_DOCID {
+                break;
+            }
+            if docid < self.fixed_doc_count as DocId {
+                self.deletionmap_writer.delete_document(docid);
+            } else {
+                self.segment_writer
+                    .delete_document(docid - self.fixed_doc_count as DocId);
+            }
+            docid = docid + 1;
+        }
     }
 
     pub fn new_segment(&mut self) {
+        // TODO; dump current building segment and add new building segment
+        // TODO: lock table_data first, then do everything
+        let table_data = self.table.data().lock().unwrap();
+        let directory = table_data.directory();
+        self.deletionmap_writer.save(directory);
+        drop(table_data);
         let recent_segment_stat = self.table.recent_segment_stat();
         self.segment_writer = SegmentWriter::new(self.table.schema(), recent_segment_stat.as_ref());
         let new_segment = self.building_segment().clone();
         self.table.add_building_segment(new_segment);
-        self.table_reader = self.table.reader();
+        let mut table_data = self.table.data().lock().unwrap();
+        self.deletionmap_writer = DeletionMapWriter::new(&mut table_data);
+        // TODO: so many reinit readers
+        self.table.reinit_reader(table_data.clone());
     }
 
     pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {

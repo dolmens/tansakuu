@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    column::ColumnSegmentData, deletionmap::DeletionMap, index::IndexSegmentData,
+    column::ColumnSegmentData, deletionmap::ImmutableDeletionMap, index::IndexSegmentData,
     schema::SchemaRef, Directory,
 };
 
@@ -21,7 +21,7 @@ pub struct PersistentSegmentData {
     meta: SegmentMetaData,
     index_data: PersistentSegmentIndexData,
     column_data: PersistentSegmentColumnData,
-    deletionmap: Option<Arc<DeletionMap>>,
+    deletionmap: ImmutableDeletionMap,
 }
 
 impl PersistentSegment {
@@ -51,12 +51,8 @@ impl PersistentSegmentData {
         let column_directory = segment_directory.join("column");
         let column_data = PersistentSegmentColumnData::open(directory, column_directory, schema);
 
-        let deletionmap_path = segment_directory.join("deletionmap");
-        let deletionmap = if directory.exists(&deletionmap_path).unwrap() {
-            Some(Arc::new(DeletionMap::load(directory, deletionmap_path)))
-        } else {
-            None
-        };
+        let deletionmap =
+            ImmutableDeletionMap::load(directory, segment_id.clone(), meta.doc_count());
 
         Self {
             segment_id,
@@ -83,7 +79,7 @@ impl PersistentSegmentData {
         self.column_data.column(column).unwrap()
     }
 
-    pub fn deletionmap(&self) -> Option<&Arc<DeletionMap>> {
-        self.deletionmap.as_ref()
+    pub fn deletionmap(&self) -> &ImmutableDeletionMap {
+        &self.deletionmap
     }
 }

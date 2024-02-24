@@ -34,7 +34,7 @@ impl<T: Send + Sync + 'static> ColumnWriter for GenericColumnWriter<T>
 where
     OwnedValue: TryInto<T>,
 {
-    fn add_doc(&mut self, value: OwnedValue) {
+    fn add_document(&mut self, value: OwnedValue) {
         self.writer.push(value.try_into().ok().unwrap());
     }
 

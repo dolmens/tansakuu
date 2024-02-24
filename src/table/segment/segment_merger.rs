@@ -1,8 +1,8 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::path::PathBuf;
 
 use crate::{
-    column::ColumnMergerFactory, deletionmap::DeletionMap, index::IndexMergerFactory,
-    schema::SchemaRef, table::Version, Directory, DocId,
+    column::ColumnMergerFactory, index::IndexMergerFactory, schema::SchemaRef, table::Version,
+    Directory, DocId,
 };
 
 use super::{PersistentSegmentData, SegmentId, SegmentMetaData};
@@ -28,9 +28,7 @@ impl SegmentMerger {
             let mut segment_docid_mappings = vec![];
             let deletionmap = segment.deletionmap();
             for i in 0..segment.doc_count() {
-                if deletionmap.is_some_and(|deletionmap| {
-                    deletionmap.is_deleted(segment.segment_id(), i as DocId)
-                }) {
+                if deletionmap.is_deleted(i as DocId) {
                     segment_docid_mappings.push(None);
                 } else {
                     segment_docid_mappings.push(Some(docid));
@@ -39,6 +37,14 @@ impl SegmentMerger {
             }
             docid_mappings.push(segment_docid_mappings);
         }
+
+        let doc_count = docid_mappings
+            .iter()
+            .flatten()
+            .filter(|&docid| docid.is_some())
+            .count();
+
+        // TODO: if doc_count is 0
 
         let column_directory = segment_directory.join("column");
         let column_merger_factory = ColumnMergerFactory::default();
@@ -74,30 +80,6 @@ impl SegmentMerger {
             );
         }
 
-        let deletionmaps: Vec<_> = segments
-            .iter()
-            .filter_map(|seg| seg.deletionmap())
-            .map(|d| d.as_ref())
-            .collect();
-        if !deletionmaps.is_empty() {
-            let deletionmap = DeletionMap::merge(&deletionmaps);
-            let segment_ids: HashSet<_> = segments
-                .iter()
-                .map(|segment| segment.segment_id())
-                .cloned()
-                .collect();
-            let deletionmap_refined = deletionmap.remove_segments_cloned(&segment_ids);
-            if !deletionmap_refined.is_empty() {
-                let deletionmap_path = segment_directory.join("deletionmap");
-                deletionmap_refined.save(directory, deletionmap_path);
-            }
-        }
-
-        let doc_count = docid_mappings
-            .iter()
-            .flatten()
-            .filter(|&docid| docid.is_some())
-            .count();
         let meta = SegmentMetaData::new(doc_count);
         meta.save(directory, segment_directory.join("meta.json"));
 

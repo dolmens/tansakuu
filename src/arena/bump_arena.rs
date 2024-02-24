@@ -3,7 +3,7 @@ use std::{alloc::Layout, ptr::NonNull, sync::Arc};
 use allocator_api2::alloc::{AllocError, Allocator};
 use bumpalo::Bump;
 
-use super::{ArenaGuard, Arena};
+use super::{Arena, ArenaGuard};
 
 #[derive(Clone)]
 pub struct BumpArena {

@@ -39,6 +39,9 @@ pub const MAX_UNCOMPRESSED_POSITION_LIST_LEN: usize = 5;
 
 pub const INVALID_VERSION_ID: VersionId = 0;
 
+pub const ESTIMATE_SEGMENT_DOC_COUNT: usize = 1024 * 1024;
+pub const ESTIMATE_SEGMENT_INC_FACTOR: f64 = 1.3;
+
 #[cfg(not(test))]
 pub const BUILDING_COLUMN_VEC_CHUNK_SIZE: usize = 1024 * 1024;
 #[cfg(not(test))]

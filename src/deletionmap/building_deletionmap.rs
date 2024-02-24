@@ -1,42 +1,45 @@
-use tantivy_common::TerminatingWrite;
+use crate::{
+    util::{ExpandableBitset, ExpandableBitsetWriter},
+    DocId,
+};
 
-use crate::{table::SegmentId, util::layered_hashmap::LayeredHashMap, Directory, DocId};
-
-use std::path::Path;
-
-use super::DeletionDictBuilder;
+pub struct BuildingDeletionMapWriter {
+    bitset: ExpandableBitsetWriter,
+}
 
 #[derive(Clone)]
 pub struct BuildingDeletionMap {
-    deleted: LayeredHashMap<SegmentId, LayeredHashMap<DocId, ()>>,
+    bitset: ExpandableBitset,
+}
+
+impl BuildingDeletionMapWriter {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bitset: ExpandableBitsetWriter::with_capacity(capacity),
+        }
+    }
+
+    pub fn delete_document(&mut self, docid: DocId) {
+        self.bitset.insert(docid as usize);
+    }
+
+    pub fn deletionmap(&self) -> BuildingDeletionMap {
+        BuildingDeletionMap {
+            bitset: self.bitset.bitset(),
+        }
+    }
 }
 
 impl BuildingDeletionMap {
-    pub fn new(deleted: LayeredHashMap<SegmentId, LayeredHashMap<DocId, ()>>) -> Self {
-        Self { deleted }
+    pub fn is_deleted(&self, docid: DocId) -> bool {
+        self.bitset.contains(docid as usize)
     }
 
-    pub fn is_deleted(&self, segment_id: &SegmentId, docid: DocId) -> bool {
-        self.deleted
-            .get(segment_id)
-            .map_or(false, |seg| seg.contains_key(&docid))
+    pub fn bitset(&self) -> &ExpandableBitset {
+        &self.bitset
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.deleted.is_empty()
-    }
-
-    pub fn save(&self, directory: &dyn Directory, path: impl AsRef<Path>) {
-        let writer = directory.open_write(path.as_ref()).unwrap();
-        let mut dict_builder = DeletionDictBuilder::new(writer);
-        let mut keybuf = [0_u8; 36];
-        for (seg, docs) in self.deleted.iter() {
-            keybuf[..32].copy_from_slice(seg.as_bytes());
-            for (&docid, _) in docs.iter() {
-                keybuf[32..36].copy_from_slice(&docid.to_be_bytes());
-                dict_builder.insert(&keybuf).unwrap();
-            }
-        }
-        dict_builder.finish().unwrap().terminate().unwrap();
+    pub fn deleted_doc_count(&self) -> usize {
+        self.bitset.count_ones()
     }
 }
