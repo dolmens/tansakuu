@@ -57,6 +57,11 @@ impl PrimaryKeyReader {
 
         None
     }
+
+    pub fn lookup(&self, term: &Term) -> Option<DocId> {
+        let hashkey = hash_string_64(term.keyword());
+        self.get_by_hashkey(hashkey)
+    }
 }
 
 impl IndexReader for PrimaryKeyReader {

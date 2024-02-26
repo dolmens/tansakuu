@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use crate::{deletionmap::BuildingDeletionMap, Directory};
+use crate::{Directory, DocId};
 
 pub trait IndexSerializer {
     fn serialize(
         &self,
         directory: &dyn Directory,
         index_directory: &Path,
-        deletionmap: &BuildingDeletionMap,
+        docid_mapping: Option<&Vec<Option<DocId>>>,
     );
 }

@@ -3,7 +3,6 @@ use std::{io::Write, sync::Arc};
 use tantivy_common::TerminatingWrite;
 
 use crate::{
-    deletionmap::BuildingDeletionMap,
     index::IndexSerializer,
     postings::{
         doc_list_encoder_builder,
@@ -11,7 +10,7 @@ use crate::{
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
     schema::{IndexRef, IndexType},
-    Directory, END_DOCID, END_POSITION,
+    Directory, DocId, END_DOCID, END_POSITION,
 };
 
 use super::InvertedIndexBuildingSegmentData;
@@ -37,7 +36,7 @@ impl IndexSerializer for InvertedIndexSerializer {
         &self,
         directory: &dyn Directory,
         index_directory: &std::path::Path,
-        deletionmap: &BuildingDeletionMap,
+        docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let posting_format = if let IndexType::Text(text_index_options) = self.index.index_type() {
             PostingFormat::builder()
@@ -126,33 +125,35 @@ impl IndexSerializer for InvertedIndexSerializer {
                 if docid == END_DOCID {
                     break;
                 }
-                if deletionmap.is_deleted(docid) {
-                    docid += 1;
-                    continue;
-                }
-                if posting_format.has_tflist() {
-                    if posting_format.has_position_list() {
-                        let mut pos = 0;
-                        loop {
-                            pos = posting_iterator.seek_pos(pos).unwrap();
-                            if pos == END_POSITION {
-                                posting_writer.add_pos(0, pos).unwrap();
-                                break;
+                if let Some(docid) = if let Some(docid_mapping) = docid_mapping {
+                    docid_mapping[docid as usize]
+                } else {
+                    Some(docid)
+                } {
+                    if posting_format.has_tflist() {
+                        if posting_format.has_position_list() {
+                            let mut pos = 0;
+                            loop {
+                                pos = posting_iterator.seek_pos(pos).unwrap();
+                                if pos == END_POSITION {
+                                    posting_writer.add_pos(0, pos).unwrap();
+                                    break;
+                                }
+                                pos += 1;
                             }
-                            pos += 1;
-                        }
-                    } else {
-                        let tf = posting_iterator.get_current_tf().unwrap();
-                        for _ in 0..tf {
-                            posting_writer.add_pos(0, 0).unwrap();
+                        } else {
+                            let tf = posting_iterator.get_current_tf().unwrap();
+                            for _ in 0..tf {
+                                posting_writer.add_pos(0, 0).unwrap();
+                            }
                         }
                     }
+                    if posting_format.has_fieldmask() {
+                        let fieldmask = posting_iterator.get_current_fieldmask().unwrap();
+                        posting_writer.set_fieldmask(fieldmask);
+                    }
+                    posting_writer.end_doc(docid).unwrap();
                 }
-                if posting_format.has_fieldmask() {
-                    let fieldmask = posting_iterator.get_current_fieldmask().unwrap();
-                    posting_writer.set_fieldmask(fieldmask);
-                }
-                posting_writer.end_doc(docid).unwrap();
                 docid += 1;
             }
 

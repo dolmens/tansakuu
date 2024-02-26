@@ -27,7 +27,7 @@ impl TableIndexReader {
         self.indexes.get(name).map(|r| r.deref())
     }
 
-    pub fn lookup<'a>(&'a self, term: &Term) -> Option<Box<dyn PostingIterator + 'a>> {
+    pub fn lookup(&self, term: &Term) -> Option<Box<dyn PostingIterator + '_>> {
         self.index(term.index_name())?.lookup(term)
     }
 

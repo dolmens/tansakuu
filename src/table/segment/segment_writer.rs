@@ -12,7 +12,7 @@ pub struct SegmentWriter {
     column_writer: SegmentColumnWriter,
     index_writer: SegmentIndexWriter,
     deletionmap_writer: BuildingDeletionMapWriter,
-    building_segment: Arc<BuildingSegmentData>,
+    building_segment_data: Arc<BuildingSegmentData>,
 }
 
 impl SegmentWriter {
@@ -38,7 +38,7 @@ impl SegmentWriter {
             column_writer,
             index_writer,
             deletionmap_writer,
-            building_segment,
+            building_segment_data: building_segment,
         }
     }
 
@@ -48,14 +48,14 @@ impl SegmentWriter {
         self.column_writer.add_document(doc, docid);
         self.index_writer.add_document(doc, docid);
         self.doc_count += 1;
-        self.building_segment.set_doc_count(self.doc_count);
+        self.building_segment_data.set_doc_count(self.doc_count);
     }
 
     pub fn delete_document(&mut self, docid: DocId) {
         self.deletionmap_writer.delete_document(docid);
     }
 
-    pub fn building_segment(&self) -> &Arc<BuildingSegmentData> {
-        &self.building_segment
+    pub fn building_segment_data(&self) -> &Arc<BuildingSegmentData> {
+        &self.building_segment_data
     }
 }

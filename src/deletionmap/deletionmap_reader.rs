@@ -10,14 +10,13 @@ pub struct DeletionMapReader {
 
 impl DeletionMapReader {
     pub fn new(table_data: &TableData) -> Self {
-        let fixed_doc_count = table_data.fixed_doc_count();
         let deletionmap = table_data.deletionmap().clone();
         let building_deletionmap = table_data
             .active_building_segment()
             .map(|seg| seg.data().deletionmap().clone());
 
         Self {
-            fixed_doc_count,
+            fixed_doc_count: deletionmap.doc_count(),
             deletionmap,
             building_deletionmap,
         }

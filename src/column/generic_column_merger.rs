@@ -24,11 +24,11 @@ impl<T: ToString + Clone + Send + Sync + 'static> ColumnMerger for GenericColumn
         let writer = directory.open_write(&path).unwrap();
         let mut writer = GenericColumnSerializerWriter::<T>::new(writer);
 
-        for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
+        for (&segment, segment_docid_mapping) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
                 .downcast_ref::<GenericColumnPersistentSegmentData<T>>()
                 .unwrap();
-            for (i, docid) in segment_docid_mappings.iter().enumerate() {
+            for (i, docid) in segment_docid_mapping.iter().enumerate() {
                 if docid.is_some() {
                     writer.write(segment_data.get(i as DocId).unwrap());
                 }

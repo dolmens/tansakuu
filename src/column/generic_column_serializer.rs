@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use tantivy_common::TerminatingWrite;
 
-use crate::{deletionmap::BuildingDeletionMap, schema::Field, Directory, DocId};
+use crate::{schema::Field, Directory, DocId};
 
 use super::{
     column_serializer::ColumnSerializer, GenericColumnBuildingSegmentData,
@@ -28,14 +28,14 @@ impl<T: Clone + ToString> ColumnSerializer for GenericColumnSerializer<T> {
         &self,
         directory: &dyn Directory,
         column_directory: &Path,
-        deletionmap: &BuildingDeletionMap,
+        docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let path = column_directory.join(&self.field_name);
         let writer = directory.open_write(&path).unwrap();
         let mut writer = GenericColumnSerializerWriter::<T>::new(writer);
         let values = &self.column_data.values;
         for (rowid, value) in values.iter().enumerate() {
-            if !deletionmap.is_deleted(rowid as DocId) {
+            if docid_mapping.is_none() || docid_mapping.unwrap()[rowid].is_some() {
                 writer.write(value.clone());
             }
         }

@@ -47,6 +47,11 @@ impl InvertedIndexWriter {
             .and_then(|stat| stat.index_term_count.get(index.name()))
             .cloned()
             .unwrap_or(HASHMAP_INITIAL_CAPACITY);
+        let hashmap_initial_capacity = if hashmap_initial_capacity > 0 {
+            hashmap_initial_capacity
+        } else {
+            HASHMAP_INITIAL_CAPACITY
+        };
         let posting_table = PostingTable::with_initial_capacity(
             hashmap_initial_capacity,
             hasher_builder,

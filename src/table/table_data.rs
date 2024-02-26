@@ -55,7 +55,7 @@ impl TableData {
             total_doc_count += doc_count;
         }
 
-        let mut deletionmap = MutableDeletionMap::with_capacity(total_doc_count);
+        let mut deletionmap = MutableDeletionMap::with_doc_count(total_doc_count);
         for seg in &persistent_segments {
             deletionmap.copy_immutable_at(
                 seg.data().deletionmap(),
@@ -111,31 +111,11 @@ impl TableData {
         }
     }
 
-    pub fn fixed_doc_count(&self) -> usize {
-        self.persistent_segments
-            .iter()
-            .map(|seg| seg.meta().doc_count())
-            .chain(
-                self.building_segments
-                    .iter()
-                    .filter(|seg| seg.is_dumping())
-                    .map(|seg| seg.meta().doc_count()),
-            )
-            .sum()
-    }
-
     pub fn recent_segment_stat(&self) -> Option<&Arc<SegmentStat>> {
         self.recent_segment_stat.as_ref()
     }
 
     pub fn add_building_segment(&mut self, building_segment: Arc<BuildingSegmentData>) {
-        // TODO: first dumping then add
-        if let Some(building_segment) = self.building_segments.last() {
-            if !building_segment.data().is_dumping() {
-                let building_segment = building_segment.data().clone();
-                self.dump_building_segment(building_segment)
-            }
-        }
         let base_docid = self
             .building_segments
             .last()
@@ -157,16 +137,38 @@ impl TableData {
             &building_segment_data
         ));
         building_segment_data.set_dumping_start();
-        // TODO: active building segment???
         let building_segment = self.building_segments.last_mut().unwrap();
         let segment_stat = building_segment.collect_segment_stat();
         self.recent_segment_stat = Some(Arc::new(segment_stat));
         building_segment
             .meta_mut()
             .set_doc_count(building_segment_data.doc_count());
+        let total_doc_count = building_segment_data.doc_count();
         let deletionmap = building_segment.data().deletionmap();
-        // TODO: What to do if all deleted
-        let doc_count = building_segment_data.doc_count() - deletionmap.deleted_doc_count();
+        let deleted_doc_count = deletionmap.deleted_doc_count();
+        if total_doc_count == deleted_doc_count {
+            self.remove_building_segment(building_segment_data);
+            return;
+        }
+        let docid_mapping = if deleted_doc_count > 0 {
+            let mut docid_mapping = vec![];
+            let mut docid = 0;
+            for i in 0..total_doc_count {
+                docid_mapping.push(if deletionmap.is_deleted(i as DocId) {
+                    None
+                } else {
+                    let current_docid = docid;
+                    docid += 1;
+                    Some(current_docid)
+                });
+            }
+            Some(docid_mapping)
+        } else {
+            None
+        };
+
+        let doc_count = total_doc_count - deleted_doc_count;
+
         let segment_directory =
             PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
         let column_directory = segment_directory.join("column");
@@ -178,7 +180,11 @@ impl TableData {
                 .unwrap()
                 .clone();
             let column_serializer = column_serializer_factory.create(field, column_data);
-            column_serializer.serialize(self.directory.as_ref(), &column_directory, deletionmap);
+            column_serializer.serialize(
+                self.directory.as_ref(),
+                &column_directory,
+                docid_mapping.as_ref(),
+            );
         }
 
         let index_directory = segment_directory.join("index");
@@ -190,7 +196,11 @@ impl TableData {
                 .unwrap()
                 .clone();
             let index_serializer = index_serializer_factory.create(index, index_data);
-            index_serializer.serialize(self.directory.as_ref(), &index_directory, deletionmap);
+            index_serializer.serialize(
+                self.directory.as_ref(),
+                &index_directory,
+                docid_mapping.as_ref(),
+            );
         }
 
         let meta = SegmentMetaData::new(doc_count);

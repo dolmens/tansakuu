@@ -114,7 +114,7 @@ impl IndexMerger for InvertedIndexMerger {
                 position_list_encoder,
             );
 
-            for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
+            for (&segment, segment_docid_mapping) in segments.iter().zip(docid_mappings.iter()) {
                 let index_segment_data = segment
                     .clone()
                     .downcast_arc::<InvertedIndexPersistentSegmentData>()
@@ -131,7 +131,7 @@ impl IndexMerger for InvertedIndexMerger {
                         if docid == END_DOCID {
                             break;
                         }
-                        if let Some(new_docid) = segment_docid_mappings[docid as usize] {
+                        if let Some(new_docid) = segment_docid_mapping[docid as usize] {
                             if posting_format.has_tflist() {
                                 if posting_format.has_position_list() {
                                     let mut pos = 0;

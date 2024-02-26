@@ -11,6 +11,7 @@ use crate::{
 use super::DeletionMap;
 
 pub struct DeletionMapWriter {
+    doc_count: usize,
     segments: Vec<DeletionMapSegmentWriter>,
     global_writer: FixedSizeBitsetWriter,
 }
@@ -49,21 +50,26 @@ impl DeletionMapWriter {
             }
         }
 
-        let fixed_doc_count = segments.iter().map(|seg| seg.doc_count).sum::<usize>();
-        let mut global_bitset = MutableBitset::with_capacity(fixed_doc_count);
+        let doc_count = segments.iter().map(|seg| seg.doc_count).sum::<usize>();
+        let mut global_bitset = MutableBitset::with_capacity(doc_count);
         for seg in &segments {
             let bitset = seg.bitset();
             let data: Vec<_> = bitset.as_loaded_words().collect();
             global_bitset.copy_data_at(&data, seg.base_docid as usize, seg.doc_count);
         }
         let global_writer = FixedSizeBitsetWriter::new(global_bitset.data());
-        let deletionmap = DeletionMap::new(global_writer.bitset().into());
+        let deletionmap = DeletionMap::new(doc_count, global_writer.bitset().into());
         table_data.set_deletionmap(deletionmap);
 
         Self {
+            doc_count,
             segments,
             global_writer,
         }
+    }
+
+    pub fn doc_count(&self) -> usize {
+        self.doc_count
     }
 
     pub fn delete_document(&mut self, docid: DocId) {

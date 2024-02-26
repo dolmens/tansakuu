@@ -44,6 +44,7 @@ impl BuildingSegment {
 
     pub fn collect_segment_stat(&self) -> SegmentStat {
         let mut segment_stat = SegmentStat::new();
+        segment_stat.doc_count = self.data.doc_count();
         self.data.collect_segment_stat(&mut segment_stat);
         segment_stat
     }

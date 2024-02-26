@@ -24,69 +24,71 @@ impl SegmentMerger {
 
         let mut docid = 0;
         let mut docid_mappings = Vec::<Vec<Option<DocId>>>::new();
+        let mut non_empty_segments = vec![];
         for segment in segments.iter() {
-            let mut segment_docid_mappings = vec![];
             let deletionmap = segment.deletionmap();
-            for i in 0..segment.doc_count() {
-                if deletionmap.is_deleted(i as DocId) {
-                    segment_docid_mappings.push(None);
-                } else {
-                    segment_docid_mappings.push(Some(docid));
-                    docid += 1;
-                }
+            let deleted_doc_count = deletionmap.deleted_doc_count();
+            if deleted_doc_count == segment.doc_count() {
+                continue;
             }
-            docid_mappings.push(segment_docid_mappings);
+            non_empty_segments.push(segment);
+            let mut segment_docid_mapping = vec![];
+            for i in 0..segment.doc_count() {
+                segment_docid_mapping.push(if deletionmap.is_deleted(i as DocId) {
+                    None
+                } else {
+                    let current_docid = docid;
+                    docid += 1;
+                    Some(current_docid)
+                });
+            }
+            docid_mappings.push(segment_docid_mapping);
         }
 
-        let doc_count = docid_mappings
-            .iter()
-            .flatten()
-            .filter(|&docid| docid.is_some())
-            .count();
+        let total_doc_count = docid as usize;
+        if !non_empty_segments.is_empty() {
+            let column_directory = segment_directory.join("column");
+            let column_merger_factory = ColumnMergerFactory::default();
+            for field in schema.columns() {
+                let column_merger = column_merger_factory.create(field);
+                let column_data: Vec<_> = non_empty_segments
+                    .iter()
+                    .map(|seg| seg.column_data(field.name()).as_ref())
+                    .collect();
+                column_merger.merge(
+                    directory,
+                    &column_directory,
+                    field,
+                    &column_data,
+                    &docid_mappings,
+                );
+            }
 
-        // TODO: if doc_count is 0
+            let index_directory = segment_directory.join("index");
+            let index_merger_factory = IndexMergerFactory::default();
+            for index in schema.indexes() {
+                let index_merger = index_merger_factory.create(index);
+                let index_data: Vec<_> = non_empty_segments
+                    .iter()
+                    .map(|seg| seg.index_data(index.name()))
+                    .collect();
+                index_merger.merge(
+                    directory,
+                    &index_directory,
+                    index,
+                    &index_data,
+                    &docid_mappings,
+                );
+            }
 
-        let column_directory = segment_directory.join("column");
-        let column_merger_factory = ColumnMergerFactory::default();
-        for field in schema.columns() {
-            let column_merger = column_merger_factory.create(field);
-            let column_data: Vec<_> = segments
-                .iter()
-                .map(|seg| seg.column_data(field.name()).as_ref())
-                .collect();
-            column_merger.merge(
-                directory,
-                &column_directory,
-                field,
-                &column_data,
-                &docid_mappings,
-            );
+            let meta = SegmentMetaData::new(total_doc_count);
+            meta.save(directory, segment_directory.join("meta.json"));
+            version.add_segment(segment_id);
         }
-
-        let index_directory = segment_directory.join("index");
-        let index_merger_factory = IndexMergerFactory::default();
-        for index in schema.indexes() {
-            let index_merger = index_merger_factory.create(index);
-            let index_data: Vec<_> = segments
-                .iter()
-                .map(|seg| seg.index_data(index.name()))
-                .collect();
-            index_merger.merge(
-                directory,
-                &index_directory,
-                index,
-                &index_data,
-                &docid_mappings,
-            );
-        }
-
-        let meta = SegmentMetaData::new(doc_count);
-        meta.save(directory, segment_directory.join("meta.json"));
 
         for segment in segments.iter() {
             version.remove_segment(segment.segment_id());
         }
-        version.add_segment(segment_id);
         version.save(directory);
     }
 }

@@ -10,17 +10,20 @@ use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct ImmutableDeletionMap {
+    doc_count: usize,
     bitset: ImmutableBitset,
 }
 
 #[derive(Clone)]
 pub struct MutableDeletionMap {
+    doc_count: usize,
     bitset: MutableBitset,
 }
 
 impl Into<ImmutableDeletionMap> for MutableDeletionMap {
     fn into(self) -> ImmutableDeletionMap {
         ImmutableDeletionMap {
+            doc_count: self.doc_count,
             bitset: self.bitset.into(),
         }
     }
@@ -28,6 +31,7 @@ impl Into<ImmutableDeletionMap> for MutableDeletionMap {
 
 #[derive(Clone)]
 pub struct DeletionMap {
+    doc_count: usize,
     bitset: Bitset,
 }
 
@@ -42,7 +46,7 @@ impl ImmutableDeletionMap {
                     .map(|_| deletionmap_bytes.read_u64())
                     .collect();
                 let bitset = ImmutableBitset::new(&words);
-                return Self { bitset };
+                return Self { doc_count, bitset };
             } else {
                 warn!(
                     "Segment `{}` deletionmap data corrupted",
@@ -52,7 +56,7 @@ impl ImmutableDeletionMap {
         }
 
         let bitset = ImmutableBitset::with_capacity(doc_count);
-        Self { bitset }
+        Self { doc_count, bitset }
     }
 
     pub fn bitset(&self) -> &ImmutableBitset {
@@ -62,12 +66,17 @@ impl ImmutableDeletionMap {
     pub fn is_deleted(&self, docid: DocId) -> bool {
         self.bitset.contains(docid as usize)
     }
+
+    pub fn deleted_doc_count(&self) -> usize {
+        self.bitset.count_ones()
+    }
 }
 
 impl MutableDeletionMap {
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_doc_count(doc_count: usize) -> Self {
         Self {
-            bitset: MutableBitset::with_capacity(capacity),
+            doc_count,
+            bitset: MutableBitset::with_capacity(doc_count),
         }
     }
 
@@ -89,14 +98,19 @@ impl MutableDeletionMap {
 impl From<ImmutableDeletionMap> for DeletionMap {
     fn from(immutable: ImmutableDeletionMap) -> Self {
         Self {
+            doc_count: immutable.doc_count,
             bitset: immutable.bitset.into(),
         }
     }
 }
 
 impl DeletionMap {
-    pub fn new(bitset: Bitset) -> Self {
-        Self { bitset }
+    pub fn new(doc_count: usize, bitset: Bitset) -> Self {
+        Self { doc_count, bitset }
+    }
+
+    pub fn doc_count(&self) -> usize {
+        self.doc_count
     }
 
     pub fn is_deleted(&self, docid: DocId) -> bool {

@@ -19,13 +19,13 @@ impl IndexMerger for PrimaryKeyMerger {
         docid_mappings: &[Vec<Option<DocId>>],
     ) {
         let mut keys = HashMap::<Vec<u8>, DocId>::new();
-        for (&segment, segment_docid_mappings) in segments.iter().zip(docid_mappings.iter()) {
+        for (&segment, segment_docid_mapping) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
                 .downcast_ref::<PrimaryKeyPersistentSegmentData>()
                 .unwrap();
             let primary_key_dict = &segment_data.keys;
             for (key, docid) in primary_key_dict.iter() {
-                if let Some(docid) = segment_docid_mappings[docid as usize] {
+                if let Some(docid) = segment_docid_mapping[docid as usize] {
                     keys.insert(key.clone(), docid);
                 }
             }

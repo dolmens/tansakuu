@@ -26,6 +26,11 @@ impl PrimaryKeyWriter {
         let hashmap_initial_capacity = recent_segment_stat
             .map(|stat| stat.doc_count)
             .unwrap_or(HASHMAP_INITIAL_CAPACITY);
+        let hashmap_initial_capacity = if hashmap_initial_capacity > 0 {
+            hashmap_initial_capacity
+        } else {
+            HASHMAP_INITIAL_CAPACITY
+        };
         let keys = LayeredHashMapWriter::with_initial_capacity(
             hashmap_initial_capacity,
             hasher_builder,
