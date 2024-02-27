@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::column::ColumnSegmentData;
+use crate::columnar::ColumnSegmentData;
 
 pub struct BuildingSegmentColumnData {
     columns: HashMap<String, Arc<dyn ColumnSegmentData>>,

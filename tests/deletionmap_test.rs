@@ -1,7 +1,7 @@
 use tansakuu::{
     document::InputDocument,
     query::Term,
-    schema::{SchemaBuilder, COLUMN, INDEXED, PRIMARY_KEY},
+    schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
     DocId, END_DOCID,
 };
@@ -27,8 +27,8 @@ fn get_all_docs(index_reader: &TableIndexReader, term: &Term) -> Vec<DocId> {
 #[test]
 fn test_delete_doc() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_i64_field("item_id".to_string(), COLUMN | INDEXED | PRIMARY_KEY);
-    schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+    schema_builder.add_i64_field("item_id".to_string(), COLUMNAR | INDEXED | PRIMARY_KEY);
+    schema_builder.add_text_field("title".to_string(), COLUMNAR | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -92,8 +92,8 @@ fn test_delete_doc() {
 #[test]
 fn test_building_segment_all_deleted() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_i64_field("item_id".to_string(), COLUMN | INDEXED | PRIMARY_KEY);
-    schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+    schema_builder.add_i64_field("item_id".to_string(), COLUMNAR | INDEXED | PRIMARY_KEY);
+    schema_builder.add_text_field("title".to_string(), COLUMNAR | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);

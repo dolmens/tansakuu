@@ -89,7 +89,7 @@ pub const MULTI: FieldOptions = FieldOptions {
     primary_key: false,
 };
 
-pub const COLUMN: FieldOptions = FieldOptions {
+pub const COLUMNAR: FieldOptions = FieldOptions {
     multi: false,
     column: true,
     indexed: false,

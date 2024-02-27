@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    column::{ColumnReader, GenericColumnReader},
+    columnar::{ColumnReader, GenericColumnReader},
     DocId,
 };
 

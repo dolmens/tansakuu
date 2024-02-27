@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    column::ColumnSegmentData, deletionmap::ImmutableDeletionMap, index::IndexSegmentData,
+    columnar::ColumnSegmentData, deletionmap::ImmutableDeletionMap, index::IndexSegmentData,
     schema::SchemaRef, Directory,
 };
 

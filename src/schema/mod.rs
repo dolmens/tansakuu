@@ -7,5 +7,5 @@ pub use facet::{Facet, FacetParseError};
 // pub use facet_options::FacetOptions;
 pub use schema::{
     Field, FieldRef, FieldType, Index, IndexRef, IndexType, Schema, SchemaBuilder, SchemaRef,
-    TextIndexOptions, COLUMN, DEFAULT, INDEXED, MULTI, PRIMARY_KEY,
+    TextIndexOptions, COLUMNAR, DEFAULT, INDEXED, MULTI, PRIMARY_KEY,
 };

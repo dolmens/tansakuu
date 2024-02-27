@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::column::{ColumnReader, ColumnReaderFactory, GenericColumnReader};
+use crate::columnar::{ColumnReader, ColumnReaderFactory, GenericColumnReader};
 
 use super::TableData;
 

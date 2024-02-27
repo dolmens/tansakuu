@@ -1,5 +1,5 @@
 use crate::{
-    column::GenericColumnWriter,
+    columnar::GenericColumnWriter,
     schema::{Field, FieldType},
 };
 

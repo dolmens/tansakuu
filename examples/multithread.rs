@@ -4,7 +4,7 @@ use tansakuu::{
     document::InputDocument,
     index::PostingIterator,
     query::Term,
-    schema::{SchemaBuilder, COLUMN, INDEXED},
+    schema::{SchemaBuilder, COLUMNAR, INDEXED},
     table::{Table, TableSettings},
     DocId, END_DOCID,
 };
@@ -27,7 +27,7 @@ fn get_all_docs(posting_iter: &mut dyn PostingIterator) -> Vec<DocId> {
 
 pub fn main() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_text_field("title".to_string(), COLUMN | INDEXED);
+    schema_builder.add_text_field("title".to_string(), COLUMNAR | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Arc::new(Table::create(schema, settings));

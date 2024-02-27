@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    column::ColumnMergerFactory, index::IndexMergerFactory, schema::SchemaRef, table::Version,
+    columnar::ColumnMergerFactory, index::IndexMergerFactory, schema::SchemaRef, table::Version,
     Directory, DocId,
 };
 

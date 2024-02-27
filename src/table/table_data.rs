@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
-    column::ColumnSerializerFactory,
+    columnar::ColumnSerializerFactory,
     deletionmap::{DeletionMap, ImmutableDeletionMap, MutableDeletionMap},
     index::IndexSerializerFactory,
     schema::SchemaRef,

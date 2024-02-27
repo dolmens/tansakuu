@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    column::{ColumnWriter, ColumnWriterFactory},
+    columnar::{ColumnWriter, ColumnWriterFactory},
     document::Document,
     schema::SchemaRef,
     DocId,

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
-    column::{ColumnSegmentData, ColumnSegmentDataFactory},
+    columnar::{ColumnSegmentData, ColumnSegmentDataFactory},
     schema::SchemaRef,
     Directory,
 };

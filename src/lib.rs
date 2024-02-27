@@ -7,7 +7,7 @@ extern crate thiserror;
 pub mod error;
 
 pub mod arena;
-pub mod column;
+pub mod columnar;
 pub mod deletionmap;
 pub mod directory;
 pub mod document;
