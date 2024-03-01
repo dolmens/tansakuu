@@ -449,28 +449,6 @@ impl From<serde_json::Map<String, serde_json::Value>> for OwnedValue {
     }
 }
 
-impl TryInto<String> for OwnedValue {
-    type Error = Self;
-    fn try_into(self) -> Result<String, Self::Error> {
-        match self {
-            OwnedValue::Str(val) => Ok(val),
-            OwnedValue::I64(val) => Ok(val.to_string()),
-            _ => Err(self),
-        }
-    }
-}
-
-impl TryInto<i64> for OwnedValue {
-    type Error = Self;
-    fn try_into(self) -> Result<i64, Self::Error> {
-        if let Self::I64(v) = self {
-            Ok(v)
-        } else {
-            Err(self)
-        }
-    }
-}
-
 /// A wrapper type for iterating over a serde_json object producing reference values.
 pub struct ObjectMapIter<'a>(btree_map::Iter<'a, String, OwnedValue>);
 

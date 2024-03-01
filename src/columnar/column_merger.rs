@@ -1,16 +1,13 @@
-use std::path::Path;
+use arrow::array::ArrayRef;
 
-use crate::{schema::Field, Directory, DocId};
+use crate::DocId;
 
-use super::ColumnSegmentData;
+use super::ColumnPersistentSegmentData;
 
 pub trait ColumnMerger {
     fn merge(
         &self,
-        directory: &dyn Directory,
-        segment_directory: &Path,
-        field: &Field,
-        segments: &[&dyn ColumnSegmentData],
+        segments: &[&ColumnPersistentSegmentData],
         docid_mappings: &[Vec<Option<DocId>>],
-    );
+    ) -> ArrayRef;
 }

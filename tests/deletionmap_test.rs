@@ -3,7 +3,7 @@ use tansakuu::{
     query::Term,
     schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
-    DocId, END_DOCID,
+    DocId, END_DOCID, types::Int64Type, columnar::{PrimitiveColumnReader, StringColumnReader},
 };
 
 fn get_all_docs(index_reader: &TableIndexReader, term: &Term) -> Vec<DocId> {
@@ -52,41 +52,64 @@ fn test_delete_doc() {
     assert!(!deletionmap_reader.is_deleted(0));
     assert!(!deletionmap_reader.is_deleted(1));
 
-    let world = Term::new("title".to_string(), "world".to_string());
-    assert_eq!(get_all_docs(index_reader, &world), vec![0, 1]);
-    let delete_term = Term::new("item_id".to_string(), "200".to_string());
-    writer.delete_documents(&delete_term);
+    let column_reader = reader.column_reader();
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
 
-    assert!(!deletionmap_reader.is_deleted(0));
-    assert!(deletionmap_reader.is_deleted(1));
+    let term_world = Term::new("title".to_string(), "world".to_string());
+    assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1]);
+    let term_100 = Term::new("item_id".to_string(), "100".to_string());
+    writer.delete_documents(&term_100);
+
+    assert!(deletionmap_reader.is_deleted(0));
+    assert!(!deletionmap_reader.is_deleted(1));
 
     writer.new_segment();
 
     let reader = table.reader();
+
+    let column_reader = reader.column_reader();
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(200));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("world peace"));
+
     let index_reader = reader.index_reader();
-    assert_eq!(get_all_docs(index_reader, &world), vec![0]);
+    assert_eq!(get_all_docs(index_reader, &term_world), vec![0]);
 
     let mut doc3 = InputDocument::new();
     doc3.add_field("item_id".to_string(), 300 as i64);
     doc3.add_field("title".to_string(), "hello world 3");
     writer.add_document(&doc3);
 
-    assert_eq!(get_all_docs(index_reader, &world), vec![0, 1]);
+    assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1]);
 
     let mut doc4 = InputDocument::new();
     doc4.add_field("item_id".to_string(), 400 as i64);
     doc4.add_field("title".to_string(), "world peace 4");
     writer.add_document(&doc4);
 
-    let delete_term = Term::new("item_id".to_string(), "300".to_string());
-    writer.delete_documents(&delete_term);
+    let term_300 = Term::new("item_id".to_string(), "300".to_string());
+    writer.delete_documents(&term_300);
 
     // trigger merge
     writer.new_segment();
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
-    assert_eq!(get_all_docs(index_reader, &world), vec![0, 1]);
+    assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1]);
 }
 
 #[test]

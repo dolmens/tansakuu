@@ -1,12 +1,7 @@
-use std::path::Path;
+use arrow::array::ArrayRef;
 
-use crate::{Directory, DocId};
+use super::ColumnBuildingSegmentData;
 
 pub trait ColumnSerializer {
-    fn serialize(
-        &self,
-        directory: &dyn Directory,
-        column_directory: &Path,
-        docid_mapping: Option<&Vec<Option<DocId>>>,
-    );
+    fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef;
 }

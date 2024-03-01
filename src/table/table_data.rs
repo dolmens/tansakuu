@@ -1,11 +1,13 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
-    columnar::ColumnSerializerFactory,
     deletionmap::{DeletionMap, ImmutableDeletionMap, MutableDeletionMap},
     index::IndexSerializerFactory,
     schema::SchemaRef,
-    table::{segment::SegmentMetaData, SegmentStat},
+    table::{
+        segment::{SegmentColumnSerializer, SegmentMetaData},
+        SegmentStat,
+    },
     Directory, DocId, END_DOCID,
 };
 
@@ -169,25 +171,20 @@ impl TableData {
 
         let doc_count = total_doc_count - deleted_doc_count;
 
-        let segment_directory =
+        let segment_path =
             PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
-        let column_directory = segment_directory.join("column");
-        let column_serializer_factory = ColumnSerializerFactory::default();
-        for field in self.schema.columns() {
-            let column_data = building_segment_data
-                .column_data()
-                .column_data(field.name())
-                .unwrap()
-                .clone();
-            let column_serializer = column_serializer_factory.create(field, column_data);
-            column_serializer.serialize(
-                self.directory.as_ref(),
-                &column_directory,
-                docid_mapping.as_ref(),
-            );
-        }
 
-        let index_directory = segment_directory.join("index");
+        let column_data = building_segment_data.column_data().columns();
+        let column_serializer = SegmentColumnSerializer {};
+        column_serializer.serialize(
+            self.directory.as_ref(),
+            &segment_path,
+            docid_mapping.as_ref(),
+            &self.schema,
+            column_data,
+        );
+
+        let index_path = segment_path.join("index");
         let index_serializer_factory = IndexSerializerFactory::default();
         for index in self.schema.indexes() {
             let index_data = building_segment_data
@@ -198,13 +195,13 @@ impl TableData {
             let index_serializer = index_serializer_factory.create(index, index_data);
             index_serializer.serialize(
                 self.directory.as_ref(),
-                &index_directory,
+                &index_path,
                 docid_mapping.as_ref(),
             );
         }
 
         let meta = SegmentMetaData::new(doc_count);
-        let meta_path = segment_directory.join("meta.json");
+        let meta_path = segment_path.join("meta.json");
         meta.save(self.directory.as_ref(), &meta_path);
         let mut version = self.version.next_version();
         version.add_segment(building_segment_data.segment_id().clone());

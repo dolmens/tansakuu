@@ -1,35 +1,18 @@
-use std::sync::Arc;
-
-use crate::schema::{Field, FieldType};
-
-use super::{
-    ColumnSegmentData, ColumnSerializer, GenericColumnBuildingSegmentData, GenericColumnSerializer,
+use crate::{
+    schema::{DataType, Field},
+    types::Int64Type,
 };
+
+use super::{ColumnSerializer, PrimitiveColumnSerializer, StringColumnSerializer};
 
 #[derive(Default)]
 pub struct ColumnSerializerFactory {}
 
 impl ColumnSerializerFactory {
-    pub fn create(
-        &self,
-        field: &Field,
-        column_data: Arc<dyn ColumnSegmentData>,
-    ) -> Box<dyn ColumnSerializer> {
-        match field.field_type() {
-            FieldType::Str => {
-                let generic_column_data = column_data
-                    .downcast_arc::<GenericColumnBuildingSegmentData<String>>()
-                    .ok()
-                    .unwrap();
-                Box::new(GenericColumnSerializer::new(field, generic_column_data))
-            }
-            FieldType::I64 => {
-                let generic_column_data = column_data
-                    .downcast_arc::<GenericColumnBuildingSegmentData<i64>>()
-                    .ok()
-                    .unwrap();
-                Box::new(GenericColumnSerializer::new(field, generic_column_data))
-            }
+    pub fn create(&self, field: &Field) -> Box<dyn ColumnSerializer> {
+        match field.data_type() {
+            DataType::String => Box::new(StringColumnSerializer::default()),
+            DataType::Int64 => Box::new(PrimitiveColumnSerializer::<Int64Type>::default()),
         }
     }
 }

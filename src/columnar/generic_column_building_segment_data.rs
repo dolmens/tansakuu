@@ -2,7 +2,7 @@ use allocator_api2::alloc::Global;
 
 use crate::{util::chunked_vec::ChunkedVec, DocId};
 
-use super::ColumnSegmentData;
+use super::{ColumnBuildingSegmentData, ColumnSegmentData};
 
 pub struct GenericColumnBuildingSegmentData<T> {
     pub values: ChunkedVec<T, Global>,
@@ -25,4 +25,8 @@ impl<T> GenericColumnBuildingSegmentData<T> {
     }
 }
 
-impl<T: Send + Sync + 'static> ColumnSegmentData for GenericColumnBuildingSegmentData<T> {}
+impl<T: Send + Sync + 'static> ColumnBuildingSegmentData for GenericColumnBuildingSegmentData<T> {
+    fn get_arrow_array(&self) -> arrow::array::ArrayRef {
+        unimplemented!()
+    }
+}

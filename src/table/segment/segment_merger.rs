@@ -1,11 +1,8 @@
 use std::path::PathBuf;
 
-use crate::{
-    columnar::ColumnMergerFactory, index::IndexMergerFactory, schema::SchemaRef, table::Version,
-    Directory, DocId,
-};
+use crate::{index::IndexMergerFactory, schema::SchemaRef, table::Version, Directory, DocId};
 
-use super::{PersistentSegmentData, SegmentId, SegmentMetaData};
+use super::{PersistentSegmentData, SegmentColumnMerger, SegmentId, SegmentMetaData};
 
 #[derive(Default)]
 pub struct SegmentMerger {}
@@ -20,7 +17,7 @@ impl SegmentMerger {
             .collect();
 
         let segment_id = SegmentId::new();
-        let segment_directory = segment_directory.join(segment_id.as_str());
+        let segment_path = segment_directory.join(segment_id.as_str());
 
         let mut docid = 0;
         let mut docid_mappings = Vec::<Vec<Option<DocId>>>::new();
@@ -47,24 +44,16 @@ impl SegmentMerger {
 
         let total_doc_count = docid as usize;
         if !non_empty_segments.is_empty() {
-            let column_directory = segment_directory.join("column");
-            let column_merger_factory = ColumnMergerFactory::default();
-            for field in schema.columns() {
-                let column_merger = column_merger_factory.create(field);
-                let column_data: Vec<_> = non_empty_segments
-                    .iter()
-                    .map(|seg| seg.column_data(field.name()).as_ref())
-                    .collect();
-                column_merger.merge(
-                    directory,
-                    &column_directory,
-                    field,
-                    &column_data,
-                    &docid_mappings,
-                );
-            }
+            let column_merger = SegmentColumnMerger::default();
+            column_merger.merge(
+                directory,
+                &segment_path,
+                schema,
+                &non_empty_segments,
+                &docid_mappings,
+            );
 
-            let index_directory = segment_directory.join("index");
+            let index_directory = segment_path.join("index");
             let index_merger_factory = IndexMergerFactory::default();
             for index in schema.indexes() {
                 let index_merger = index_merger_factory.create(index);
@@ -82,7 +71,7 @@ impl SegmentMerger {
             }
 
             let meta = SegmentMetaData::new(total_doc_count);
-            meta.save(directory, segment_directory.join("meta.json"));
+            meta.save(directory, segment_path.join("meta.json"));
             version.add_segment(segment_id);
         }
 

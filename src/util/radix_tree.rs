@@ -34,6 +34,14 @@ pub struct RadixTreeIter<'a, T, A: Allocator = Global> {
     data: &'a RadixTreeData<T, A>,
 }
 
+pub struct RadixTreeIntoIter<T, A: Allocator = Global> {
+    index: usize,
+    size: usize,
+    mask: usize,
+    chunk: NonNull<T>,
+    data: Arc<RadixTreeData<T, A>>,
+}
+
 struct RadixTreeData<T, A: Allocator = Global> {
     element_count: AcqRelUsize,
     chunk_exponent: u8,
@@ -132,6 +140,18 @@ impl<T, A: Allocator> RadixTree<T, A> {
 
     pub fn iter(&self) -> RadixTreeIter<'_, T, A> {
         self.data.iter()
+    }
+}
+
+impl<T, A: Allocator> IntoIterator for RadixTree<T, A>
+where
+    T: Clone,
+{
+    type Item = T;
+    type IntoIter = RadixTreeIntoIter<T, A>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        RadixTreeIntoIter::new(self.data)
     }
 }
 
@@ -362,6 +382,39 @@ impl<'a, T, A: Allocator> Iterator for RadixTreeIter<'a, T, A> {
             }
             self.index += 1;
             unsafe { Some(&*self.chunk.as_ptr().add(index_in_chunk)) }
+        } else {
+            None
+        }
+    }
+}
+
+impl<T, A: Allocator> RadixTreeIntoIter<T, A> {
+    fn new(data: Arc<RadixTreeData<T, A>>) -> Self {
+        Self {
+            index: 0,
+            size: data.len(),
+            mask: (1 << data.chunk_exponent) - 1,
+            chunk: NonNull::dangling(),
+            data,
+        }
+    }
+}
+
+impl<T, A: Allocator> Iterator for RadixTreeIntoIter<T, A>
+where
+    T: Clone,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.size {
+            let index_in_chunk = self.index & self.mask;
+            if index_in_chunk == 0 {
+                let chunk_index = self.index >> self.data.chunk_exponent;
+                self.chunk = self.data.get_chunk(chunk_index);
+            }
+            self.index += 1;
+            unsafe { Some((*self.chunk.as_ptr().add(index_in_chunk)).clone()) }
         } else {
             None
         }

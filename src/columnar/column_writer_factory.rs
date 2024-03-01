@@ -1,18 +1,18 @@
 use crate::{
-    columnar::GenericColumnWriter,
-    schema::{Field, FieldType},
+    schema::{DataType, Field},
+    types::Int64Type,
 };
 
-use super::ColumnWriter;
+use super::{ColumnWriter, PrimitiveColumnWriter, StringColumnWriter};
 
 #[derive(Default)]
 pub struct ColumnWriterFactory {}
 
 impl ColumnWriterFactory {
     pub fn create(&self, field: &Field) -> Box<dyn ColumnWriter> {
-        match field.field_type() {
-            FieldType::Str => Box::new(GenericColumnWriter::<String>::new()),
-            FieldType::I64 => Box::new(GenericColumnWriter::<i64>::new()),
+        match field.data_type() {
+            DataType::String => Box::new(StringColumnWriter::new()),
+            DataType::Int64 => Box::new(PrimitiveColumnWriter::<i64>::new()),
         }
     }
 }

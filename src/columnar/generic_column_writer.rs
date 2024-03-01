@@ -7,7 +7,7 @@ use crate::{
     BUILDING_COLUMN_VEC_NODE_SIZE,
 };
 
-use super::{ColumnSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
+use super::{ColumnBuildingSegmentData, ColumnWriter, GenericColumnBuildingSegmentData};
 
 pub struct GenericColumnWriter<T> {
     writer: ChunkedVecWriter<T, Global>,
@@ -34,11 +34,11 @@ impl<T: Send + Sync + 'static> ColumnWriter for GenericColumnWriter<T>
 where
     OwnedValue: TryInto<T>,
 {
-    fn add_document(&mut self, value: OwnedValue) {
+    fn add_value(&mut self, value: OwnedValue) {
         self.writer.push(value.try_into().ok().unwrap());
     }
 
-    fn column_data(&self) -> Arc<dyn ColumnSegmentData> {
+    fn column_data(&self) -> Arc<dyn ColumnBuildingSegmentData> {
         self.column_data.clone()
     }
 }

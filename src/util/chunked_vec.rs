@@ -1,6 +1,6 @@
 use allocator_api2::alloc::{Allocator, Global};
 
-use super::radix_tree::{RadixTree, RadixTreeIter, RadixTreeWriter};
+use super::radix_tree::{RadixTree, RadixTreeIntoIter, RadixTreeIter, RadixTreeWriter};
 
 pub struct ChunkedVecWriter<T, A: Allocator = Global> {
     tree: RadixTreeWriter<T, A>,
@@ -13,6 +13,10 @@ pub struct ChunkedVec<T, A: Allocator = Global> {
 
 pub struct ChunkedVecIter<'a, T, A: Allocator = Global> {
     iter: RadixTreeIter<'a, T, A>,
+}
+
+pub struct ChunkedVecIntoIter<T, A: Allocator = Global> {
+    iter: RadixTreeIntoIter<T, A>,
 }
 
 impl<T, A: Allocator + Default> ChunkedVecWriter<T, A> {
@@ -55,8 +59,33 @@ impl<T, A: Allocator> ChunkedVec<T, A> {
     }
 }
 
+impl<T, A: Allocator> IntoIterator for ChunkedVec<T, A>
+where
+    T: Clone,
+{
+    type Item = T;
+    type IntoIter = ChunkedVecIntoIter<T, A>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ChunkedVecIntoIter {
+            iter: self.tree.into_iter(),
+        }
+    }
+}
+
 impl<'a, T, A: Allocator> Iterator for ChunkedVecIter<'a, T, A> {
     type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<T, A: Allocator> Iterator for ChunkedVecIntoIter<T, A>
+where
+    T: Clone,
+{
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()

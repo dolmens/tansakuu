@@ -24,7 +24,7 @@ impl IndexSerializer for PrimaryKeySerializer {
     fn serialize(
         &self,
         directory: &dyn Directory,
-        index_directory: &std::path::Path,
+        index_path: &std::path::Path,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let mut keys: Vec<_> = self
@@ -34,7 +34,7 @@ impl IndexSerializer for PrimaryKeySerializer {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         keys.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
-        let index_path = index_directory.join(&self.index_name);
+        let index_path = index_path.join(&self.index_name);
         let index_writer = directory.open_write(&index_path).unwrap();
         let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_writer);
         for (key, docid) in keys.iter() {

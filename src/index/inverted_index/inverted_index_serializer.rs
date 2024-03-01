@@ -35,7 +35,7 @@ impl IndexSerializer for InvertedIndexSerializer {
     fn serialize(
         &self,
         directory: &dyn Directory,
-        index_directory: &std::path::Path,
+        index_path: &std::path::Path,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let posting_format = if let IndexType::Text(text_index_options) = self.index.index_type() {
@@ -47,25 +47,25 @@ impl IndexSerializer for InvertedIndexSerializer {
         };
         let doc_list_format = posting_format.doc_list_format().clone();
 
-        let dict_path = index_directory.join(self.index_name.clone() + ".dict");
+        let dict_path = index_path.join(self.index_name.clone() + ".dict");
         let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let mut term_dict_writer = TermDictBuilder::new(dict_output_writer);
 
-        let skip_list_path = index_directory.join(self.index_name.clone() + ".skiplist");
+        let skip_list_path = index_path.join(self.index_name.clone() + ".skiplist");
         let mut skip_list_output_writer = directory.open_write(&skip_list_path).unwrap();
-        let posting_path = index_directory.join(self.index_name.clone() + ".posting");
+        let posting_path = index_path.join(self.index_name.clone() + ".posting");
         let mut posting_output_writer = directory.open_write(&posting_path).unwrap();
 
         let mut position_skip_list_output_writer = if posting_format.has_position_list() {
             let position_skip_list_path =
-                index_directory.join(self.index_name.clone() + ".positions.skiplist");
+                index_path.join(self.index_name.clone() + ".positions.skiplist");
             Some(directory.open_write(&position_skip_list_path).unwrap())
         } else {
             None
         };
 
         let mut position_list_output_writer = if posting_format.has_position_list() {
-            let position_list_path = index_directory.join(self.index_name.clone() + ".positions");
+            let position_list_path = index_path.join(self.index_name.clone() + ".positions");
             Some(directory.open_write(&position_list_path).unwrap())
         } else {
             None

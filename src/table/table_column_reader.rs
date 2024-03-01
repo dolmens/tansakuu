@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use crate::columnar::{ColumnReader, ColumnReaderFactory, GenericColumnReader};
+use crate::columnar::{ColumnReader, ColumnReaderFactory};
 
 use super::TableData;
 
@@ -25,14 +25,11 @@ impl TableColumnReader {
         self.columns.get(name).map(|r| r.deref())
     }
 
-    pub fn typed_column<T: Clone + Send + Sync + 'static>(
-        &self,
-        name: &str,
-    ) -> Option<&GenericColumnReader<T>> {
-        self.column(name).and_then(|column| column.downcast_ref())
-    }
-
     pub(crate) fn column_ref(&self, name: &str) -> Option<Arc<dyn ColumnReader>> {
         self.columns.get(name).map(|r| r.clone())
+    }
+
+    pub fn typed_reader<R: ColumnReader>(&self, name: &str) -> Option<&R> {
+        self.columns.get(name).and_then(|r| r.downcast_ref())
     }
 }

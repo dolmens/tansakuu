@@ -35,10 +35,11 @@ impl SegmentIndexWriter {
     pub fn add_document<D: Document>(&mut self, doc: &D, docid: DocId) {
         let mut indexes = BTreeSet::new();
         for (field, value) in doc.iter_fields_and_values() {
+            let owned_value = value.into();
             if let Some(field) = self.schema.field(field) {
                 for index in field.indexes().iter().map(|index| index.upgrade().unwrap()) {
                     let index_writer = self.indexes.get_mut(index.name()).unwrap();
-                    index_writer.add_field(field.name(), value.clone().into());
+                    index_writer.add_field(field.name(), &owned_value);
                     indexes.insert(index.name().to_string());
                 }
             }

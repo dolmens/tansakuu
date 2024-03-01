@@ -27,10 +27,10 @@ impl<T: Clone + ToString> ColumnSerializer for GenericColumnSerializer<T> {
     fn serialize(
         &self,
         directory: &dyn Directory,
-        column_directory: &Path,
+        column_path: &Path,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
-        let path = column_directory.join(&self.field_name);
+        let path = column_path.join(&self.field_name);
         let writer = directory.open_write(&path).unwrap();
         let mut writer = GenericColumnSerializerWriter::<T>::new(writer);
         let values = &self.column_data.values;

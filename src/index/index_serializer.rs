@@ -6,7 +6,7 @@ pub trait IndexSerializer {
     fn serialize(
         &self,
         directory: &dyn Directory,
-        index_directory: &Path,
+        index_path: &Path,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     );
 }

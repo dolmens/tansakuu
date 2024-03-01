@@ -1,8 +1,10 @@
 use tansakuu::{
+    columnar::{PrimitiveColumnReader, StringColumnReader},
     document::InputDocument,
     query::Term,
     schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
+    types::Int64Type,
     DocId, END_DOCID,
 };
 
@@ -58,9 +60,11 @@ fn test_basic() {
     assert_eq!(docids, vec![1]);
 
     let column_reader = reader.column_reader();
-    let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
-    assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
-    assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
 }
 
 #[test]
@@ -108,9 +112,16 @@ fn test_segment_serialize() {
     assert_eq!(docids, vec![1]);
 
     let column_reader = reader.column_reader();
-    let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
-    assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
-    assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
 
     writer.new_segment();
 
@@ -146,6 +157,20 @@ fn test_segment_serialize() {
     let term = Term::new("item_id".to_string(), "300".to_string());
     let docids = get_all_docs(index_reader, &term);
     assert_eq!(docids, vec![2]);
+
+    let column_reader = reader.column_reader();
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    assert_eq!(item_id_column_reader.get(2), Some(300));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
+    assert_eq!(title_column_reader.get(2), Some("hello"));
 }
 
 #[test]
@@ -193,9 +218,16 @@ fn test_segment_merge() {
     assert_eq!(docids, vec![1]);
 
     let column_reader = reader.column_reader();
-    let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
-    assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
-    assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
 
     writer.new_segment();
 
@@ -232,6 +264,20 @@ fn test_segment_merge() {
     let docids = get_all_docs(index_reader, &term);
     assert_eq!(docids, vec![2]);
 
+    let column_reader = reader.column_reader();
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    assert_eq!(item_id_column_reader.get(2), Some(300));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
+    assert_eq!(title_column_reader.get(2), Some("hello"));
+
     writer.new_segment();
 
     let term = Term::new("title".to_string(), "hello".to_string());
@@ -258,4 +304,18 @@ fn test_segment_merge() {
     let term = Term::new("item_id".to_string(), "300".to_string());
     let docids = get_all_docs(index_reader, &term);
     assert_eq!(docids, vec![2]);
+
+    let column_reader = reader.column_reader();
+    let item_id_column_reader = column_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>("item_id")
+        .unwrap();
+    assert_eq!(item_id_column_reader.get(0), Some(100));
+    assert_eq!(item_id_column_reader.get(1), Some(200));
+    assert_eq!(item_id_column_reader.get(2), Some(300));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
+    assert_eq!(title_column_reader.get(2), Some("hello"));
 }

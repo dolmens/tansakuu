@@ -7,11 +7,15 @@ edition = "2021"
 aho-corasick = "1.1.2"
 allocator-api2 = "0.2.16"
 arc-swap = "1.6.0"
+arrow = { version = "50.0.0", features = ["prettyprint"] }
+arrow-schema = "50.0.0"
 base64 = "0.21.7"
 bumpalo = { version = "3.14.0", features = ["allocator-api2"] }
 crc32fast = "1.3.2"
 downcast-rs = "1.2.0"
+half = "2.4.0"
 log = "0.4.20"
+num = "0.4.1"
 once_cell = "1.19.0"
 oneshot = "0.1.6"
 regex = { version = "1.10.3", features = ["std"] }

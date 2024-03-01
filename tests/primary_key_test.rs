@@ -1,8 +1,10 @@
 use tansakuu::{
+    columnar::{PrimitiveColumnReader, StringColumnReader},
     document::InputDocument,
     query::Term,
     schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
+    types::Int64Type,
     DocId, END_DOCID,
 };
 
@@ -69,12 +71,16 @@ fn test_primary_key() {
     assert_eq!(docids, vec![1]);
 
     let column_reader = reader.column_reader();
-    let title_column_reader = column_reader.typed_column::<String>("title").unwrap();
-    assert_eq!(title_column_reader.get(0), Some("hello world".to_string()));
-    assert_eq!(title_column_reader.get(1), Some("world peace".to_string()));
+    let title_column_reader = column_reader
+        .typed_reader::<StringColumnReader>("title")
+        .unwrap();
+    assert_eq!(title_column_reader.get(0), Some("hello world"));
+    assert_eq!(title_column_reader.get(1), Some("world peace"));
 
     let primary_key_reader = reader.primary_key_reader().unwrap();
-    let primary_key_reader = primary_key_reader.typed_reader::<i64>().unwrap();
+    let primary_key_reader = primary_key_reader
+        .typed_reader::<PrimitiveColumnReader<Int64Type>>()
+        .unwrap();
     assert_eq!(primary_key_reader.get(0), Some(100));
     assert_eq!(primary_key_reader.get(1), Some(200));
 }

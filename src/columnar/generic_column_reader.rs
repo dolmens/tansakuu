@@ -11,32 +11,34 @@ pub struct GenericColumnReader<T> {
 
 impl<T: Clone + Send + Sync + 'static> GenericColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
-        let mut persistent_segments = vec![];
-        for segment in table_data.persistent_segments() {
-            let column_data = segment.data().column_data(field.name());
-            let generic_column_data = column_data.clone().downcast_arc().ok().unwrap();
-            let column_segment_reader =
-                GenericColumnPersistentSegmentReader::<T>::new(generic_column_data);
-            persistent_segments.push(column_segment_reader);
-        }
+        unimplemented!()
+        // let mut persistent_segments = vec![];
+        // for segment in table_data.persistent_segments() {
+        //     let column_data = segment.data().column_data(field.name());
+        //     let generic_column_data = column_data.clone().downcast_arc().ok().unwrap();
+        //     let column_segment_reader =
+        //         GenericColumnPersistentSegmentReader::<T>::new(generic_column_data);
+        //     persistent_segments.push(column_segment_reader);
+        // }
 
-        let mut building_segments = vec![];
-        for building_segment in table_data.building_segments() {
-            let column_data = building_segment
-                .data()
-                .column_data()
-                .column_data(field.name())
-                .unwrap();
-            let generic_column_data = column_data.clone().downcast_arc().ok().unwrap();
-            let column_segment_reader =
-                GenericColumnBuildingSegmentReader::<T>::new(generic_column_data);
-            building_segments.push(column_segment_reader);
-        }
+        // let mut building_segments = vec![];
+        // for building_segment in table_data.building_segments() {
+        //     let column_data = building_segment
+        //         .data()
+        //         .column_data()
+        //         .column_data(field.name())
+        //         .cloned()
+        //         .unwrap();
+        //     let generic_column_data = column_data.downcast_arc().ok().unwrap();
+        //     let column_segment_reader =
+        //         GenericColumnBuildingSegmentReader::<T>::new(generic_column_data);
+        //     building_segments.push(column_segment_reader);
+        // }
 
-        Self {
-            persistent_segments,
-            building_segments,
-        }
+        // Self {
+        //     persistent_segments,
+        //     building_segments,
+        // }
     }
 }
 

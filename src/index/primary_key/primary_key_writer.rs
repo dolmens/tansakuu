@@ -1,7 +1,7 @@
 use std::{collections::hash_map::RandomState, sync::Arc};
 
 use crate::{
-    document::OwnedValue,
+    document::{OwnedValue, Value},
     index::IndexWriter,
     table::SegmentStat,
     util::{
@@ -47,9 +47,9 @@ impl PrimaryKeyWriter {
 }
 
 impl IndexWriter for PrimaryKeyWriter {
-    fn add_field(&mut self, _field: &str, value: OwnedValue) {
+    fn add_field(&mut self, _field: &str, value: &OwnedValue) {
         assert!(self.current_key.is_none());
-        let token: String = value.try_into().unwrap();
+        let token: String = value.as_i64().unwrap_or_default().to_string();
         self.current_key = Some(token);
     }
 

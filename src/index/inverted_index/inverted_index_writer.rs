@@ -71,8 +71,8 @@ impl InvertedIndexWriter {
 }
 
 impl IndexWriter for InvertedIndexWriter {
-    fn add_field(&mut self, field: &str, value: OwnedValue) {
-        for (pos, tok) in (&value).as_str().unwrap().split_whitespace().enumerate() {
+    fn add_field(&mut self, field: &str, value: &OwnedValue) {
+        for (pos, tok) in value.as_str().unwrap().split_whitespace().enumerate() {
             let hashkey = hash_string_64(tok);
             let writer_index = self
                 .posting_indexes

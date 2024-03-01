@@ -5,6 +5,8 @@ use std::{
     sync::{Arc, Weak},
 };
 
+use super::DataType;
+
 #[derive(Default)]
 pub struct SchemaBuilder {
     schema: Schema,
@@ -21,17 +23,11 @@ pub struct Schema {
 
 pub type SchemaRef = Arc<Schema>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FieldType {
-    Str,
-    I64,
-}
-
 pub struct Field {
     name: String,
-    field_type: FieldType,
+    field_type: DataType,
     multi: bool,
-    column: bool,
+    columnar: bool,
     stored: bool,
     indexes: Cell<Vec<IndexWeakRef>>,
 }
@@ -67,7 +63,7 @@ pub type IndexWeakRef = Weak<Index>;
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
     multi: bool,
-    column: bool,
+    columnar: bool,
     indexed: bool,
     stored: bool,
     primary_key: bool,
@@ -75,7 +71,7 @@ pub struct FieldOptions {
 
 pub const DEFAULT: FieldOptions = FieldOptions {
     multi: false,
-    column: false,
+    columnar: false,
     indexed: false,
     stored: false,
     primary_key: false,
@@ -83,7 +79,7 @@ pub const DEFAULT: FieldOptions = FieldOptions {
 
 pub const MULTI: FieldOptions = FieldOptions {
     multi: true,
-    column: false,
+    columnar: false,
     indexed: false,
     stored: false,
     primary_key: false,
@@ -91,7 +87,7 @@ pub const MULTI: FieldOptions = FieldOptions {
 
 pub const COLUMNAR: FieldOptions = FieldOptions {
     multi: false,
-    column: true,
+    columnar: true,
     indexed: false,
     stored: false,
     primary_key: false,
@@ -99,7 +95,7 @@ pub const COLUMNAR: FieldOptions = FieldOptions {
 
 pub const INDEXED: FieldOptions = FieldOptions {
     multi: false,
-    column: false,
+    columnar: false,
     indexed: true,
     stored: false,
     primary_key: false,
@@ -107,7 +103,7 @@ pub const INDEXED: FieldOptions = FieldOptions {
 
 pub const PRIMARY_KEY: FieldOptions = FieldOptions {
     multi: false,
-    column: false,
+    columnar: false,
     indexed: false,
     stored: false,
     primary_key: true,
@@ -119,7 +115,7 @@ impl BitOr for FieldOptions {
     fn bitor(self, rhs: Self) -> Self::Output {
         Self {
             multi: self.multi || rhs.multi,
-            column: self.column || rhs.column,
+            columnar: self.columnar || rhs.columnar,
             indexed: self.indexed || rhs.indexed,
             stored: false,
             primary_key: self.primary_key || rhs.primary_key,
@@ -133,17 +129,17 @@ impl SchemaBuilder {
     }
 
     pub fn add_text_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, FieldType::Str, options);
+        self.add_field(field_name, DataType::String, options);
     }
 
     pub fn add_i64_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, FieldType::I64, options);
+        self.add_field(field_name, DataType::Int64, options);
     }
 
-    pub fn add_field(&mut self, field_name: String, field_type: FieldType, options: FieldOptions) {
+    pub fn add_field(&mut self, field_name: String, field_type: DataType, options: FieldOptions) {
         let mut options = options;
         if options.primary_key {
-            options.column = true;
+            options.columnar = true;
             options.indexed = true;
         }
         assert!(!self.schema.fields_map.contains_key(&field_name));
@@ -151,7 +147,7 @@ impl SchemaBuilder {
             name: field_name,
             field_type,
             multi: false,
-            column: options.column,
+            columnar: options.columnar,
             stored: options.stored,
             indexes: Cell::new(vec![]),
         });
@@ -233,7 +229,7 @@ impl Schema {
     }
 
     pub fn columns(&self) -> impl Iterator<Item = &FieldRef> {
-        self.fields.iter().filter(|f| f.column)
+        self.fields.iter().filter(|f| f.columnar)
     }
 
     pub fn fields(&self) -> &[FieldRef] {
@@ -272,12 +268,12 @@ impl Field {
         &self.name
     }
 
-    pub fn field_type(&self) -> &FieldType {
+    pub fn data_type(&self) -> &DataType {
         &self.field_type
     }
 
     pub fn is_column(&self) -> bool {
-        self.column
+        self.columnar
     }
 
     pub fn is_stored(&self) -> bool {

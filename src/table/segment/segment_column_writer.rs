@@ -27,8 +27,9 @@ impl SegmentColumnWriter {
 
     pub fn add_document<D: Document>(&mut self, doc: &D, _docid: DocId) {
         for (name, value) in doc.iter_fields_and_values() {
+            let owned_value = value.into();
             if let Some(writer) = self.columns.get_mut(name) {
-                writer.add_document(value.into());
+                writer.add_value(&owned_value);
             }
         }
     }
