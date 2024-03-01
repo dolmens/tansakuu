@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use allocator_api2::alloc::Global;
-use arrow::array::StringArray;
 
 use crate::{util::chunked_vec::ChunkedVec, DocId};
 
@@ -25,14 +22,7 @@ impl StringColumnBuildingSegmentData {
     }
 }
 
-impl ColumnBuildingSegmentData for StringColumnBuildingSegmentData {
-    // fn get_arrow_array(&self) -> arrow::array::ArrayRef {
-    //     let data: Vec<_> = self.values.iter().map(|s| s.as_str()).collect();
-    //     let array = StringArray::from(data);
-
-    //     Arc::new(array)
-    // }
-}
+impl ColumnBuildingSegmentData for StringColumnBuildingSegmentData {}
 
 // #[cfg(test)]
 // mod tests {

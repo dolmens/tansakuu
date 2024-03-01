@@ -1,7 +1,4 @@
-use crate::{
-    schema::{DataType, Field},
-    types::Int64Type,
-};
+use crate::schema::{DataType, Field};
 
 use super::{ColumnWriter, PrimitiveColumnWriter, StringColumnWriter};
 

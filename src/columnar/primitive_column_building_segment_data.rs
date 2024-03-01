@@ -1,13 +1,6 @@
-use std::sync::Arc;
-
 use allocator_api2::alloc::Global;
-use arrow::array::PrimitiveArray;
 
-use crate::{
-    types::{NativeType, PrimitiveType},
-    util::chunked_vec::ChunkedVec,
-    DocId,
-};
+use crate::{types::NativeType, util::chunked_vec::ChunkedVec, DocId};
 
 use super::ColumnBuildingSegmentData;
 
@@ -30,33 +23,6 @@ impl<T: NativeType> PrimitiveColumnBuildingSegmentData<T> {
 }
 
 impl<T: NativeType> ColumnBuildingSegmentData for PrimitiveColumnBuildingSegmentData<T> {}
-
-// pub struct PrimitiveColumnBuildingSegmentDataOLD<T: PrimitiveType> {
-//     pub values: ChunkedVec<T::Native, Global>,
-// }
-
-// impl<T: PrimitiveType> PrimitiveColumnBuildingSegmentDataOLD<T> {
-//     pub fn new(values: ChunkedVec<T::Native, Global>) -> Self {
-//         Self { values }
-//     }
-
-//     pub fn get(&self, docid: DocId) -> Option<T::Native> {
-//         self.values.get(docid as usize).copied()
-//     }
-
-//     pub fn doc_count(&self) -> usize {
-//         self.values.len()
-//     }
-// }
-
-// impl<T: PrimitiveType> ColumnBuildingSegmentData for PrimitiveColumnBuildingSegmentDataOLD<T> {
-//     fn get_arrow_array(&self) -> arrow::array::ArrayRef {
-//         let array =
-//             PrimitiveArray::<T::ArrowPrimitive>::from_iter_values(self.values.clone().into_iter());
-
-//         Arc::new(array)
-//     }
-// }
 
 // #[cfg(test)]
 // mod tests {

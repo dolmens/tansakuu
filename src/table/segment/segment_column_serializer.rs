@@ -9,7 +9,7 @@ use tantivy_common::TerminatingWrite;
 
 use crate::{
     columnar::{ColumnBuildingSegmentData, ColumnSerializerFactory},
-    schema::{DataType, Schema, SchemaConverter},
+    schema::{Schema, SchemaConverter},
     Directory, DocId,
 };
 

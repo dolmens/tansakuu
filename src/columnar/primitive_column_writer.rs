@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 use allocator_api2::alloc::Global;
 
@@ -31,24 +31,6 @@ impl<T: NativeType> PrimitiveColumnWriter<T> {
         }
     }
 }
-
-// struct PrimitiveValueAccessor<T: NativeType> {
-//     _marker: PhantomData<T>,
-// }
-
-// impl<T: NativeType> Default for PrimitiveValueAccessor<T> {
-//     fn default() -> Self {
-//         Self {
-//             _marker: PhantomData,
-//         }
-//     }
-// }
-
-// impl PrimitiveValueAccessor<i64> {
-//     fn get(&self, value: &OwnedValue) -> i64 {
-//         value.as_i64().unwrap_or_default()
-//     }
-// }
 
 // impl<T: NativeType> ColumnWriter for PrimitiveColumnWriter<T> {
 //     fn add_value(&mut self, value: OwnedValue) {

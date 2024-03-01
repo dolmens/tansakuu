@@ -1,10 +1,14 @@
 use std::{path::Path, sync::Arc};
 
-use arrow::{ipc::writer::FileWriter, record_batch::RecordBatch};
+use arrow::{
+    array::BooleanArray,
+    compute::{concat, filter},
+    ipc::writer::FileWriter,
+    record_batch::RecordBatch,
+};
 use tantivy_common::TerminatingWrite;
 
 use crate::{
-    columnar::ColumnMergerFactory,
     schema::{Schema, SchemaConverter},
     Directory, DocId,
 };
@@ -26,17 +30,31 @@ impl SegmentColumnMerger {
         let schema_converter = SchemaConverter::default();
         let arrow_schema = schema_converter.convert_to_arrow(schema);
         let arrow_schema = Arc::new(arrow_schema);
+
         let mut arrow_columns = vec![];
-        let column_merger_factory = ColumnMergerFactory::default();
         for field in schema.columns() {
-            let column_merger = column_merger_factory.create(field);
-            let column_data: Vec<_> = segments
+            let segment_arrays: Vec<_> = segments
                 .iter()
-                .map(|seg| seg.column_data(field.name()).unwrap())
+                .map(|seg| seg.column_data(field.name()).unwrap().array().as_ref())
                 .collect();
-            let merged_array = column_merger.merge(&column_data, &docid_mappings);
+            let merged_array = concat(&segment_arrays).unwrap();
             arrow_columns.push(merged_array);
         }
+
+        let docid_mappings: Vec<_> = docid_mappings
+            .into_iter()
+            .flat_map(|m| m)
+            .cloned()
+            .collect();
+        let filter_array = docid_mappings
+            .iter()
+            .map(|d| d.map(|_| true))
+            .collect::<BooleanArray>();
+        let arrow_columns: Vec<_> = arrow_columns
+            .iter()
+            .map(|c| filter(c, &filter_array).unwrap())
+            .collect();
+
         let record_batch = RecordBatch::try_new(arrow_schema.clone(), arrow_columns).unwrap();
         let output_path = segment_path.join("columnar.arrow");
         let mut output_writer = directory.open_write(&output_path).unwrap();

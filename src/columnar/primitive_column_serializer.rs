@@ -1,8 +1,8 @@
-use std::{marker::PhantomData, path::Path, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use arrow::array::{ArrayRef, PrimitiveArray};
 
-use crate::{types::PrimitiveType, DocId};
+use crate::types::PrimitiveType;
 
 use super::{
     column_serializer::ColumnSerializer, ColumnBuildingSegmentData,
