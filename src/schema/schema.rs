@@ -198,6 +198,10 @@ impl SchemaBuilder {
             .map(|f| self.schema.fields_map.get(f).unwrap().0.clone())
             .collect();
 
+        if index_type == IndexType::UniqueKey {
+            assert_eq!(field_refs.len(), 1);
+        }
+
         let index = Arc::new(Index {
             name: index_name,
             index_type,
