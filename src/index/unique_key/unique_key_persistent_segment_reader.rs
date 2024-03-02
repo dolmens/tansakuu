@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{table::SegmentMeta, DocId};
 
-use super::PrimaryKeyPersistentSegmentData;
+use super::UniqueKeyPersistentSegmentData;
 
-pub struct PrimaryKeyPersistentSegmentReader {
+pub struct UniqueKeyPersistentSegmentReader {
     meta: SegmentMeta,
-    index_data: Arc<PrimaryKeyPersistentSegmentData>,
+    index_data: Arc<UniqueKeyPersistentSegmentData>,
 }
 
-impl PrimaryKeyPersistentSegmentReader {
-    pub fn new(meta: SegmentMeta, index_data: Arc<PrimaryKeyPersistentSegmentData>) -> Self {
+impl UniqueKeyPersistentSegmentReader {
+    pub fn new(meta: SegmentMeta, index_data: Arc<UniqueKeyPersistentSegmentData>) -> Self {
         Self { meta, index_data }
     }
 

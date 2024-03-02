@@ -1,16 +1,16 @@
 use crate::{index::IndexSegmentDataBuilder, schema::Index, Directory};
 
-use super::{PrimaryKeyDict, PrimaryKeyPersistentSegmentData};
+use super::{UniqueKeyDict, UniqueKeyPersistentSegmentData};
 
-pub struct PrimaryKeySegmentDataBuilder {}
+pub struct UniqueKeySegmentDataBuilder {}
 
-impl PrimaryKeySegmentDataBuilder {
+impl UniqueKeySegmentDataBuilder {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl IndexSegmentDataBuilder for PrimaryKeySegmentDataBuilder {
+impl IndexSegmentDataBuilder for UniqueKeySegmentDataBuilder {
     fn build(
         &self,
         index: &Index,
@@ -19,8 +19,8 @@ impl IndexSegmentDataBuilder for PrimaryKeySegmentDataBuilder {
     ) -> Box<dyn crate::index::IndexSegmentData> {
         let index_path = index_directory.join(index.name());
         let index_data = directory.open_read(&index_path).unwrap();
-        let keys = PrimaryKeyDict::open(index_data).unwrap();
+        let keys = UniqueKeyDict::open(index_data).unwrap();
 
-        Box::new(PrimaryKeyPersistentSegmentData::new(keys))
+        Box::new(UniqueKeyPersistentSegmentData::new(keys))
     }
 }

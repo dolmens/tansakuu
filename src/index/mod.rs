@@ -10,7 +10,7 @@ mod index_writer;
 mod index_writer_factory;
 mod inverted_index;
 mod posting_iterator;
-mod primary_key;
+mod unique_key;
 
 pub use index_merger::IndexMerger;
 pub use index_merger_factory::IndexMergerFactory;
@@ -24,4 +24,4 @@ pub use index_writer::IndexWriter;
 pub use index_writer_factory::IndexWriterFactory;
 pub use inverted_index::InvertedIndexReader;
 pub use posting_iterator::PostingIterator;
-pub use primary_key::PrimaryKeyReader;
+pub use unique_key::UniqueKeyReader;

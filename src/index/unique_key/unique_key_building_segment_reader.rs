@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use crate::{table::SegmentMeta, util::layered_hashmap::LayeredHashMap, DocId};
 
-use super::PrimaryKeyBuildingSegmentData;
+use super::UniqueKeyBuildingSegmentData;
 
-pub struct PrimaryKeyBuildingSegmentReader {
+pub struct UniqueKeyBuildingSegmentReader {
     meta: SegmentMeta,
     keys: LayeredHashMap<u64, DocId>,
 }
 
-impl PrimaryKeyBuildingSegmentReader {
-    pub fn new(meta: SegmentMeta, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
+impl UniqueKeyBuildingSegmentReader {
+    pub fn new(meta: SegmentMeta, index_data: Arc<UniqueKeyBuildingSegmentData>) -> Self {
         Self {
             meta,
             keys: index_data.keys.clone(),

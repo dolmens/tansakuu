@@ -5,7 +5,7 @@ use crate::{
     table::SegmentStat,
 };
 
-use super::{inverted_index::InvertedIndexWriter, primary_key::PrimaryKeyWriter, IndexWriter};
+use super::{inverted_index::InvertedIndexWriter, unique_key::UniqueKeyWriter, IndexWriter};
 
 #[derive(Default)]
 pub struct IndexWriterFactory {}
@@ -21,7 +21,7 @@ impl IndexWriterFactory {
                 index.clone(),
                 recent_segment_stat.clone(),
             )),
-            IndexType::PrimaryKey => Box::new(PrimaryKeyWriter::new(recent_segment_stat.clone())),
+            IndexType::UniqueKey => Box::new(UniqueKeyWriter::new(recent_segment_stat.clone())),
         }
     }
 }

@@ -4,15 +4,15 @@ use tantivy_common::TerminatingWrite;
 
 use crate::{index::IndexSerializer, schema::IndexRef, Directory, DocId};
 
-use super::{PrimaryKeyBuildingSegmentData, PrimaryKeyDictBuilder};
+use super::{UniqueKeyBuildingSegmentData, UniqueKeyDictBuilder};
 
-pub struct PrimaryKeySerializer {
+pub struct UniqueKeySerializer {
     index_name: String,
-    index_data: Arc<PrimaryKeyBuildingSegmentData>,
+    index_data: Arc<UniqueKeyBuildingSegmentData>,
 }
 
-impl PrimaryKeySerializer {
-    pub fn new(index: &IndexRef, index_data: Arc<PrimaryKeyBuildingSegmentData>) -> Self {
+impl UniqueKeySerializer {
+    pub fn new(index: &IndexRef, index_data: Arc<UniqueKeyBuildingSegmentData>) -> Self {
         Self {
             index_name: index.name().to_string(),
             index_data,
@@ -20,7 +20,7 @@ impl PrimaryKeySerializer {
     }
 }
 
-impl IndexSerializer for PrimaryKeySerializer {
+impl IndexSerializer for UniqueKeySerializer {
     fn serialize(
         &self,
         directory: &dyn Directory,
@@ -36,7 +36,7 @@ impl IndexSerializer for PrimaryKeySerializer {
         keys.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
         let index_path = index_path.join(&self.index_name);
         let index_writer = directory.open_write(&index_path).unwrap();
-        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(index_writer);
+        let mut primary_key_dict_writer = UniqueKeyDictBuilder::new(index_writer);
         for (key, docid) in keys.iter() {
             if let Some(docid) = if let Some(docid_mapping) = docid_mapping {
                 docid_mapping[*docid as usize]

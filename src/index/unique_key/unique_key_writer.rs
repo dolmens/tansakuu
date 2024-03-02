@@ -11,15 +11,15 @@ use crate::{
     DocId, HASHMAP_INITIAL_CAPACITY,
 };
 
-use super::PrimaryKeyBuildingSegmentData;
+use super::UniqueKeyBuildingSegmentData;
 
-pub struct PrimaryKeyWriter {
+pub struct UniqueKeyWriter {
     current_key: Option<String>,
     keys: LayeredHashMapWriter<u64, DocId>,
-    index_data: Arc<PrimaryKeyBuildingSegmentData>,
+    index_data: Arc<UniqueKeyBuildingSegmentData>,
 }
 
-impl PrimaryKeyWriter {
+impl UniqueKeyWriter {
     pub fn new(recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
@@ -41,12 +41,12 @@ impl PrimaryKeyWriter {
         Self {
             current_key: None,
             keys,
-            index_data: Arc::new(PrimaryKeyBuildingSegmentData::new(keymap)),
+            index_data: Arc::new(UniqueKeyBuildingSegmentData::new(keymap)),
         }
     }
 }
 
-impl IndexWriter for PrimaryKeyWriter {
+impl IndexWriter for UniqueKeyWriter {
     fn add_field(&mut self, _field: &str, value: &OwnedValue) {
         assert!(self.current_key.is_none());
         let token: String = value.as_i64().unwrap_or_default().to_string();

@@ -4,7 +4,7 @@ use crate::schema::{IndexRef, IndexType};
 
 use super::{
     inverted_index::{InvertedIndexBuildingSegmentData, InvertedIndexSerializer},
-    primary_key::PrimaryKeySerializer,
+    unique_key::UniqueKeySerializer,
     IndexSegmentData, IndexSerializer,
 };
 
@@ -28,9 +28,9 @@ impl IndexSerializerFactory {
                     inverted_index_data,
                 ))
             }
-            IndexType::PrimaryKey => {
+            IndexType::UniqueKey => {
                 let primary_key_data = index_data.downcast_arc().ok().unwrap();
-                Box::new(PrimaryKeySerializer::new(index, primary_key_data))
+                Box::new(UniqueKeySerializer::new(index, primary_key_data))
             }
         }
     }

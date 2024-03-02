@@ -8,7 +8,7 @@ pub struct TableReader {
     index_reader: TableIndexReader,
     column_reader: TableColumnReader,
     primary_key_reader: Option<PrimaryKeyReader>,
-    primary_key_index_reader: Option<Arc<index::PrimaryKeyReader>>,
+    primary_key_index_reader: Option<Arc<index::UniqueKeyReader>>,
     deletionmap_reader: DeletionMapReader,
     table_data: TableData,
 }
@@ -55,7 +55,7 @@ impl TableReader {
         self.primary_key_reader.as_ref()
     }
 
-    pub fn primary_key_index_reader(&self) -> Option<&index::PrimaryKeyReader> {
+    pub fn primary_key_index_reader(&self) -> Option<&index::UniqueKeyReader> {
         self.primary_key_index_reader.as_deref()
     }
 

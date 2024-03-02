@@ -4,15 +4,15 @@ use crate::{
 };
 
 use super::{
-    PrimaryKeyBuildingSegmentReader, PrimaryKeyPersistentSegmentReader, PrimaryKeyPostingIterator,
+    UniqueKeyBuildingSegmentReader, UniqueKeyPersistentSegmentReader, UniqueKeyPostingIterator,
 };
 
-pub struct PrimaryKeyReader {
-    persistent_segments: Vec<PrimaryKeyPersistentSegmentReader>,
-    building_segments: Vec<PrimaryKeyBuildingSegmentReader>,
+pub struct UniqueKeyReader {
+    persistent_segments: Vec<UniqueKeyPersistentSegmentReader>,
+    building_segments: Vec<UniqueKeyBuildingSegmentReader>,
 }
 
-impl PrimaryKeyReader {
+impl UniqueKeyReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
@@ -21,7 +21,7 @@ impl PrimaryKeyReader {
             let index_data = data.index_data(index.name());
             let primary_key_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
-                PrimaryKeyPersistentSegmentReader::new(meta.clone(), primary_key_data);
+                UniqueKeyPersistentSegmentReader::new(meta.clone(), primary_key_data);
             persistent_segments.push(primary_key_segment_reader);
         }
 
@@ -32,7 +32,7 @@ impl PrimaryKeyReader {
             let index_data = data.index_data().index_data(index.name()).unwrap();
             let primary_key_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
-                PrimaryKeyBuildingSegmentReader::new(meta.clone(), primary_key_data);
+                UniqueKeyBuildingSegmentReader::new(meta.clone(), primary_key_data);
             building_segments.push(primary_key_segment_reader);
         }
 
@@ -64,12 +64,11 @@ impl PrimaryKeyReader {
     }
 }
 
-impl IndexReader for PrimaryKeyReader {
+impl IndexReader for UniqueKeyReader {
     fn lookup(&self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator>> {
         let hashkey = hash_string_64(term.keyword());
         self.get_by_hashkey(hashkey).map(|docid| {
-            Box::new(PrimaryKeyPostingIterator::new(docid))
-                as Box<dyn crate::index::PostingIterator>
+            Box::new(UniqueKeyPostingIterator::new(docid)) as Box<dyn crate::index::PostingIterator>
         })
     }
 }

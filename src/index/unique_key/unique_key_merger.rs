@@ -4,12 +4,12 @@ use tantivy_common::TerminatingWrite;
 
 use crate::{index::IndexMerger, Directory, DocId};
 
-use super::{PrimaryKeyDictBuilder, PrimaryKeyPersistentSegmentData};
+use super::{UniqueKeyDictBuilder, UniqueKeyPersistentSegmentData};
 
 #[derive(Default)]
-pub struct PrimaryKeyMerger {}
+pub struct UniqueKeyMerger {}
 
-impl IndexMerger for PrimaryKeyMerger {
+impl IndexMerger for UniqueKeyMerger {
     fn merge(
         &self,
         directory: &dyn Directory,
@@ -21,7 +21,7 @@ impl IndexMerger for PrimaryKeyMerger {
         let mut keys = HashMap::<Vec<u8>, DocId>::new();
         for (&segment, segment_docid_mapping) in segments.iter().zip(docid_mappings.iter()) {
             let segment_data = segment
-                .downcast_ref::<PrimaryKeyPersistentSegmentData>()
+                .downcast_ref::<UniqueKeyPersistentSegmentData>()
                 .unwrap();
             let primary_key_dict = &segment_data.keys;
             for (key, docid) in primary_key_dict.iter() {
@@ -35,7 +35,7 @@ impl IndexMerger for PrimaryKeyMerger {
 
         let index_path = index_directory.join(index.name());
         let writer = directory.open_write(&index_path).unwrap();
-        let mut primary_key_dict_writer = PrimaryKeyDictBuilder::new(writer);
+        let mut primary_key_dict_writer = UniqueKeyDictBuilder::new(writer);
         for (key, docid) in keys.iter() {
             primary_key_dict_writer.insert(key, docid).unwrap();
         }

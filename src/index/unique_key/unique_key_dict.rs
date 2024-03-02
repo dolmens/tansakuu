@@ -8,11 +8,11 @@ use tantivy_sstable::{
 
 use crate::DocId;
 
-pub struct PrimaryKeyDict(Dictionary<DocIdSSTable>);
+pub struct UniqueKeyDict(Dictionary<DocIdSSTable>);
 
-pub struct PrimaryKeyDictBuilder<W: Write>(Writer<W, DocIdValueWriter>);
+pub struct UniqueKeyDictBuilder<W: Write>(Writer<W, DocIdValueWriter>);
 
-impl<W: Write> PrimaryKeyDictBuilder<W> {
+impl<W: Write> UniqueKeyDictBuilder<W> {
     pub fn new(w: W) -> Self {
         Self(Writer::<W, DocIdValueWriter>::new(w))
     }
@@ -26,26 +26,26 @@ impl<W: Write> PrimaryKeyDictBuilder<W> {
     }
 }
 
-impl PrimaryKeyDict {
+impl UniqueKeyDict {
     pub fn open(file: FileSlice) -> io::Result<Self> {
-        Dictionary::open(file).map(PrimaryKeyDict)
+        Dictionary::open(file).map(UniqueKeyDict)
     }
 
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> io::Result<Option<DocId>> {
         self.0.get(key)
     }
 
-    pub fn iter(&self) -> PrimaryKeyDictIterator {
-        PrimaryKeyDictIterator { idx: 0, dict: self }
+    pub fn iter(&self) -> UniqueKeyDictIterator {
+        UniqueKeyDictIterator { idx: 0, dict: self }
     }
 }
 
-pub struct PrimaryKeyDictIterator<'a> {
+pub struct UniqueKeyDictIterator<'a> {
     idx: usize,
-    dict: &'a PrimaryKeyDict,
+    dict: &'a UniqueKeyDict,
 }
 
-impl<'a> Iterator for PrimaryKeyDictIterator<'a> {
+impl<'a> Iterator for UniqueKeyDictIterator<'a> {
     type Item = (Vec<u8>, DocId);
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -41,7 +41,7 @@ pub struct TextIndexOptions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexType {
     Text(TextIndexOptions),
-    PrimaryKey,
+    UniqueKey,
 }
 
 #[derive(Debug)]
@@ -59,6 +59,7 @@ pub struct FieldOptions {
     columnar: bool,
     indexed: bool,
     stored: bool,
+    unique_key: bool,
     primary_key: bool,
 }
 
@@ -67,6 +68,7 @@ pub const DEFAULT: FieldOptions = FieldOptions {
     columnar: false,
     indexed: false,
     stored: false,
+    unique_key: false,
     primary_key: false,
 };
 
@@ -75,6 +77,7 @@ pub const MULTI: FieldOptions = FieldOptions {
     columnar: false,
     indexed: false,
     stored: false,
+    unique_key: false,
     primary_key: false,
 };
 
@@ -83,6 +86,7 @@ pub const COLUMNAR: FieldOptions = FieldOptions {
     columnar: true,
     indexed: false,
     stored: false,
+    unique_key: false,
     primary_key: false,
 };
 
@@ -91,6 +95,16 @@ pub const INDEXED: FieldOptions = FieldOptions {
     columnar: false,
     indexed: true,
     stored: false,
+    unique_key: false,
+    primary_key: false,
+};
+
+pub const UNIQUE_KEY: FieldOptions = FieldOptions {
+    multi: false,
+    columnar: false,
+    indexed: false,
+    stored: false,
+    unique_key: true,
     primary_key: false,
 };
 
@@ -99,6 +113,7 @@ pub const PRIMARY_KEY: FieldOptions = FieldOptions {
     columnar: false,
     indexed: false,
     stored: false,
+    unique_key: true,
     primary_key: true,
 };
 
@@ -111,6 +126,7 @@ impl BitOr for FieldOptions {
             columnar: self.columnar || rhs.columnar,
             indexed: self.indexed || rhs.indexed,
             stored: false,
+            unique_key: self.unique_key || rhs.unique_key,
             primary_key: self.primary_key || rhs.primary_key,
         }
     }
@@ -153,18 +169,29 @@ impl SchemaBuilder {
 
         if options.indexed {
             let fields = vec![field.name().to_string()];
-            let index_type = if options.primary_key {
-                IndexType::PrimaryKey
+            let index_type = if options.unique_key {
+                IndexType::UniqueKey
             } else {
                 IndexType::Text(Default::default())
             };
-            self.add_index(field.name().to_string(), index_type, &fields);
+            self.add_index(
+                field.name().to_string(),
+                index_type,
+                options.primary_key,
+                &fields,
+            );
         }
 
         self.schema.fields.push(field);
     }
 
-    pub fn add_index(&mut self, index_name: String, index_type: IndexType, fields: &[String]) {
+    pub fn add_index(
+        &mut self,
+        index_name: String,
+        index_type: IndexType,
+        primary_key: bool,
+        fields: &[String],
+    ) {
         assert!(!self.schema.indexes_map.contains_key(&index_name));
         let field_refs: Vec<_> = fields
             .iter()
@@ -186,7 +213,8 @@ impl SchemaBuilder {
                 .push(index.clone());
         }
 
-        if index.index_type == IndexType::PrimaryKey {
+        if primary_key {
+            assert_eq!(index.index_type, IndexType::UniqueKey);
             assert!(self.schema.primary_key.is_none());
             assert_eq!(index.fields.len(), 1);
             self.schema.primary_key = Some((index.fields[0].clone(), index.clone()));
@@ -290,6 +318,7 @@ mod tests {
                 columnar: true,
                 indexed: true,
                 stored: false,
+                unique_key: false,
                 primary_key: false,
             }
         );
@@ -343,6 +372,7 @@ mod tests {
             builder.add_index(
                 "i2".to_string(),
                 IndexType::Text(Default::default()),
+                false,
                 &vec!["f2".to_string()],
             );
             assert_eq!(builder.schema.indexes.len(), 2);
@@ -361,6 +391,7 @@ mod tests {
             builder.add_index(
                 "i3".to_string(),
                 IndexType::Text(Default::default()),
+                false,
                 &vec!["f1".to_string(), "f2".to_string()],
             );
             assert_eq!(builder.schema.indexes.len(), 3);
