@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use allocator_api2::alloc::Global;
 use arrow::array::StringArray;
 
 use crate::{util::chunked_vec::ChunkedVec, DocId};
@@ -8,7 +7,7 @@ use crate::{util::chunked_vec::ChunkedVec, DocId};
 use super::StringColumnBuildingSegmentData;
 
 pub struct StringColumnBuildingSegmentReader {
-    values: ChunkedVec<String, Global>,
+    values: ChunkedVec<String>,
 }
 
 impl StringColumnBuildingSegmentReader

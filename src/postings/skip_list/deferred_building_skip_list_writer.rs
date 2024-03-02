@@ -1,40 +1,37 @@
 use std::sync::Arc;
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::util::atomic::RelaxedAtomicPtr;
 
 use super::{BuildingSkipList, BuildingSkipListWriter, SkipListFormat, SkipListWrite};
 
-pub struct DeferredBuildingSkipListWriter<A: Allocator = Global> {
-    skip_list_writer: Option<Box<BuildingSkipListWriter<A>>>,
-    building_skip_list: Arc<AtomicBuildingSkipList<A>>,
+pub struct DeferredBuildingSkipListWriter {
+    skip_list_writer: Option<Box<BuildingSkipListWriter>>,
+    building_skip_list: Arc<AtomicBuildingSkipList>,
     skip_list_format: SkipListFormat,
-    allocator: Option<A>,
 }
 
-pub struct AtomicBuildingSkipList<A: Allocator = Global> {
-    building_skip_list: RelaxedAtomicPtr<BuildingSkipList<A>>,
+pub struct AtomicBuildingSkipList {
+    building_skip_list: RelaxedAtomicPtr<BuildingSkipList>,
 }
 
-impl<A: Allocator> AtomicBuildingSkipList<A> {
+impl AtomicBuildingSkipList {
     pub fn new() -> Self {
         Self {
             building_skip_list: RelaxedAtomicPtr::default(),
         }
     }
 
-    pub fn load(&self) -> &BuildingSkipList<A> {
+    pub fn load(&self) -> &BuildingSkipList {
         unsafe { self.building_skip_list.load().as_ref().unwrap() }
     }
 
-    fn store(&self, building_skip_list: BuildingSkipList<A>) {
+    fn store(&self, building_skip_list: BuildingSkipList) {
         let boxed = Box::new(building_skip_list);
         self.building_skip_list.store(Box::into_raw(boxed));
     }
 }
 
-impl<A: Allocator> Drop for AtomicBuildingSkipList<A> {
+impl Drop for AtomicBuildingSkipList {
     fn drop(&mut self) {
         let ptr = self.building_skip_list.load();
         if !ptr.is_null() {
@@ -45,28 +42,24 @@ impl<A: Allocator> Drop for AtomicBuildingSkipList<A> {
     }
 }
 
-impl<A: Allocator> DeferredBuildingSkipListWriter<A> {
-    pub fn new_in(skip_list_format: SkipListFormat, allocator: A) -> Self {
+impl DeferredBuildingSkipListWriter {
+    pub fn new(skip_list_format: SkipListFormat) -> Self {
         Self {
             skip_list_writer: None,
             building_skip_list: Arc::new(AtomicBuildingSkipList::new()),
             skip_list_format,
-            allocator: Some(allocator),
         }
     }
 
-    pub fn building_skip_list(&self) -> Arc<AtomicBuildingSkipList<A>> {
+    pub fn building_skip_list(&self) -> Arc<AtomicBuildingSkipList> {
         self.building_skip_list.clone()
     }
 }
 
-impl<A: Allocator + Clone> SkipListWrite for DeferredBuildingSkipListWriter<A> {
+impl SkipListWrite for DeferredBuildingSkipListWriter {
     fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> std::io::Result<()> {
         if self.skip_list_writer.is_none() {
-            let skip_list_writer = BuildingSkipListWriter::new_in(
-                self.skip_list_format,
-                self.allocator.take().unwrap(),
-            );
+            let skip_list_writer = BuildingSkipListWriter::new(self.skip_list_format);
             let building_skip_list = skip_list_writer.building_skip_list().clone();
             self.building_skip_list.store(building_skip_list);
             self.skip_list_writer = Some(Box::new(skip_list_writer));

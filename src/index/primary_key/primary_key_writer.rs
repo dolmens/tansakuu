@@ -31,7 +31,7 @@ impl PrimaryKeyWriter {
         } else {
             HASHMAP_INITIAL_CAPACITY
         };
-        let keys = LayeredHashMapWriter::with_initial_capacity(
+        let keys = LayeredHashMapWriter::with_capacity(
             hashmap_initial_capacity,
             hasher_builder,
             capacity_policy,

@@ -81,11 +81,7 @@ fn make_hash<Q: ?Sized + Hash, S: BuildHasher>(key: &Q, hasher_builder: &S) -> u
 }
 
 impl<K, V, S: BuildHasher, C: CapacityPolicy> LayeredHashMapWriter<K, V, S, C> {
-    pub fn with_initial_capacity(
-        initial_capacity: usize,
-        hasher_builder: S,
-        capacity_policy: C,
-    ) -> Self {
+    pub fn with_capacity(initial_capacity: usize, hasher_builder: S, capacity_policy: C) -> Self {
         let data = Arc::new(LayeredHashMapData::new(hasher_builder));
 
         Self {
@@ -519,8 +515,7 @@ mod tests {
     fn test_hashmap_simple() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let mut writer =
-            LayeredHashMapWriter::with_initial_capacity(4, hasher_builder, capacity_policy);
+        let mut writer = LayeredHashMapWriter::with_capacity(4, hasher_builder, capacity_policy);
         let map = writer.hashmap();
         assert!(map.get(&1).is_none());
         assert!(writer.insert(1, 10).is_none());
@@ -560,11 +555,8 @@ mod tests {
     fn test_hashmap_multithreads() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let mut writer = LayeredHashMapWriter::<i32, i32>::with_initial_capacity(
-            4,
-            hasher_builder,
-            capacity_policy,
-        );
+        let mut writer =
+            LayeredHashMapWriter::<i32, i32>::with_capacity(4, hasher_builder, capacity_policy);
         let map = writer.hashmap();
         let count = 16;
         let reader_thread = thread::spawn(move || {
@@ -627,11 +619,8 @@ mod tests {
     fn test_iter() {
         let hasher_builder = RandomState::new();
         let capacity_policy = FixedCapacityPolicy;
-        let mut writer = LayeredHashMapWriter::<i32, i32>::with_initial_capacity(
-            4,
-            hasher_builder,
-            capacity_policy,
-        );
+        let mut writer =
+            LayeredHashMapWriter::<i32, i32>::with_capacity(4, hasher_builder, capacity_policy);
         let map = writer.hashmap();
         let mut expected = vec![];
         for i in 0..8 {

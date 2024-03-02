@@ -52,11 +52,8 @@ impl InvertedIndexWriter {
         } else {
             HASHMAP_INITIAL_CAPACITY
         };
-        let posting_table = PostingTable::with_initial_capacity(
-            hashmap_initial_capacity,
-            hasher_builder,
-            capacity_policy,
-        );
+        let posting_table =
+            PostingTable::with_capacity(hashmap_initial_capacity, hasher_builder, capacity_policy);
         let postings = posting_table.hashmap();
 
         Self {
@@ -86,7 +83,11 @@ impl IndexWriter for InvertedIndexWriter {
                 })
                 .clone();
             let posting_writer = &mut self.posting_writers[writer_index];
-            let field_offset = self.index_data.index.field_offset(field).unwrap_or_default();
+            let field_offset = self
+                .index_data
+                .index
+                .field_offset(field)
+                .unwrap_or_default();
             posting_writer.add_pos(field_offset, pos as u32).unwrap();
             self.modified_postings.insert(writer_index);
         }

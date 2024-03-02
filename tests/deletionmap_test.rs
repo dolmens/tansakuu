@@ -1,9 +1,11 @@
 use tansakuu::{
+    columnar::{PrimitiveColumnReader, StringColumnReader},
     document::InputDocument,
     query::Term,
     schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
-    DocId, END_DOCID, types::Int64Type, columnar::{PrimitiveColumnReader, StringColumnReader},
+    types::Int64Type,
+    DocId, END_DOCID,
 };
 
 fn get_all_docs(index_reader: &TableIndexReader, term: &Term) -> Vec<DocId> {

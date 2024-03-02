@@ -1,15 +1,13 @@
-use allocator_api2::alloc::Global;
-
 use crate::{types::NativeType, util::chunked_vec::ChunkedVec, DocId};
 
 use super::ColumnBuildingSegmentData;
 
 pub struct PrimitiveColumnBuildingSegmentData<T: NativeType> {
-    pub values: ChunkedVec<T, Global>,
+    pub values: ChunkedVec<T>,
 }
 
 impl<T: NativeType> PrimitiveColumnBuildingSegmentData<T> {
-    pub fn new(values: ChunkedVec<T, Global>) -> Self {
+    pub fn new(values: ChunkedVec<T>) -> Self {
         Self { values }
     }
 

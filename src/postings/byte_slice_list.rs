@@ -6,8 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::util::{
     atomic::{AcqRelUsize, RelaxedAtomicPtr},
     capacity_policy::CapacityPolicy,
@@ -21,22 +19,20 @@ pub struct ByteSlice {
     data: NonNull<u8>,
 }
 
-pub struct ByteSliceList<A: Allocator = Global> {
+pub struct ByteSliceList {
     total_size: AcqRelUsize,
     head: RelaxedAtomicPtr<ByteSlice>,
-    allocator: A,
 }
 
-pub struct ByteSliceWriter<C: CapacityPolicy = FractionalChunkCapacityPolicy, A: Allocator = Global>
-{
+pub struct ByteSliceWriter<C: CapacityPolicy = FractionalChunkCapacityPolicy> {
     total_size: usize,
     current_slice_offset: usize,
     current_slice: Option<NonNull<ByteSlice>>,
-    byte_slice_list: Arc<ByteSliceList<A>>,
+    byte_slice_list: Arc<ByteSliceList>,
     capacity_policy: C,
 }
 
-unsafe impl<C: CapacityPolicy, A: Allocator> Send for ByteSliceWriter<C, A> {}
+unsafe impl<C: CapacityPolicy> Send for ByteSliceWriter<C> {}
 
 pub struct ByteSliceReader<'a> {
     total_size: usize,
@@ -82,30 +78,28 @@ impl ByteSlice {
     }
 }
 
-impl<A: Allocator> ByteSliceList<A> {
-    fn new(allocator: A) -> Self {
+impl ByteSliceList {
+    fn new() -> Self {
         Self {
             total_size: AcqRelUsize::new(0),
             head: RelaxedAtomicPtr::default(),
-            allocator,
         }
     }
 
-    fn with_initial_capacity_in(initial_capacity: usize, allocator: A) -> Self {
-        let head = Self::create_slice_in(initial_capacity, &allocator);
+    fn with_capacity(initial_capacity: usize) -> Self {
+        let head = Self::create_slice(initial_capacity);
 
         Self {
             total_size: AcqRelUsize::new(0),
             head: RelaxedAtomicPtr::new(head.as_ptr()),
-            allocator,
         }
     }
 
-    fn create_slice_in(capacity: usize, allocator: &A) -> NonNull<ByteSlice> {
+    fn create_slice(capacity: usize) -> NonNull<ByteSlice> {
         let layout = Self::layout_with_capacity(capacity);
-        let byte_slice_ptr = allocator
-            .allocate(layout)
-            .unwrap_or_else(|_| handle_alloc_error(layout))
+        let byte_slice_ptr = unsafe { std::alloc::alloc(layout) };
+        let byte_slice_ptr = NonNull::new(byte_slice_ptr)
+            .unwrap_or_else(|| handle_alloc_error(layout))
             .cast::<ByteSlice>();
         unsafe {
             let byte_slice_data_ptr =
@@ -127,10 +121,6 @@ impl<A: Allocator> ByteSliceList<A> {
             .pad_to_align()
     }
 
-    fn create_slice(&self, capacity: usize) -> NonNull<ByteSlice> {
-        Self::create_slice_in(capacity, &self.allocator)
-    }
-
     pub fn total_size(&self) -> usize {
         self.total_size.load()
     }
@@ -140,7 +130,7 @@ impl<A: Allocator> ByteSliceList<A> {
     }
 }
 
-impl<A: Allocator> Drop for ByteSliceList<A> {
+impl Drop for ByteSliceList {
     fn drop(&mut self) {
         if self.total_size() == 0 {
             return;
@@ -152,27 +142,16 @@ impl<A: Allocator> Drop for ByteSliceList<A> {
             let next_silce = slice_ref.next.load();
             let layout = Self::layout_with_capacity(capacity);
             unsafe {
-                self.allocator
-                    .deallocate(NonNull::new_unchecked(slice).cast(), layout);
+                std::alloc::dealloc(slice.cast(), layout);
             }
             slice = next_silce;
         }
     }
 }
 
-impl<C: CapacityPolicy + Default, A: Allocator + Default> ByteSliceWriter<C, A> {
+impl<C: CapacityPolicy + Default> ByteSliceWriter<C> {
     pub fn new() -> Self {
-        Self::new_in(A::default())
-    }
-
-    pub fn with_initial_capacity(initial_capacity: usize) -> Self {
-        Self::with_initial_capacity_in(initial_capacity, A::default())
-    }
-}
-
-impl<C: CapacityPolicy + Default, A: Allocator> ByteSliceWriter<C, A> {
-    pub fn new_in(allocator: A) -> Self {
-        let byte_slice_list = Arc::new(ByteSliceList::new(allocator));
+        let byte_slice_list = Arc::new(ByteSliceList::new());
 
         Self {
             total_size: 0,
@@ -183,11 +162,8 @@ impl<C: CapacityPolicy + Default, A: Allocator> ByteSliceWriter<C, A> {
         }
     }
 
-    pub fn with_initial_capacity_in(initial_capacity: usize, allocator: A) -> Self {
-        let byte_slice_list = Arc::new(ByteSliceList::with_initial_capacity_in(
-            initial_capacity,
-            allocator,
-        ));
+    pub fn with_capacity(initial_capacity: usize) -> Self {
+        let byte_slice_list = Arc::new(ByteSliceList::with_capacity(initial_capacity));
         let current_slice = NonNull::new(byte_slice_list.head.load());
 
         Self {
@@ -200,15 +176,15 @@ impl<C: CapacityPolicy + Default, A: Allocator> ByteSliceWriter<C, A> {
     }
 }
 
-impl<C: CapacityPolicy, A: Allocator> ByteSliceWriter<C, A> {
-    pub fn byte_slice_list(&self) -> Arc<ByteSliceList<A>> {
+impl<C: CapacityPolicy> ByteSliceWriter<C> {
+    pub fn byte_slice_list(&self) -> Arc<ByteSliceList> {
         self.byte_slice_list.clone()
     }
 
     fn add_slice(&mut self) {
         let next_slice_capacity = self.get_next_slice_capcacity(self.current_slice_capacity());
         assert!(next_slice_capacity > 0);
-        let next_byte_slice = self.byte_slice_list.create_slice(next_slice_capacity);
+        let next_byte_slice = ByteSliceList::create_slice(next_slice_capacity);
         if let Some(current_slice) = self.current_slice_ref() {
             current_slice.next.store(next_byte_slice.as_ptr());
         } else {
@@ -235,7 +211,7 @@ impl<C: CapacityPolicy, A: Allocator> ByteSliceWriter<C, A> {
     }
 }
 
-impl<C: CapacityPolicy, A: Allocator> Write for ByteSliceWriter<C, A> {
+impl<C: CapacityPolicy> Write for ByteSliceWriter<C> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.current_slice_is_full() {
             self.add_slice();
@@ -268,7 +244,7 @@ impl<'a> ByteSliceReader<'a> {
         }
     }
 
-    pub fn open<A: Allocator>(byte_slice_list: &'a ByteSliceList<A>) -> Self {
+    pub fn open(byte_slice_list: &'a ByteSliceList) -> Self {
         let total_size = byte_slice_list.total_size();
         let current_slice = if total_size > 0 {
             byte_slice_list.head_ref()
@@ -436,8 +412,7 @@ mod tests {
 
     #[test]
     fn test_simple_writer_only() {
-        let mut writer: ByteSliceWriter<FixedCapacityPolicy> =
-            ByteSliceWriter::with_initial_capacity(4);
+        let mut writer: ByteSliceWriter<FixedCapacityPolicy> = ByteSliceWriter::with_capacity(4);
         assert_eq!(writer.total_size, 0);
         let byte_slice_list = writer.byte_slice_list();
 
@@ -481,8 +456,7 @@ mod tests {
 
     #[test]
     fn test_multithreads() {
-        let mut writer: ByteSliceWriter<FixedCapacityPolicy> =
-            ByteSliceWriter::with_initial_capacity(4);
+        let mut writer: ByteSliceWriter<FixedCapacityPolicy> = ByteSliceWriter::with_capacity(4);
         let byte_slice_list = writer.byte_slice_list();
         thread::scope(|scope| {
             let t = scope.spawn(move || {
@@ -560,7 +534,7 @@ mod tests {
 
     #[test]
     fn test_simple_writer_and_reader() {
-        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_capacity(4);
         assert_eq!(writer.total_size, 0);
         let byte_slice_list = writer.byte_slice_list();
         let reader = ByteSliceReader::open(&byte_slice_list);
@@ -614,7 +588,7 @@ mod tests {
 
     #[test]
     fn test_multithreads_writer_and_reader() {
-        let mut writer: ByteSliceWriter = ByteSliceWriter::with_initial_capacity(4);
+        let mut writer: ByteSliceWriter = ByteSliceWriter::with_capacity(4);
         assert_eq!(writer.total_size, 0);
         let byte_slice_list = writer.byte_slice_list();
 

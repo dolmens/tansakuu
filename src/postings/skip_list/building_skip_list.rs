@@ -1,7 +1,5 @@
 use std::{io, sync::Arc};
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::{
     postings::{ByteSliceList, ByteSliceReader, ByteSliceWriter},
     util::fractional_capacity_policy::FractionalChunkCapacityPolicy,
@@ -13,15 +11,15 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct BuildingSkipList<A: Allocator = Global> {
+pub struct BuildingSkipList {
     building_block: Arc<BuildingSkipListBlock>,
-    byte_slice_list: Arc<ByteSliceList<A>>,
+    byte_slice_list: Arc<ByteSliceList>,
     skip_list_format: SkipListFormat,
 }
 
-pub struct BuildingSkipListWriter<A: Allocator = Global> {
-    skip_list_writer: SkipListWriter<ByteSliceWriter<FractionalChunkCapacityPolicy, A>>,
-    building_skip_list: BuildingSkipList<A>,
+pub struct BuildingSkipListWriter {
+    skip_list_writer: SkipListWriter<ByteSliceWriter<FractionalChunkCapacityPolicy>>,
+    building_skip_list: BuildingSkipList,
 }
 
 pub struct BuildingSkipListReader<'a> {
@@ -36,16 +34,9 @@ pub struct BuildingSkipListReader<'a> {
     skip_list_reader: SkipListReader<ByteSliceReader<'a>>,
 }
 
-#[cfg(test)]
-impl<A: Allocator + Default> BuildingSkipListWriter<A> {
+impl BuildingSkipListWriter {
     pub fn new(skip_list_format: SkipListFormat) -> Self {
-        Self::new_in(skip_list_format, A::default())
-    }
-}
-
-impl<A: Allocator> BuildingSkipListWriter<A> {
-    pub fn new_in(skip_list_format: SkipListFormat, allocator: A) -> Self {
-        let byte_slice_writer = ByteSliceWriter::new_in(allocator);
+        let byte_slice_writer = ByteSliceWriter::new();
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_writer = SkipListWriter::new(skip_list_format, byte_slice_writer);
         let building_skip_list = BuildingSkipList {
@@ -60,12 +51,12 @@ impl<A: Allocator> BuildingSkipListWriter<A> {
         }
     }
 
-    pub fn building_skip_list(&self) -> &BuildingSkipList<A> {
+    pub fn building_skip_list(&self) -> &BuildingSkipList {
         &self.building_skip_list
     }
 }
 
-impl<A: Allocator> SkipListWrite for BuildingSkipListWriter<A> {
+impl SkipListWrite for BuildingSkipListWriter {
     fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
         self.skip_list_writer.add_skip_item(key, offset, value)
     }
@@ -80,7 +71,7 @@ impl<A: Allocator> SkipListWrite for BuildingSkipListWriter<A> {
 }
 
 impl<'a> BuildingSkipListReader<'a> {
-    pub fn open<A: Allocator>(building_skip_list: &'a BuildingSkipList<A>) -> Self {
+    pub fn open(building_skip_list: &'a BuildingSkipList) -> Self {
         let flush_info = building_skip_list.building_block.flush_info.load();
         let byte_slice_list = building_skip_list.byte_slice_list.as_ref();
         let building_block = building_skip_list.building_block.as_ref();
@@ -209,8 +200,7 @@ mod tests {
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = SKIPLIST_BLOCK_LEN;
         let skip_list_format = SkipListFormat::builder().build();
-        let mut skip_list_writer: BuildingSkipListWriter =
-            BuildingSkipListWriter::new(skip_list_format);
+        let mut skip_list_writer = BuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list().clone();
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
         assert_eq!(skip_list_reader.building_block_snapshot.len(), 0);
@@ -341,8 +331,7 @@ mod tests {
     fn test_multithread() {
         const BLOCK_LEN: usize = SKIPLIST_BLOCK_LEN;
         let skip_list_format = SkipListFormat::builder().build();
-        let mut skip_list_writer: BuildingSkipListWriter =
-            BuildingSkipListWriter::new(skip_list_format);
+        let mut skip_list_writer = BuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list().clone();
         let w = thread::spawn(move || {
             for i in 0..BLOCK_LEN + 3 {

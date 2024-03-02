@@ -5,49 +5,46 @@ use std::{
     sync::Arc,
 };
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use super::atomic::{AcqRelAtomicPtr, AcqRelUsize};
 
-pub struct RadixTreeWriter<T, A: Allocator = Global> {
+pub struct RadixTreeWriter<T> {
     element_count: usize,
     chunk_exponent: u8,
     last_chunk: NonNull<T>,
-    data: Arc<RadixTreeData<T, A>>,
+    data: Arc<RadixTreeData<T>>,
 }
 
-unsafe impl<T: Send + Sync, A: Allocator + Send + Sync> Send for RadixTreeWriter<T, A> {}
+unsafe impl<T: Send + Sync> Send for RadixTreeWriter<T> {}
 
 #[derive(Clone)]
-pub struct RadixTree<T, A: Allocator = Global> {
-    data: Arc<RadixTreeData<T, A>>,
+pub struct RadixTree<T> {
+    data: Arc<RadixTreeData<T>>,
 }
 
-unsafe impl<T: Send + Sync, A: Allocator + Send + Sync> Send for RadixTree<T, A> {}
-unsafe impl<T: Send + Sync, A: Allocator + Send + Sync> Sync for RadixTree<T, A> {}
+unsafe impl<T: Send + Sync> Send for RadixTree<T> {}
+unsafe impl<T: Send + Sync> Sync for RadixTree<T> {}
 
-pub struct RadixTreeIter<'a, T, A: Allocator = Global> {
+pub struct RadixTreeIter<'a, T> {
     index: usize,
     size: usize,
     mask: usize,
     chunk: NonNull<T>,
-    data: &'a RadixTreeData<T, A>,
+    data: &'a RadixTreeData<T>,
 }
 
-pub struct RadixTreeIntoIter<T, A: Allocator = Global> {
+pub struct RadixTreeIntoIter<T> {
     index: usize,
     size: usize,
     mask: usize,
     chunk: NonNull<T>,
-    data: Arc<RadixTreeData<T, A>>,
+    data: Arc<RadixTreeData<T>>,
 }
 
-struct RadixTreeData<T, A: Allocator = Global> {
+struct RadixTreeData<T> {
     element_count: AcqRelUsize,
     chunk_exponent: u8,
     node_exponent: u8,
     root: AcqRelAtomicPtr<RadixTreeNode<T>>,
-    allocator: A,
 }
 
 struct RadixTreeNode<T> {
@@ -69,14 +66,8 @@ fn calculate_exponent(num: usize) -> u8 {
     expoent
 }
 
-impl<T, A: Allocator + Default> RadixTreeWriter<T, A> {
+impl<T> RadixTreeWriter<T> {
     pub fn new(chunk_size: usize, node_size: usize) -> Self {
-        Self::new_in(chunk_size, node_size, Default::default())
-    }
-}
-
-impl<T, A: Allocator> RadixTreeWriter<T, A> {
-    pub fn new_in(chunk_size: usize, node_size: usize, allocator: A) -> Self {
         let chunk_exponent = calculate_exponent(chunk_size);
         let node_exponent = calculate_exponent(node_size);
         let data = Arc::new(RadixTreeData {
@@ -84,7 +75,6 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
             chunk_exponent,
             node_exponent,
             root: AcqRelAtomicPtr::default(),
-            allocator,
         });
 
         Self {
@@ -95,7 +85,7 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
         }
     }
 
-    pub fn reader(&self) -> RadixTree<T, A> {
+    pub fn reader(&self) -> RadixTree<T> {
         RadixTree {
             data: self.data.clone(),
         }
@@ -129,7 +119,7 @@ impl<T, A: Allocator> RadixTreeWriter<T, A> {
     }
 }
 
-impl<T, A: Allocator> RadixTree<T, A> {
+impl<T> RadixTree<T> {
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -138,24 +128,24 @@ impl<T, A: Allocator> RadixTree<T, A> {
         self.data.get(index)
     }
 
-    pub fn iter(&self) -> RadixTreeIter<'_, T, A> {
+    pub fn iter(&self) -> RadixTreeIter<'_, T> {
         self.data.iter()
     }
 }
 
-impl<T, A: Allocator> IntoIterator for RadixTree<T, A>
+impl<T> IntoIterator for RadixTree<T>
 where
     T: Clone,
 {
     type Item = T;
-    type IntoIter = RadixTreeIntoIter<T, A>;
+    type IntoIter = RadixTreeIntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
         RadixTreeIntoIter::new(self.data)
     }
 }
 
-impl<T, A: Allocator> RadixTreeData<T, A> {
+impl<T> RadixTreeData<T> {
     fn len(&self) -> usize {
         self.element_count.load()
     }
@@ -171,7 +161,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
         }
     }
 
-    fn iter(&self) -> RadixTreeIter<'_, T, A> {
+    fn iter(&self) -> RadixTreeIter<'_, T> {
         RadixTreeIter::new(self)
     }
 
@@ -202,10 +192,9 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
 
     fn allocate_chunk(&self, index: usize) -> NonNull<T> {
         let layout = self.chunk_layout();
-        let chunk = self
-            .allocator
-            .allocate(layout)
-            .unwrap_or_else(|_| handle_alloc_error(layout))
+        let chunk = unsafe { std::alloc::alloc(layout) };
+        let chunk = NonNull::new(chunk)
+            .unwrap_or_else(|| handle_alloc_error(layout))
             .cast();
 
         self.append_chunk(chunk, index);
@@ -277,10 +266,9 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
 
     fn new_node(&self, height: u8) -> NonNull<RadixTreeNode<T>> {
         let layout = self.node_layout();
-        let node_ptr = self
-            .allocator
-            .allocate(layout)
-            .unwrap_or_else(|_| handle_alloc_error(layout))
+        let node_ptr = unsafe { std::alloc::alloc(layout) };
+        let node_ptr = NonNull::new(node_ptr)
+            .unwrap_or_else(|| handle_alloc_error(layout))
             .cast::<RadixTreeNode<T>>();
         let slot_ptr = self.slot_ptr(node_ptr);
         for i in 0..(1 << self.node_exponent) {
@@ -318,7 +306,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
                     }
                 }
                 unsafe {
-                    self.allocator.deallocate(chunk, chunk_layout);
+                    std::alloc::dealloc(chunk.as_ptr(), chunk_layout);
                 }
             } else {
                 let child_node = unsafe { NonNull::new_unchecked(slot) }.cast();
@@ -326,7 +314,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
             }
         }
         unsafe {
-            self.allocator.deallocate(node.cast(), layout);
+            std::alloc::dealloc(node.cast().as_ptr(), layout);
         }
     }
 
@@ -347,7 +335,7 @@ impl<T, A: Allocator> RadixTreeData<T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for RadixTreeData<T, A> {
+impl<T> Drop for RadixTreeData<T> {
     fn drop(&mut self) {
         let root = self.root.load();
         if !root.is_null() {
@@ -358,8 +346,8 @@ impl<T, A: Allocator> Drop for RadixTreeData<T, A> {
     }
 }
 
-impl<'a, T, A: Allocator> RadixTreeIter<'a, T, A> {
-    fn new(data: &'a RadixTreeData<T, A>) -> Self {
+impl<'a, T> RadixTreeIter<'a, T> {
+    fn new(data: &'a RadixTreeData<T>) -> Self {
         Self {
             index: 0,
             size: data.len(),
@@ -370,7 +358,7 @@ impl<'a, T, A: Allocator> RadixTreeIter<'a, T, A> {
     }
 }
 
-impl<'a, T, A: Allocator> Iterator for RadixTreeIter<'a, T, A> {
+impl<'a, T> Iterator for RadixTreeIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -388,8 +376,8 @@ impl<'a, T, A: Allocator> Iterator for RadixTreeIter<'a, T, A> {
     }
 }
 
-impl<T, A: Allocator> RadixTreeIntoIter<T, A> {
-    fn new(data: Arc<RadixTreeData<T, A>>) -> Self {
+impl<T> RadixTreeIntoIter<T> {
+    fn new(data: Arc<RadixTreeData<T>>) -> Self {
         Self {
             index: 0,
             size: data.len(),
@@ -400,7 +388,7 @@ impl<T, A: Allocator> RadixTreeIntoIter<T, A> {
     }
 }
 
-impl<T, A: Allocator> Iterator for RadixTreeIntoIter<T, A>
+impl<T> Iterator for RadixTreeIntoIter<T>
 where
     T: Clone,
 {

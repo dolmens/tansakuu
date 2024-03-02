@@ -1,15 +1,13 @@
-use allocator_api2::alloc::Global;
-
 use crate::{util::chunked_vec::ChunkedVec, DocId};
 
 use super::ColumnBuildingSegmentData;
 
 pub struct StringColumnBuildingSegmentData {
-    pub values: ChunkedVec<String, Global>,
+    pub values: ChunkedVec<String>,
 }
 
 impl StringColumnBuildingSegmentData {
-    pub fn new(values: ChunkedVec<String, Global>) -> Self {
+    pub fn new(values: ChunkedVec<String>) -> Self {
         Self { values }
     }
 

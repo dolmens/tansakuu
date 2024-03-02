@@ -1,7 +1,5 @@
 use std::{io, sync::Arc};
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::{
     util::fractional_capacity_policy::FractionalChunkCapacityPolicy, DocId,
     MAX_UNCOMPRESSED_DOC_LIST_LEN,
@@ -19,19 +17,19 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct BuildingDocList<A: Allocator = Global> {
+pub struct BuildingDocList {
     building_block: Arc<BuildingDocListBlock>,
-    byte_slice_list: Arc<ByteSliceList<A>>,
-    building_skip_list: Arc<AtomicBuildingSkipList<A>>,
+    byte_slice_list: Arc<ByteSliceList>,
+    building_skip_list: Arc<AtomicBuildingSkipList>,
     doc_list_format: DocListFormat,
 }
 
-pub struct BuildingDocListEncoder<A: Allocator + Clone = Global> {
+pub struct BuildingDocListEncoder {
     doc_list_encoder: DocListEncoder<
-        ByteSliceWriter<FractionalChunkCapacityPolicy, A>,
-        DeferredBuildingSkipListWriter<A>,
+        ByteSliceWriter<FractionalChunkCapacityPolicy>,
+        DeferredBuildingSkipListWriter,
     >,
-    building_doc_list: BuildingDocList<A>,
+    building_doc_list: BuildingDocList,
 }
 
 pub struct BuildingDocListDecoder<'a> {
@@ -42,20 +40,13 @@ pub struct BuildingDocListDecoder<'a> {
     doc_list_decoder: DocListDecoder<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
 }
 
-impl<A: Allocator + Clone + Default> BuildingDocListEncoder<A> {
+impl BuildingDocListEncoder {
     pub fn new(doc_list_format: DocListFormat) -> Self {
-        Self::new_in(doc_list_format, A::default())
-    }
-}
-
-impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
-    pub fn new_in(doc_list_format: DocListFormat, allocator: A) -> Self {
-        let byte_slice_writer = ByteSliceWriter::new_in(allocator.clone());
+        let byte_slice_writer = ByteSliceWriter::new();
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = doc_list_format.skip_list_format().clone();
 
-        let skip_list_writer =
-            DeferredBuildingSkipListWriter::new_in(skip_list_format, allocator.clone());
+        let skip_list_writer = DeferredBuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list().clone();
 
         let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
@@ -77,12 +68,12 @@ impl<A: Allocator + Clone> BuildingDocListEncoder<A> {
         }
     }
 
-    pub fn building_doc_list(&self) -> &BuildingDocList<A> {
+    pub fn building_doc_list(&self) -> &BuildingDocList {
         &self.building_doc_list
     }
 }
 
-impl<A: Allocator + Clone> DocListEncode for BuildingDocListEncoder<A> {
+impl DocListEncode for BuildingDocListEncoder {
     fn add_pos(&mut self, field: usize) {
         self.doc_list_encoder.add_pos(field);
     }
@@ -109,7 +100,7 @@ impl<A: Allocator + Clone> DocListEncode for BuildingDocListEncoder<A> {
 }
 
 impl<'a> BuildingDocListDecoder<'a> {
-    pub fn open<A: Allocator>(building_doc_list: &'a BuildingDocList<A>) -> Self {
+    pub fn open(building_doc_list: &'a BuildingDocList) -> Self {
         let flush_info = building_doc_list.building_block.flush_info.load();
         let byte_slice_list = building_doc_list.byte_slice_list.as_ref();
         let building_block = building_doc_list.building_block.as_ref();
@@ -274,8 +265,7 @@ mod tests {
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
-        let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format);
+        let mut doc_list_encoder = BuildingDocListEncoder::new(doc_list_format);
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
         let mut doc_list_block = DocListBlock::new(&doc_list_format);
         let mut doc_list_decoder = BuildingDocListDecoder::open(&building_doc_list);
@@ -485,8 +475,7 @@ mod tests {
     fn test_multithread() -> io::Result<()> {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let doc_list_format = DocListFormat::builder().with_tflist().build();
-        let mut doc_list_encoder: BuildingDocListEncoder =
-            BuildingDocListEncoder::new(doc_list_format);
+        let mut doc_list_encoder = BuildingDocListEncoder::new(doc_list_format);
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
 
         let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();

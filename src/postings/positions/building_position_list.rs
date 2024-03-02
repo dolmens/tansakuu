@@ -1,7 +1,5 @@
 use std::{io, sync::Arc};
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::{
     postings::{
         skip_list::{
@@ -20,18 +18,18 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct BuildingPositionList<A: Allocator = Global> {
+pub struct BuildingPositionList {
     pub building_block: Arc<BuildingPositionListBlock>,
-    pub byte_slice_list: Arc<ByteSliceList<A>>,
-    pub building_skip_list: Arc<AtomicBuildingSkipList<A>>,
+    pub byte_slice_list: Arc<ByteSliceList>,
+    pub building_skip_list: Arc<AtomicBuildingSkipList>,
 }
 
-pub struct BuildingPositionListEncoder<A: Allocator + Clone = Global> {
+pub struct BuildingPositionListEncoder {
     position_list_encoder: PositionListEncoder<
-        ByteSliceWriter<FractionalChunkCapacityPolicy, A>,
-        DeferredBuildingSkipListWriter<A>,
+        ByteSliceWriter<FractionalChunkCapacityPolicy>,
+        DeferredBuildingSkipListWriter,
     >,
-    building_position_list: BuildingPositionList<A>,
+    building_position_list: BuildingPositionList,
 }
 
 pub struct BuildingPositionListDecoder<'a> {
@@ -42,19 +40,12 @@ pub struct BuildingPositionListDecoder<'a> {
     position_list_decoder: PositionListDecoder<ByteSliceReader<'a>, BuildingSkipListReader<'a>>,
 }
 
-impl<A: Allocator + Clone + Default> BuildingPositionListEncoder<A> {
+impl BuildingPositionListEncoder {
     pub fn new() -> Self {
-        Self::new_in(Default::default())
-    }
-}
-
-impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
-    pub fn new_in(allocator: A) -> Self {
-        let byte_slice_writer = ByteSliceWriter::new_in(allocator.clone());
+        let byte_slice_writer = ByteSliceWriter::new();
         let byte_slice_list = byte_slice_writer.byte_slice_list();
         let skip_list_format = SkipListFormat::builder().build();
-        let skip_list_writer =
-            DeferredBuildingSkipListWriter::new_in(skip_list_format, allocator.clone());
+        let skip_list_writer = DeferredBuildingSkipListWriter::new(skip_list_format);
         let building_skip_list = skip_list_writer.building_skip_list();
         let position_list_encoder = PositionListEncoder::new(byte_slice_writer, skip_list_writer);
         let building_block = position_list_encoder.building_block().clone();
@@ -70,12 +61,12 @@ impl<A: Allocator + Clone> BuildingPositionListEncoder<A> {
         }
     }
 
-    pub fn building_position_list(&self) -> &BuildingPositionList<A> {
+    pub fn building_position_list(&self) -> &BuildingPositionList {
         &self.building_position_list
     }
 }
 
-impl<A: Allocator + Clone> PositionListEncode for BuildingPositionListEncoder<A> {
+impl PositionListEncode for BuildingPositionListEncoder {
     fn add_pos(&mut self, pos: u32) -> io::Result<()> {
         self.position_list_encoder.add_pos(pos)
     }
@@ -98,7 +89,7 @@ impl<A: Allocator + Clone> PositionListEncode for BuildingPositionListEncoder<A>
 }
 
 impl<'a> BuildingPositionListDecoder<'a> {
-    pub fn open<A: Allocator>(building_position_list: &'a BuildingPositionList<A>) -> Self {
+    pub fn open(building_position_list: &'a BuildingPositionList) -> Self {
         let byte_slice_list = building_position_list.byte_slice_list.as_ref();
         let building_block = building_position_list.building_block.as_ref();
         let flush_info = building_position_list.building_block.flush_info.load();
@@ -205,8 +196,7 @@ mod tests {
     #[test]
     fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
-        let mut position_list_encoder: BuildingPositionListEncoder =
-            BuildingPositionListEncoder::new();
+        let mut position_list_encoder = BuildingPositionListEncoder::new();
         let building_position_list = position_list_encoder.building_position_list().clone();
         let mut position_list_block = PositionListBlock::new();
         let position_list_decoder = BuildingPositionListDecoder::open(&building_position_list);
@@ -344,8 +334,7 @@ mod tests {
     #[test]
     fn test_multi_thread() -> io::Result<()> {
         const BLOCK_LEN: usize = POSITION_LIST_BLOCK_LEN;
-        let mut position_list_encoder: BuildingPositionListEncoder =
-            BuildingPositionListEncoder::new();
+        let mut position_list_encoder = BuildingPositionListEncoder::new();
         let building_position_list = position_list_encoder.building_position_list().clone();
 
         let positions: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as u32).collect();

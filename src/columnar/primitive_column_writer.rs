@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use allocator_api2::alloc::Global;
-
 use crate::{
     document::{OwnedValue, Value},
     types::NativeType,
@@ -12,7 +10,7 @@ use crate::{
 use super::{ColumnBuildingSegmentData, ColumnWriter, PrimitiveColumnBuildingSegmentData};
 
 pub struct PrimitiveColumnWriter<T: NativeType> {
-    writer: ChunkedVecWriter<T, Global>,
+    writer: ChunkedVecWriter<T>,
     column_data: Arc<PrimitiveColumnBuildingSegmentData<T>>,
 }
 

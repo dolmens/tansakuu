@@ -1,19 +1,16 @@
 use std::{
     alloc::{handle_alloc_error, Layout},
-    ptr::{self, NonNull},
+    ptr::NonNull,
     sync::Arc,
 };
-
-use crate::arena::{Arena, ArenaGuard, BumpArena};
 
 use super::atomic::{AcqRelU64, AcqRelUsize, RelaxedAtomicPtr};
 
 type AtomicWord = AcqRelU64;
 const BITS: usize = std::mem::size_of::<AtomicWord>() * 8;
 
-pub struct ExpandableBitsetWriter<A: Arena = BumpArena> {
+pub struct ExpandableBitsetWriter {
     data: Arc<ExpandableBitsetData>,
-    arena: A,
 }
 
 #[derive(Clone)]
@@ -21,39 +18,39 @@ pub struct ExpandableBitset {
     data: Arc<ExpandableBitsetData>,
 }
 
+struct RecycleNode {
+    layout: Layout,
+    ptr: NonNull<u8>,
+    next: Option<NonNull<RecycleNode>>,
+}
+
 struct ExpandableBitsetData {
     data: RelaxedAtomicPtr<AtomicWord>,
     capacity: AcqRelUsize,
-    _arena_guard: ArenaGuard,
+    recycle_list: RelaxedAtomicPtr<RecycleNode>,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
     (index / BITS, index % BITS)
 }
 
-impl ExpandableBitsetWriter<BumpArena> {
+impl ExpandableBitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
-        Self::with_capacity_in(capacity, BumpArena::new())
-    }
-}
-
-impl<A: Arena> ExpandableBitsetWriter<A> {
-    pub fn with_capacity_in(capacity: usize, arena: A) -> Self {
         let len = (capacity + BITS - 1) / BITS;
         let capacity = len * BITS;
         let layout = Layout::array::<AtomicWord>(len).unwrap();
-        let data = arena
-            .allocate(layout)
-            .unwrap_or_else(|_| handle_alloc_error(layout))
+        let data = unsafe { std::alloc::alloc(layout) };
+        let data = NonNull::new(data)
+            .unwrap_or_else(|| handle_alloc_error(layout))
             .cast::<AtomicWord>();
         for i in 0..len {
             unsafe {
-                ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
+                std::ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
             }
         }
-        let data = Arc::new(ExpandableBitsetData::new(capacity, data, arena.guard()));
+        let data = Arc::new(ExpandableBitsetData::new(capacity, layout, data));
 
-        Self { data, arena }
+        Self { data }
     }
 
     pub fn bitset(&self) -> ExpandableBitset {
@@ -87,23 +84,32 @@ impl<A: Arena> ExpandableBitsetWriter<A> {
         let old_data = self.data_ptr();
 
         let layout = Layout::array::<AtomicWord>(next_len).unwrap();
-        let data = self
-            .arena
-            .allocate(layout)
-            .unwrap_or_else(|_| handle_alloc_error(layout))
+        let data = unsafe { std::alloc::alloc(layout) };
+        let data = NonNull::new(data)
+            .unwrap_or_else(|| handle_alloc_error(layout))
             .cast::<AtomicWord>();
 
         for i in 0..len {
             unsafe {
-                ptr::write(data.as_ptr().add(i), ptr::read(old_data.as_ptr().add(i)));
+                std::ptr::write(
+                    data.as_ptr().add(i),
+                    std::ptr::read(old_data.as_ptr().add(i)),
+                );
             }
         }
 
         for i in len..next_len {
             unsafe {
-                ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
+                std::ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
             }
         }
+
+        let recycle_node = ExpandableBitsetData::new_recycle_node(
+            layout,
+            data.cast(),
+            Some(NonNull::new(self.data.recycle_list.load()).unwrap()),
+        );
+        self.data.recycle_list.store(recycle_node.as_ptr());
 
         self.data.data.store(data.as_ptr());
         self.data.capacity.store(next_len * BITS);
@@ -123,12 +129,31 @@ impl<A: Arena> ExpandableBitsetWriter<A> {
 }
 
 impl ExpandableBitsetData {
-    fn new(capacity: usize, data: NonNull<AtomicWord>, arena_guard: ArenaGuard) -> Self {
+    fn new(capacity: usize, layout: Layout, data: NonNull<AtomicWord>) -> Self {
+        let recycle_node = Self::new_recycle_node(layout, data.cast(), None);
+
         Self {
             data: RelaxedAtomicPtr::new(data.as_ptr()),
             capacity: AcqRelUsize::new(capacity),
-            _arena_guard: arena_guard,
+            recycle_list: RelaxedAtomicPtr::new(recycle_node.as_ptr()),
         }
+    }
+
+    fn new_recycle_node(
+        layout: Layout,
+        ptr: NonNull<u8>,
+        next: Option<NonNull<RecycleNode>>,
+    ) -> NonNull<RecycleNode> {
+        let node_layout = Layout::new::<RecycleNode>();
+        let node = unsafe { std::alloc::alloc(node_layout) };
+        let node = NonNull::new(node)
+            .unwrap_or_else(|| handle_alloc_error(layout))
+            .cast::<RecycleNode>();
+        unsafe {
+            std::ptr::write(node.as_ptr(), RecycleNode { layout, ptr, next });
+        }
+
+        node
     }
 
     fn capacity(&self) -> usize {
@@ -153,6 +178,23 @@ impl ExpandableBitsetData {
             (slot.load() & (1 << rem)) != 0
         } else {
             false
+        }
+    }
+}
+
+impl Drop for ExpandableBitsetData {
+    fn drop(&mut self) {
+        let mut recycle_node = self.recycle_list.load();
+        while !recycle_node.is_null() {
+            let node = recycle_node;
+            let node_ref = unsafe { node.as_ref().unwrap() };
+            recycle_node = node_ref
+                .next
+                .map_or_else(|| std::ptr::null_mut(), |p| p.as_ptr());
+            unsafe {
+                std::alloc::dealloc(node_ref.ptr.as_ptr(), node_ref.layout);
+                std::alloc::dealloc(node.cast(), Layout::new::<RecycleNode>());
+            }
         }
     }
 }

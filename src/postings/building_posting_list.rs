@@ -1,7 +1,5 @@
 use std::io;
 
-use allocator_api2::alloc::{Allocator, Global};
-
 use crate::DocId;
 
 use super::{
@@ -12,37 +10,31 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct BuildingPostingList<A: Allocator = Global> {
-    pub building_doc_list: BuildingDocList<A>,
-    pub building_position_list: Option<BuildingPositionList<A>>,
+pub struct BuildingPostingList {
+    pub building_doc_list: BuildingDocList,
+    pub building_position_list: Option<BuildingPositionList>,
     pub posting_format: PostingFormat,
 }
 
-pub struct BuildingPostingWriter<A: Allocator + Clone = Global> {
-    posting_writer: PostingWriter<BuildingDocListEncoder<A>, BuildingPositionListEncoder<A>>,
-    building_posting_list: BuildingPostingList<A>,
+pub struct BuildingPostingWriter {
+    posting_writer: PostingWriter<BuildingDocListEncoder, BuildingPositionListEncoder>,
+    building_posting_list: BuildingPostingList,
 }
 
-pub struct BuildingPostingReader<'a, A: Allocator = Global> {
+pub struct BuildingPostingReader<'a> {
     posting_reader: PostingReader<BuildingDocListDecoder<'a>, BuildingPositionListDecoder<'a>>,
-    building_posting_list: &'a BuildingPostingList<A>,
+    building_posting_list: &'a BuildingPostingList,
 }
 
-impl<A: Allocator + Clone + Default> BuildingPostingWriter<A> {
+impl BuildingPostingWriter {
     pub fn new(posting_format: PostingFormat) -> Self {
-        Self::new_in(posting_format, A::default())
-    }
-}
-
-impl<A: Allocator + Clone> BuildingPostingWriter<A> {
-    pub fn new_in(posting_format: PostingFormat, allocator: A) -> Self {
         let doc_list_format = posting_format.doc_list_format().clone();
-        let doc_list_encoder = BuildingDocListEncoder::new_in(doc_list_format, allocator.clone());
+        let doc_list_encoder = BuildingDocListEncoder::new(doc_list_format);
         let building_doc_list = doc_list_encoder.building_doc_list().clone();
 
         let (position_list_encoder, building_position_list) = if posting_format.has_position_list()
         {
-            let position_list_encoder = BuildingPositionListEncoder::new_in(allocator.clone());
+            let position_list_encoder = BuildingPositionListEncoder::new();
             let building_position_list = position_list_encoder.building_position_list().clone();
             (Some(position_list_encoder), Some(building_position_list))
         } else {
@@ -67,7 +59,7 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
         }
     }
 
-    pub fn building_posting_list(&self) -> &BuildingPostingList<A> {
+    pub fn building_posting_list(&self) -> &BuildingPostingList {
         &self.building_posting_list
     }
 
@@ -84,8 +76,8 @@ impl<A: Allocator + Clone> BuildingPostingWriter<A> {
     }
 }
 
-impl<'a, A: Allocator> BuildingPostingReader<'a, A> {
-    pub fn open(building_posting_list: &'a BuildingPostingList<A>) -> Self {
+impl<'a> BuildingPostingReader<'a> {
+    pub fn open(building_posting_list: &'a BuildingPostingList) -> Self {
         let doc_list_decoder =
             BuildingDocListDecoder::open(&building_posting_list.building_doc_list);
 
@@ -122,7 +114,7 @@ impl<'a, A: Allocator> BuildingPostingReader<'a, A> {
     }
 }
 
-impl<'a, A: Allocator> PostingRead for BuildingPostingReader<'a, A> {
+impl<'a> PostingRead for BuildingPostingReader<'a> {
     fn decode_doc_buffer(
         &mut self,
         docid: DocId,

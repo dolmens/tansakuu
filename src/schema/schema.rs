@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    ops::BitOr,
-    sync::{Arc, Weak},
-};
+use std::{collections::HashMap, ops::BitOr, sync::Arc};
 
 use super::DataType;
 

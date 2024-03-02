@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use allocator_api2::alloc::Global;
-
 use crate::{
     document::{OwnedValue, Value},
     util::chunked_vec::ChunkedVecWriter,
@@ -11,7 +9,7 @@ use crate::{
 use super::{ColumnBuildingSegmentData, ColumnWriter, StringColumnBuildingSegmentData};
 
 pub struct StringColumnWriter {
-    writer: ChunkedVecWriter<String, Global>,
+    writer: ChunkedVecWriter<String>,
     column_data: Arc<StringColumnBuildingSegmentData>,
 }
 
