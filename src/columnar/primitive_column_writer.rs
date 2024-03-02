@@ -32,24 +32,18 @@ impl<T: NativeType> PrimitiveColumnWriter<T> {
     }
 }
 
-// impl<T: NativeType> ColumnWriter for PrimitiveColumnWriter<T> {
-//     fn add_value(&mut self, value: OwnedValue) {
-//         let pp = PrimitiveValueAccessor::<T>::default().get(&value);
-//         unimplemented!()
-//         // self.writer.push(value.try_into().ok().unwrap());
-//     }
+macro_rules! impl_primitive_column_writer {
+    ($ty:ty, $get_value:ident) => {
+        impl ColumnWriter for PrimitiveColumnWriter<$ty> {
+            fn add_value(&mut self, value: &OwnedValue) {
+                self.writer.push(value.$get_value().unwrap_or_default());
+            }
 
-//     fn column_data(&self) -> Arc<dyn ColumnBuildingSegmentData> {
-//         self.column_data.clone()
-//     }
-// }
-
-impl ColumnWriter for PrimitiveColumnWriter<i64> {
-    fn add_value(&mut self, value: &OwnedValue) {
-        self.writer.push(value.as_i64().unwrap_or_default());
-    }
-
-    fn column_data(&self) -> Arc<dyn ColumnBuildingSegmentData> {
-        self.column_data.clone()
-    }
+            fn column_data(&self) -> Arc<dyn ColumnBuildingSegmentData> {
+                self.column_data.clone()
+            }
+        }
+    };
 }
+
+impl_primitive_column_writer!(i64, as_i64);
