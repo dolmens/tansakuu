@@ -280,7 +280,7 @@ mod tests {
 
         let th = thread::spawn(move || {
             loop {
-                if reader.capacity() < BITS * 6 {
+                if reader.capacity() < BITS * 6 || !reader.contains(BITS * 4) {
                     thread::yield_now();
                 } else {
                     break;
@@ -289,7 +289,6 @@ mod tests {
             assert!(reader.contains(BITS - 1));
             assert!(reader.contains(BITS));
             assert!(reader.contains(BITS * 4 - 1));
-            assert!(reader.contains(BITS * 4));
         });
 
         let capacity = BITS;
