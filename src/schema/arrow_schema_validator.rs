@@ -5,12 +5,15 @@ pub struct ArrowSchemaValidator {}
 
 impl ArrowSchemaValidator {
     pub fn validate(&self, schema: &Schema, arrow_schema: &arrow_schema::Schema) -> bool {
-        let columns: Vec<_> = schema.columns().collect();
-        if columns.len() != arrow_schema.fields().len() {
+        if schema.columns().len() != arrow_schema.fields().len() {
             return false;
         }
 
-        for (&field, &arrow_field) in columns.iter().zip(arrow_schema.all_fields().iter()) {
+        for (field, &arrow_field) in schema
+            .columns()
+            .iter()
+            .zip(arrow_schema.all_fields().iter())
+        {
             if field.name() != arrow_field.name() {
                 return false;
             }

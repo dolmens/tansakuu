@@ -1,5 +1,4 @@
 use std::{
-    cell::Cell,
     collections::HashMap,
     ops::BitOr,
     sync::{Arc, Weak},
@@ -15,25 +14,23 @@ pub struct SchemaBuilder {
 #[derive(Default)]
 pub struct Schema {
     fields: Vec<FieldRef>,
+    columns: Vec<FieldRef>,
     indexes: Vec<IndexRef>,
     primary_key: Option<(FieldRef, IndexRef)>,
-    fields_map: HashMap<String, FieldRef>,
+    fields_map: HashMap<String, (FieldRef, Vec<IndexRef>)>,
     indexes_map: HashMap<String, IndexRef>,
 }
 
 pub type SchemaRef = Arc<Schema>;
 
+#[derive(Debug)]
 pub struct Field {
     name: String,
     field_type: DataType,
     multi: bool,
     columnar: bool,
     stored: bool,
-    indexes: Cell<Vec<IndexWeakRef>>,
 }
-
-unsafe impl Send for Field {}
-unsafe impl Sync for Field {}
 
 pub type FieldRef = Arc<Field>;
 
@@ -51,6 +48,7 @@ pub enum IndexType {
     PrimaryKey,
 }
 
+#[derive(Debug)]
 pub struct Index {
     name: String,
     index_type: IndexType,
@@ -58,7 +56,6 @@ pub struct Index {
 }
 
 pub type IndexRef = Arc<Index>;
-pub type IndexWeakRef = Weak<Index>;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
@@ -142,6 +139,7 @@ impl SchemaBuilder {
             options.columnar = true;
             options.indexed = true;
         }
+
         assert!(!self.schema.fields_map.contains_key(&field_name));
         let field = Arc::new(Field {
             name: field_name,
@@ -149,11 +147,13 @@ impl SchemaBuilder {
             multi: false,
             columnar: options.columnar,
             stored: options.stored,
-            indexes: Cell::new(vec![]),
         });
+        if field.columnar {
+            self.schema.columns.push(field.clone());
+        }
         self.schema
             .fields_map
-            .insert(field.name().to_string(), field.clone());
+            .insert(field.name().to_string(), (field.clone(), Vec::new()));
 
         if options.indexed {
             let fields = vec![field.name().to_string()];
@@ -172,8 +172,7 @@ impl SchemaBuilder {
         assert!(!self.schema.indexes_map.contains_key(&index_name));
         let field_refs: Vec<_> = fields
             .iter()
-            .map(|f| self.schema.field(f).unwrap())
-            .cloned()
+            .map(|f| self.schema.fields_map.get(f).unwrap().0.clone())
             .collect();
 
         let index = Arc::new(Index {
@@ -182,10 +181,13 @@ impl SchemaBuilder {
             fields: field_refs,
         });
 
-        for field_name in fields {
-            let field = self.schema.field(field_name).unwrap();
-            let field_indexes = unsafe { &mut *field.indexes.as_ptr() };
-            field_indexes.push(Arc::downgrade(&index));
+        for field in fields {
+            self.schema
+                .fields_map
+                .get_mut(field)
+                .unwrap()
+                .1
+                .push(index.clone());
         }
 
         if index.index_type == IndexType::PrimaryKey {
@@ -210,8 +212,10 @@ impl Schema {
         SchemaBuilder::new()
     }
 
-    pub fn field(&self, field_name: &str) -> Option<&FieldRef> {
-        self.fields_map.get(field_name)
+    pub fn field(&self, field_name: &str) -> Option<(&FieldRef, &[IndexRef])> {
+        self.fields_map
+            .get(field_name)
+            .map(|(field, indexes)| (field, indexes.as_slice()))
     }
 
     pub fn index(&self, index_name: &str) -> Option<&IndexRef> {
@@ -228,8 +232,8 @@ impl Schema {
         &self.indexes
     }
 
-    pub fn columns(&self) -> impl Iterator<Item = &FieldRef> {
-        self.fields.iter().filter(|f| f.columnar)
+    pub fn columns(&self) -> &[FieldRef] {
+        &self.columns
     }
 
     pub fn fields(&self) -> &[FieldRef] {
@@ -246,16 +250,8 @@ impl Index {
         &self.index_type
     }
 
-    pub fn field_offset(&self, field: &str) -> usize {
-        if self.fields.len() == 1 {
-            return 0;
-        }
-        for (i, f) in self.fields.iter().enumerate() {
-            if f.name() == field {
-                return i;
-            }
-        }
-        0
+    pub fn field_offset(&self, field: &str) -> Option<usize> {
+        self.fields.iter().position(|f| f.name() == field)
     }
 
     pub fn fields(&self) -> &[FieldRef] {
@@ -279,166 +275,140 @@ impl Field {
     pub fn is_stored(&self) -> bool {
         self.stored
     }
-
-    pub fn indexes(&self) -> &[IndexWeakRef] {
-        unsafe { &*self.indexes.as_ptr() }
-    }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::schema::{
-//         schema::{FieldEntry, FieldOptions, IndexEntry, COLUMN, INDEXED},
-//         Field, FieldType, Index, IndexType, PRIMARY_KEY,
-//     };
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
 
-//     use super::SchemaBuilder;
+    use crate::schema::{
+        schema::FieldOptions, IndexType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY,
+    };
 
-//     #[test]
-//     fn test_field_options_bitor() {
-//         assert_eq!(
-//             COLUMN | INDEXED,
-//             FieldOptions {
-//                 multi: false,
-//                 column: true,
-//                 indexed: true,
-//                 stored: false,
-//                 primary_key: false,
-//             }
-//         );
-//     }
+    #[test]
+    fn test_field_options_bitor() {
+        assert_eq!(
+            COLUMNAR | INDEXED,
+            FieldOptions {
+                multi: false,
+                columnar: true,
+                indexed: true,
+                stored: false,
+                primary_key: false,
+            }
+        );
+    }
 
-//     #[test]
-//     fn test_schema_builder() {
-//         let mut builder = SchemaBuilder::new();
-//         // column and indexed
-//         builder.add_text_field("f1".to_string(), COLUMN | INDEXED);
-//         assert_eq!(
-//             builder.schema.fields[0],
-//             Field {
-//                 name: "f1".to_string(),
-//                 field_type: FieldType::Str,
-//                 multi: false,
-//                 column: true,
-//                 stored: false,
-//                 index_entries: vec![IndexEntry(0)],
-//                 index_names: vec!["f1".to_string()]
-//             }
-//         );
-//         assert_eq!(
-//             builder.schema.indexes[0],
-//             Index {
-//                 name: "f1".to_string(),
-//                 index_type: IndexType::Text,
-//                 field_entries: vec![FieldEntry(0)],
-//                 field_names: vec!["f1".to_string()]
-//             }
-//         );
-//         assert_eq!(builder.schema.fields_map.get("f1"), Some(&FieldEntry(0)));
-//         assert_eq!(builder.schema.indexes_map.get("f1"), Some(&IndexEntry(0)));
+    #[test]
+    fn test_schema_builder() {
+        let mut builder = SchemaBuilder::new();
+        {
+            // column and indexed
+            builder.add_text_field("f1".to_string(), COLUMNAR | INDEXED);
+            assert_eq!(builder.schema.fields.len(), 1);
+            let field1 = &builder.schema.fields[0];
+            assert_eq!(field1.name(), "f1");
+            assert_eq!(field1.columnar, true);
+            assert_eq!(builder.schema.indexes.len(), 1);
+            let index1 = &builder.schema.indexes[0];
+            assert_eq!(index1.name(), "f1");
+            assert_eq!(builder.schema.columns.len(), 1);
+            let column1 = &builder.schema.columns[0];
+            assert!(Arc::ptr_eq(field1, column1));
+            assert_eq!(index1.fields.len(), 1);
+            assert!(Arc::ptr_eq(field1, &index1.fields[0]));
+            assert_eq!(builder.schema.fields_map.len(), 1);
+            let (field, indexes) = builder.schema.fields_map.get("f1").unwrap();
+            assert!(Arc::ptr_eq(field1, field));
+            assert_eq!(indexes.len(), 1);
+            assert!(Arc::ptr_eq(index1, &indexes[0]));
+            assert_eq!(builder.schema.indexes_map.len(), 1);
+            let index = builder.schema.indexes_map.get("f1").unwrap();
+            assert!(Arc::ptr_eq(index1, index));
+        }
 
-//         // only column
-//         builder.add_text_field("f2".to_string(), COLUMN);
-//         assert_eq!(
-//             builder.schema.fields[1],
-//             Field {
-//                 name: "f2".to_string(),
-//                 field_type: FieldType::Str,
-//                 multi: false,
-//                 column: true,
-//                 stored: false,
-//                 index_entries: vec![],
-//                 index_names: vec![]
-//             }
-//         );
-//         assert_eq!(builder.schema.fields_map.get("f2"), Some(&FieldEntry(1)));
-//         assert_eq!(builder.schema.indexes_map.get("f2"), None);
+        {
+            // only column
+            builder.add_text_field("f2".to_string(), COLUMNAR);
+            assert_eq!(builder.schema.fields.len(), 2);
+            let field2 = &builder.schema.fields[1];
+            assert_eq!(field2.name(), "f2");
+            assert_eq!(builder.schema.columns.len(), 2);
+            assert!(Arc::ptr_eq(field2, &builder.schema.columns[1]));
+            assert_eq!(builder.schema.indexes.len(), 1);
+            assert_eq!(builder.schema.fields_map.len(), 2);
+            let (field, indexes) = builder.schema.fields_map.get("f2").unwrap();
+            assert!(Arc::ptr_eq(field2, field));
+            assert_eq!(indexes.len(), 0);
+        }
 
-//         // add index
-//         builder.add_index("f2".to_string(), IndexType::Text, &vec!["f2".to_string()]);
-//         assert_eq!(
-//             builder.schema.fields[1],
-//             Field {
-//                 name: "f2".to_string(),
-//                 field_type: FieldType::Str,
-//                 multi: false,
-//                 column: true,
-//                 stored: false,
-//                 index_entries: vec![IndexEntry(1)],
-//                 index_names: vec!["f2".to_string()]
-//             }
-//         );
-//         assert_eq!(
-//             builder.schema.indexes[1],
-//             Index {
-//                 name: "f2".to_string(),
-//                 index_type: IndexType::Text,
-//                 field_entries: vec![FieldEntry(1)],
-//                 field_names: vec!["f2".to_string()]
-//             }
-//         );
-//         assert_eq!(builder.schema.indexes_map.get("f2"), Some(&IndexEntry(1)));
+        {
+            // add index
+            builder.add_index(
+                "i2".to_string(),
+                IndexType::Text(Default::default()),
+                &vec!["f2".to_string()],
+            );
+            assert_eq!(builder.schema.indexes.len(), 2);
+            let index2 = &builder.schema.indexes[1];
+            assert_eq!(index2.name(), "i2");
+            let index = builder.schema.indexes_map.get("i2").unwrap();
+            assert!(Arc::ptr_eq(index2, index));
+            let (field, indexes) = builder.schema.fields_map.get("f2").unwrap();
+            let field2 = &builder.schema.fields[1];
+            assert!(Arc::ptr_eq(field2, field));
+            assert_eq!(indexes.len(), 1);
+        }
 
-//         // add union index
-//         builder.add_index(
-//             "f3".to_string(),
-//             IndexType::Text,
-//             &vec!["f1".to_string(), "f2".to_string()],
-//         );
-//         assert_eq!(
-//             builder.schema.fields[0],
-//             Field {
-//                 name: "f1".to_string(),
-//                 field_type: FieldType::Str,
-//                 multi: false,
-//                 column: true,
-//                 stored: false,
-//                 index_entries: vec![IndexEntry(0), IndexEntry(2)],
-//                 index_names: vec!["f1".to_string(), "f3".to_string()]
-//             }
-//         );
-//         assert_eq!(
-//             builder.schema.fields[1],
-//             Field {
-//                 name: "f2".to_string(),
-//                 field_type: FieldType::Str,
-//                 multi: false,
-//                 column: true,
-//                 stored: false,
-//                 index_entries: vec![IndexEntry(1), IndexEntry(2)],
-//                 index_names: vec!["f2".to_string(), "f3".to_string()]
-//             }
-//         );
-//         assert_eq!(
-//             builder.schema.indexes[2],
-//             Index {
-//                 name: "f3".to_string(),
-//                 index_type: IndexType::Text,
-//                 field_entries: vec![FieldEntry(0), FieldEntry(1)],
-//                 field_names: vec!["f1".to_string(), "f2".to_string()]
-//             }
-//         );
-//     }
+        {
+            // add union index
+            builder.add_index(
+                "i3".to_string(),
+                IndexType::Text(Default::default()),
+                &vec!["f1".to_string(), "f2".to_string()],
+            );
+            assert_eq!(builder.schema.indexes.len(), 3);
+            let index3 = &builder.schema.indexes[2];
+            assert_eq!(index3.name(), "i3");
+            assert_eq!(builder.schema.indexes_map.len(), 3);
+            let index = builder.schema.indexes_map.get("i3").unwrap();
+            assert!(Arc::ptr_eq(index3, index));
+            assert_eq!(index3.fields.len(), 2);
+            assert_eq!(index3.fields[0].name(), "f1");
+            assert_eq!(index3.fields[1].name(), "f2");
+            let (field1, indexes1) = builder.schema.fields_map.get("f1").unwrap();
+            assert!(Arc::ptr_eq(field1, &builder.schema.fields[0]));
+            assert_eq!(indexes1.len(), 2);
+            assert!(Arc::ptr_eq(&indexes1[0], &builder.schema.indexes[0]));
+            assert!(Arc::ptr_eq(&indexes1[1], &builder.schema.indexes[2]));
+            let (field2, indexes2) = builder.schema.fields_map.get("f2").unwrap();
+            assert!(Arc::ptr_eq(field2, &builder.schema.fields[1]));
+            assert_eq!(indexes1.len(), 2);
+            assert!(Arc::ptr_eq(&indexes2[0], &builder.schema.indexes[1]));
+            assert!(Arc::ptr_eq(&indexes2[1], &builder.schema.indexes[2]));
+        }
+    }
 
-//     #[test]
-//     fn test_primary_key() {
-//         let mut builder = SchemaBuilder::new();
-//         builder.add_text_field("f1".to_string(), COLUMN | PRIMARY_KEY);
-//         assert_eq!(
-//             builder.schema.primary_key(),
-//             Some((&builder.schema.fields[0], &builder.schema.indexes[0]))
-//         );
-//     }
+    #[test]
+    fn test_primary_key() {
+        let mut builder = SchemaBuilder::default();
+        builder.add_text_field("f1".to_string(), COLUMNAR | PRIMARY_KEY);
+        let (field, indexes) = builder.schema.field("f1").unwrap();
+        let (pk_field, pk_index) = builder.schema.primary_key().unwrap();
+        assert!(Arc::ptr_eq(field, pk_field));
+        assert_eq!(indexes.len(), 1);
+        assert!(Arc::ptr_eq(&indexes[0], pk_index));
+    }
 
-//     #[test]
-//     fn test_columns() {
-//         let mut builder = SchemaBuilder::new();
-//         builder.add_text_field("f1".to_string(), COLUMN | INDEXED);
-//         builder.add_i64_field("f2".to_string(), INDEXED);
-//         builder.add_i64_field("f3".to_string(), COLUMN);
-//         let fields: Vec<_> = builder.schema.fields().iter().map(|f| f.name()).collect();
-//         assert_eq!(fields, vec!["f1", "f2", "f3"]);
-//         let columns: Vec<_> = builder.schema.columns().map(|f| f.name()).collect();
-//         assert_eq!(columns, vec!["f1", "f3"]);
-//     }
-// }
+    #[test]
+    fn test_columns() {
+        let mut builder = SchemaBuilder::default();
+        builder.add_text_field("f1".to_string(), COLUMNAR | INDEXED);
+        builder.add_i64_field("f2".to_string(), INDEXED);
+        builder.add_i64_field("f3".to_string(), COLUMNAR);
+        let fields: Vec<_> = builder.schema.fields().iter().map(|f| f.name()).collect();
+        assert_eq!(fields, vec!["f1", "f2", "f3"]);
+        let columns: Vec<_> = builder.schema.columns().iter().map(|f| f.name()).collect();
+        assert_eq!(columns, vec!["f1", "f3"]);
+    }
+}

@@ -27,7 +27,7 @@ impl PersistentSegmentColumnData {
         let doc_count = record_batch.num_rows();
 
         let mut columns = HashMap::new();
-        for (i, field) in schema.columns().enumerate() {
+        for (i, field) in schema.columns().iter().enumerate() {
             let values = record_batch.column(i).clone();
             let data = ColumnPersistentSegmentData::new(doc_count, values);
             columns.insert(field.name().to_string(), data);

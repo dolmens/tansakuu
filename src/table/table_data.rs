@@ -240,12 +240,8 @@ impl TableData {
         self.directory.as_ref()
     }
 
-    pub fn persistent_segments(&self) -> impl Iterator<Item = &PersistentSegment> {
-        self.persistent_segments.iter()
-    }
-
-    pub fn persistent_segments_mut(&mut self) -> impl Iterator<Item = &mut PersistentSegment> {
-        self.persistent_segments.iter_mut()
+    pub fn persistent_segments(&self) -> &[PersistentSegment] {
+        &self.persistent_segments
     }
 
     pub fn active_building_segment(&self) -> Option<&BuildingSegment> {
@@ -254,12 +250,8 @@ impl TableData {
             .filter(|seg| !seg.is_dumping())
     }
 
-    pub fn building_segments(&self) -> impl Iterator<Item = &BuildingSegment> {
-        self.building_segments.iter()
-    }
-
-    pub fn building_segments_mut(&mut self) -> impl Iterator<Item = &mut BuildingSegment> {
-        self.building_segments.iter_mut()
+    pub fn building_segments(&self) -> &[BuildingSegment] {
+        &self.building_segments
     }
 
     pub fn segment_of_docid(&self, docid: DocId) -> Option<(&SegmentId, DocId)> {

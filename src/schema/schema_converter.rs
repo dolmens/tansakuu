@@ -9,9 +9,8 @@ pub struct SchemaConverter {}
 
 impl SchemaConverter {
     pub fn convert_to_arrow(&self, schema: &Schema) -> ArrowSchema {
-        let fields: Vec<_> = schema.columns().collect();
-        let mut arrow_fields = Vec::with_capacity(fields.len());
-        for field in fields {
+        let mut arrow_fields = Vec::with_capacity(schema.columns().len());
+        for field in schema.columns() {
             match field.data_type() {
                 DataType::String => {
                     let arrow_field =

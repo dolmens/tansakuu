@@ -33,7 +33,7 @@ where
             doc.iter_fields_and_values().filter(|(field, _)| {
                 self.schema
                     .field(*field)
-                    .is_some_and(|field| field.is_stored())
+                    .is_some_and(|field| field.0.is_stored())
             })
         };
         let num_field_values = stored_field_values().count();

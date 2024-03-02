@@ -86,7 +86,7 @@ impl IndexWriter for InvertedIndexWriter {
                 })
                 .clone();
             let posting_writer = &mut self.posting_writers[writer_index];
-            let field_offset = self.index_data.index.field_offset(field);
+            let field_offset = self.index_data.index.field_offset(field).unwrap_or_default();
             posting_writer.add_pos(field_offset, pos as u32).unwrap();
             self.modified_postings.insert(writer_index);
         }
