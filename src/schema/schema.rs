@@ -146,17 +146,21 @@ impl SchemaBuilder {
     }
 
     pub fn add_field(&mut self, field_name: String, field_type: DataType, options: FieldOptions) {
+        assert!(
+            !self.schema.fields_map.contains_key(&field_name),
+            "Field `{field_name}` already exist."
+        );
+
         let mut options = options;
         if options.primary_key {
             options.columnar = true;
             options.indexed = true;
         }
 
-        assert!(!self.schema.fields_map.contains_key(&field_name));
         let field = Arc::new(Field {
             name: field_name,
             field_type,
-            multi: false,
+            multi: options.multi,
             columnar: options.columnar,
             stored: options.stored,
         });
@@ -192,14 +196,26 @@ impl SchemaBuilder {
         primary_key: bool,
         fields: &[String],
     ) {
-        assert!(!self.schema.indexes_map.contains_key(&index_name));
+        assert!(
+            !self.schema.indexes_map.contains_key(&index_name),
+            "Index `{index_name}` alreay exist."
+        );
+
         let field_refs: Vec<_> = fields
             .iter()
             .map(|f| self.schema.fields_map.get(f).unwrap().0.clone())
             .collect();
 
         if index_type == IndexType::UniqueKey {
-            assert_eq!(field_refs.len(), 1);
+            assert_eq!(
+                field_refs.len(),
+                1,
+                "UniqueKey `{index_name}` should only index one field."
+            );
+            assert!(
+                !field_refs[0].multi,
+                "UniqueKey `{index_name}` field should not be multi."
+            )
         }
 
         let index = Arc::new(Index {
@@ -218,9 +234,17 @@ impl SchemaBuilder {
         }
 
         if primary_key {
-            assert_eq!(index.index_type, IndexType::UniqueKey);
-            assert!(self.schema.primary_key.is_none());
-            assert_eq!(index.fields.len(), 1);
+            assert_eq!(
+                index.index_type,
+                IndexType::UniqueKey,
+                "PrimaryKey `{}` should be UniqueKey index.",
+                index.name()
+            );
+            assert!(
+                self.schema.primary_key.is_none(),
+                "PrimaryKey `{}` already exist.",
+                index.name()
+            );
             self.schema.primary_key = Some((index.fields[0].clone(), index.clone()));
         }
 
