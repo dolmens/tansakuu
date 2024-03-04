@@ -21,6 +21,7 @@ impl IndexWriterFactory {
                 index.clone(),
                 recent_segment_stat.clone(),
             )),
+            IndexType::PrimaryKey => Box::new(UniqueKeyWriter::new(recent_segment_stat.clone())),
             IndexType::UniqueKey => Box::new(UniqueKeyWriter::new(recent_segment_stat.clone())),
         }
     }

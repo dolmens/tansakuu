@@ -41,6 +41,7 @@ pub struct TextIndexOptions {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexType {
     Text(TextIndexOptions),
+    PrimaryKey,
     UniqueKey,
 }
 
@@ -63,7 +64,7 @@ pub struct FieldOptions {
     primary_key: bool,
 }
 
-pub const DEFAULT: FieldOptions = FieldOptions {
+pub const BARE_FIELD: FieldOptions = FieldOptions {
     multi: false,
     columnar: false,
     indexed: false,
@@ -102,7 +103,7 @@ pub const INDEXED: FieldOptions = FieldOptions {
 pub const UNIQUE_KEY: FieldOptions = FieldOptions {
     multi: false,
     columnar: false,
-    indexed: false,
+    indexed: true,
     stored: false,
     unique_key: true,
     primary_key: false,
@@ -111,9 +112,9 @@ pub const UNIQUE_KEY: FieldOptions = FieldOptions {
 pub const PRIMARY_KEY: FieldOptions = FieldOptions {
     multi: false,
     columnar: false,
-    indexed: false,
+    indexed: true,
     stored: false,
-    unique_key: true,
+    unique_key: false,
     primary_key: true,
 };
 
@@ -173,29 +174,20 @@ impl SchemaBuilder {
 
         if options.indexed {
             let fields = vec![field.name().to_string()];
-            let index_type = if options.unique_key {
+            let index_type = if options.primary_key {
+                IndexType::PrimaryKey
+            } else if options.unique_key {
                 IndexType::UniqueKey
             } else {
                 IndexType::Text(Default::default())
             };
-            self.add_index(
-                field.name().to_string(),
-                index_type,
-                options.primary_key,
-                &fields,
-            );
+            self.add_index(field.name().to_string(), index_type, &fields);
         }
 
         self.schema.fields.push(field);
     }
 
-    pub fn add_index(
-        &mut self,
-        index_name: String,
-        index_type: IndexType,
-        primary_key: bool,
-        fields: &[String],
-    ) {
+    pub fn add_index(&mut self, index_name: String, index_type: IndexType, fields: &[String]) {
         assert!(
             !self.schema.indexes_map.contains_key(&index_name),
             "Index `{index_name}` alreay exist."
@@ -206,7 +198,21 @@ impl SchemaBuilder {
             .map(|f| self.schema.fields_map.get(f).unwrap().0.clone())
             .collect();
 
-        if index_type == IndexType::UniqueKey {
+        if matches!(index_type, IndexType::PrimaryKey) {
+            // TODO: validate field type, only primitive allowed
+            assert_eq!(
+                field_refs.len(),
+                1,
+                "PrimaryKey `{index_name}` should only index one field."
+            );
+            assert!(
+                !field_refs[0].multi,
+                "PrimaryKey `{index_name}` field should not be multi."
+            )
+        }
+
+        if matches!(index_type, IndexType::UniqueKey) {
+            // TODO: validate field type, only primitive allowed
             assert_eq!(
                 field_refs.len(),
                 1,
@@ -233,17 +239,10 @@ impl SchemaBuilder {
                 .push(index.clone());
         }
 
-        if primary_key {
-            assert_eq!(
-                index.index_type,
-                IndexType::UniqueKey,
-                "PrimaryKey `{}` should be UniqueKey index.",
-                index.name()
-            );
+        if matches!(index.index_type(), IndexType::PrimaryKey) {
             assert!(
                 self.schema.primary_key.is_none(),
-                "PrimaryKey `{}` already exist.",
-                index.name()
+                "PrimaryKey already exist.",
             );
             self.schema.primary_key = Some((index.fields[0].clone(), index.clone()));
         }
@@ -400,7 +399,6 @@ mod tests {
             builder.add_index(
                 "i2".to_string(),
                 IndexType::Text(Default::default()),
-                false,
                 &vec!["f2".to_string()],
             );
             assert_eq!(builder.schema.indexes.len(), 2);
@@ -419,7 +417,6 @@ mod tests {
             builder.add_index(
                 "i3".to_string(),
                 IndexType::Text(Default::default()),
-                false,
                 &vec!["f1".to_string(), "f2".to_string()],
             );
             assert_eq!(builder.schema.indexes.len(), 3);

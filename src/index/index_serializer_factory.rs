@@ -28,9 +28,13 @@ impl IndexSerializerFactory {
                     inverted_index_data,
                 ))
             }
-            IndexType::UniqueKey => {
+            IndexType::PrimaryKey => {
                 let primary_key_data = index_data.downcast_arc().ok().unwrap();
                 Box::new(UniqueKeySerializer::new(index, primary_key_data))
+            }
+            IndexType::UniqueKey => {
+                let unique_key_data = index_data.downcast_arc().ok().unwrap();
+                Box::new(UniqueKeySerializer::new(index, unique_key_data))
             }
         }
     }
