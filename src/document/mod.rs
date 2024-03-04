@@ -153,60 +153,28 @@
 //!
 //! TODO: Complete this section...
 
-mod de;
+// mod de;
+// mod se;
 // mod existing_type_impls;
-mod binary_serializer_cow;
-mod cow_string;
+// mod binary_serializer_cow;
+//mod cow_string;
+
+mod document;
+mod inner_input_document;
 mod input_document;
 mod owned_value;
-mod se;
 mod value;
 
-pub use cow_string::CowString;
+//pub use cow_string::CowString;
 // pub(crate) use self::de::BinaryDocumentDeserializer;
-pub use self::de::{
-    ArrayAccess, DeserializeError, DocumentDeserialize, DocumentDeserializer, ObjectAccess,
-    ValueDeserialize, ValueDeserializer, ValueType, ValueVisitor,
-};
+// pub use self::de::{
+//     ArrayAccess, DeserializeError, DocumentDeserialize, DocumentDeserializer, ObjectAccess,
+//     ValueDeserialize, ValueDeserializer, ValueType, ValueVisitor,
+// };
+// pub(crate) use self::se::BinaryDocumentSerializer;
+
+pub use self::document::Document;
+pub use self::inner_input_document::InnerInputDocument;
 pub use self::input_document::InputDocument;
 pub use self::owned_value::OwnedValue;
-// pub(crate) use self::se::BinaryDocumentSerializer;
-pub use self::value::{value_to_string, ReferenceValue, ReferenceValueLeaf, Value};
-
-/// The core trait representing a document within the index.
-pub trait Document: Send + Sync + 'static {
-    /// The value of the field.
-    type Value<'a>: Value<'a> + Clone
-    where
-        Self: 'a;
-
-    /// The iterator over all of the fields and values within the doc.
-    type FieldsValuesIter<'a>: Iterator<Item = (&'a str, Self::Value<'a>)>
-    where
-        Self: 'a;
-
-    /// Get an iterator iterating over all fields and values in a document.
-    fn iter_fields_and_values(&self) -> Self::FieldsValuesIter<'_>;
-}
-
-pub(crate) mod type_codes {
-    pub const TEXT_CODE: u8 = 0;
-    pub const U64_CODE: u8 = 1;
-    pub const I64_CODE: u8 = 2;
-    pub const HIERARCHICAL_FACET_CODE: u8 = 3;
-    pub const BYTES_CODE: u8 = 4;
-    pub const DATE_CODE: u8 = 5;
-    pub const F64_CODE: u8 = 6;
-    pub const EXT_CODE: u8 = 7;
-
-    #[deprecated]
-    pub const JSON_OBJ_CODE: u8 = 8; // Replaced by the `OBJECT_CODE`.
-    pub const BOOL_CODE: u8 = 9;
-    pub const IP_CODE: u8 = 10;
-    pub const NULL_CODE: u8 = 11;
-    pub const ARRAY_CODE: u8 = 12;
-    pub const OBJECT_CODE: u8 = 13;
-
-    // Extended type codes
-    pub const TOK_STR_EXT_CODE: u8 = 0;
-}
+pub use self::value::{ReferenceValue, ReferenceValueLeaf, Value};

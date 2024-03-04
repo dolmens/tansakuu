@@ -397,7 +397,3 @@ where
         matches!(self, Self::Object(_))
     }
 }
-
-pub fn value_to_string<'a, V: Value<'a>>(v: V) -> String {
-    "".to_string()
-}

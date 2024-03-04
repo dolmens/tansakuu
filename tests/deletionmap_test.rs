@@ -40,12 +40,12 @@ fn test_delete_doc() {
     let mut doc1 = InputDocument::new();
     doc1.add_field("item_id".to_string(), 100 as i64);
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("item_id".to_string(), 200 as i64);
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -94,14 +94,14 @@ fn test_delete_doc() {
     let mut doc3 = InputDocument::new();
     doc3.add_field("item_id".to_string(), 300 as i64);
     doc3.add_field("title".to_string(), "hello world 3");
-    writer.add_document(&doc3);
+    writer.add_document(doc3);
 
     assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1]);
 
     let mut doc4 = InputDocument::new();
     doc4.add_field("item_id".to_string(), 400 as i64);
     doc4.add_field("title".to_string(), "world peace 4");
-    writer.add_document(&doc4);
+    writer.add_document(doc4);
 
     let term_300 = Term::new("item_id".to_string(), "300".to_string());
     writer.delete_documents(&term_300);
@@ -128,12 +128,12 @@ fn test_building_segment_all_deleted() {
     let mut doc1 = InputDocument::new();
     doc1.add_field("item_id".to_string(), 100 as i64);
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("item_id".to_string(), 200 as i64);
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -162,7 +162,7 @@ fn test_building_segment_all_deleted() {
     let mut doc3 = InputDocument::new();
     doc3.add_field("item_id".to_string(), 300 as i64);
     doc3.add_field("title".to_string(), "hello world 3");
-    writer.add_document(&doc3);
+    writer.add_document(doc3);
 
     assert_eq!(get_all_docs(index_reader, &world), vec![0]);
 }

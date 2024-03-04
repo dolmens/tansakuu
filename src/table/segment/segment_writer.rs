@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    deletionmap::BuildingDeletionMapWriter, document::Document, schema::SchemaRef, DocId,
+    deletionmap::BuildingDeletionMapWriter, document::InnerInputDocument, schema::SchemaRef, DocId,
     ESTIMATE_SEGMENT_DOC_COUNT, ESTIMATE_SEGMENT_INC_FACTOR,
 };
 
@@ -42,11 +42,11 @@ impl SegmentWriter {
         }
     }
 
-    pub fn add_document<D: Document>(&mut self, doc: &D) {
+    pub fn add_document(&mut self, document: InnerInputDocument) {
         let docid = self.doc_count as DocId;
         // First column then index, so that indexed documents must be in column.
-        self.column_writer.add_document(doc, docid);
-        self.index_writer.add_document(doc, docid);
+        self.column_writer.add_document(&document, docid);
+        self.index_writer.add_document(&document, docid);
         self.doc_count += 1;
         self.building_segment_data.set_doc_count(self.doc_count);
     }

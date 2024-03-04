@@ -17,8 +17,12 @@ impl InputDocument {
         }
     }
 
-    pub fn add_field<I: Into<OwnedValue>>(&mut self, name: String, value: I) {
-        self.fields.insert(name, value.into());
+    pub fn add_field<I: Into<OwnedValue>>(&mut self, field_name: String, value: I) {
+        self.fields.insert(field_name, value.into());
+    }
+
+    pub fn get_field(&self, field_name: &str) -> Option<&OwnedValue> {
+        self.fields.get(field_name)
     }
 }
 

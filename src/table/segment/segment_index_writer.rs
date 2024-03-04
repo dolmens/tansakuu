@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    document::Document,
+    document::InnerInputDocument,
     index::{IndexWriter, IndexWriterFactory},
     schema::SchemaRef,
     DocId,
@@ -32,14 +32,13 @@ impl SegmentIndexWriter {
         }
     }
 
-    pub fn add_document<D: Document>(&mut self, doc: &D, docid: DocId) {
+    pub fn add_document(&mut self, document: &InnerInputDocument, docid: DocId) {
         let mut indexes = BTreeSet::new();
-        for (field, value) in doc.iter_fields_and_values() {
-            let owned_value = value.into();
+        for (field, value) in document.iter_fields_and_values() {
             if let Some((field, field_indexes)) = self.schema.field(field) {
                 for index in field_indexes.iter() {
                     let index_writer = self.indexes.get_mut(index.name()).unwrap();
-                    index_writer.add_field(field.name(), &owned_value);
+                    index_writer.add_field(field.name(), value);
                     indexes.insert(index.name().to_string());
                 }
             }

@@ -38,11 +38,11 @@ fn test_basic() {
 
     let mut doc1 = InputDocument::new();
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -81,12 +81,12 @@ fn test_segment_serialize() {
     let mut doc1 = InputDocument::new();
     doc1.add_field("item_id".to_string(), 100 as i64);
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("item_id".to_string(), 200 as i64);
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -128,7 +128,7 @@ fn test_segment_serialize() {
     let mut doc3 = InputDocument::new();
     doc3.add_field("item_id".to_string(), 300 as i64);
     doc3.add_field("title".to_string(), "hello");
-    writer.add_document(&doc3);
+    writer.add_document(doc3);
 
     // Still OLD Readers
     let term = Term::new("title".to_string(), "hello".to_string());
@@ -187,12 +187,12 @@ fn test_segment_merge() {
     let mut doc1 = InputDocument::new();
     doc1.add_field("item_id".to_string(), 100 as i64);
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("item_id".to_string(), 200 as i64);
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -234,7 +234,7 @@ fn test_segment_merge() {
     let mut doc3 = InputDocument::new();
     doc3.add_field("item_id".to_string(), 300 as i64);
     doc3.add_field("title".to_string(), "hello");
-    writer.add_document(&doc3);
+    writer.add_document(doc3);
 
     // Still OLD Readers
     let term = Term::new("title".to_string(), "hello".to_string());

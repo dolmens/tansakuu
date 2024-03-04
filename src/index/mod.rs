@@ -8,7 +8,7 @@ mod index_serializer;
 mod index_serializer_factory;
 mod index_writer;
 mod index_writer_factory;
-mod inverted_index;
+pub mod inverted_index;
 mod posting_iterator;
 mod unique_key;
 

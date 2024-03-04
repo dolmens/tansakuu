@@ -68,7 +68,7 @@ impl Facet {
         &self.0
     }
 
-    pub(crate) fn from_encoded_string(facet_string: String) -> Facet {
+    pub fn from_encoded_string(facet_string: String) -> Facet {
         Facet(facet_string)
     }
 

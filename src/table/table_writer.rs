@@ -24,8 +24,8 @@ impl TableWriter {
         }
     }
 
-    pub fn add_document<D: Document>(&mut self, doc: &D) {
-        self.segment_writer.add_document(doc);
+    pub fn add_document<D: Document>(&mut self, document: D) {
+        self.segment_writer.add_document(document.into());
     }
 
     pub fn delete_documents(&mut self, term: &Term) {

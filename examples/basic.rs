@@ -34,11 +34,11 @@ pub fn main() {
 
     let mut doc1 = InputDocument::new();
     doc1.add_field("title".to_string(), "hello world");
-    writer.add_document(&doc1);
+    writer.add_document(doc1);
 
     let mut doc2 = InputDocument::new();
     doc2.add_field("title".to_string(), "world peace");
-    writer.add_document(&doc2);
+    writer.add_document(doc2);
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
