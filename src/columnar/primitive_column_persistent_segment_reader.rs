@@ -1,4 +1,4 @@
-use arrow::array::PrimitiveArray;
+use arrow::array::{Array, PrimitiveArray};
 
 use crate::{types::PrimitiveType, DocId};
 
@@ -21,7 +21,11 @@ impl<T: PrimitiveType> PrimitiveColumnPersistentSegmentReader<T> {
     }
 
     pub fn get(&self, docid: DocId) -> Option<T::Native> {
-        Some(self.values.value(docid as usize))
+        if self.values.is_null(docid as usize) {
+            None
+        } else {
+            Some(self.values.value(docid as usize))
+        }
     }
 
     pub fn doc_count(&self) -> usize {

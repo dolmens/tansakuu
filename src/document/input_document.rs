@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use super::{Document, OwnedValue};
 
+#[derive(Default)]
 pub struct InputDocument {
     fields: BTreeMap<String, OwnedValue>,
 }
@@ -9,6 +10,29 @@ pub struct InputDocument {
 pub struct InputFieldValueIter<'a>(
     pub(crate) std::collections::btree_map::Iter<'a, String, OwnedValue>,
 );
+
+#[macro_export]
+macro_rules! doc(
+    () => {
+        {
+            ($crate::document::InputDocument::default())
+        }
+    }; // avoids a warning due to the useless `mut`.
+    ($($field:ident => $value:expr),*) => {
+        {
+            let mut document = $crate::document::InputDocument::default();
+            $(
+                document.add_field(stringify!($field).to_string(), $value);
+            )*
+            document
+        }
+    };
+    // if there is a trailing comma retry with the trailing comma stripped.
+    ($($field:ident => $value:expr),+ ,) => {
+        doc!( $( $field => $value ), *)
+    };
+);
+
 
 impl InputDocument {
     pub fn new() -> Self {

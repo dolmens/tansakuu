@@ -23,6 +23,7 @@ pub type SchemaRef = Arc<Schema>;
 pub struct Field {
     name: String,
     field_type: DataType,
+    nullable: bool,
     multi: bool,
     columnar: bool,
     stored: bool,
@@ -56,6 +57,7 @@ pub type IndexRef = Arc<Index>;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct FieldOptions {
+    not_null: bool,
     multi: bool,
     columnar: bool,
     indexed: bool,
@@ -65,6 +67,7 @@ pub struct FieldOptions {
 }
 
 pub const BARE_FIELD: FieldOptions = FieldOptions {
+    not_null: false,
     multi: false,
     columnar: false,
     indexed: false,
@@ -73,7 +76,20 @@ pub const BARE_FIELD: FieldOptions = FieldOptions {
     primary_key: false,
 };
 
+pub const NOT_NULL: FieldOptions = FieldOptions {
+    not_null: true,
+    multi: false,
+    columnar: false,
+    indexed: false,
+    stored: false,
+    unique_key: false,
+    primary_key: false,
+};
+
+
+
 pub const MULTI: FieldOptions = FieldOptions {
+    not_null: false,
     multi: true,
     columnar: false,
     indexed: false,
@@ -83,6 +99,7 @@ pub const MULTI: FieldOptions = FieldOptions {
 };
 
 pub const COLUMNAR: FieldOptions = FieldOptions {
+    not_null: false,
     multi: false,
     columnar: true,
     indexed: false,
@@ -92,6 +109,7 @@ pub const COLUMNAR: FieldOptions = FieldOptions {
 };
 
 pub const INDEXED: FieldOptions = FieldOptions {
+    not_null: false,
     multi: false,
     columnar: false,
     indexed: true,
@@ -101,6 +119,7 @@ pub const INDEXED: FieldOptions = FieldOptions {
 };
 
 pub const UNIQUE_KEY: FieldOptions = FieldOptions {
+    not_null: false,
     multi: false,
     columnar: false,
     indexed: true,
@@ -110,6 +129,7 @@ pub const UNIQUE_KEY: FieldOptions = FieldOptions {
 };
 
 pub const PRIMARY_KEY: FieldOptions = FieldOptions {
+    not_null: false,
     multi: false,
     columnar: false,
     indexed: true,
@@ -123,6 +143,7 @@ impl BitOr for FieldOptions {
 
     fn bitor(self, rhs: Self) -> Self::Output {
         Self {
+            not_null: self.not_null || rhs.not_null,
             multi: self.multi || rhs.multi,
             columnar: self.columnar || rhs.columnar,
             indexed: self.indexed || rhs.indexed,
@@ -159,6 +180,7 @@ impl SchemaBuilder {
         }
 
         let field = Arc::new(Field {
+            nullable: !options.not_null,
             name: field_name,
             field_type,
             multi: options.multi,
@@ -326,6 +348,14 @@ impl Field {
     pub fn is_stored(&self) -> bool {
         self.stored
     }
+
+    pub fn is_nullable(&self) -> bool {
+        self.nullable
+    }
+
+    pub fn is_multi(&self) -> bool {
+        self.multi
+    }
 }
 
 #[cfg(test)]
@@ -341,6 +371,7 @@ mod tests {
         assert_eq!(
             COLUMNAR | INDEXED,
             FieldOptions {
+                not_null: false,
                 multi: false,
                 columnar: true,
                 indexed: true,

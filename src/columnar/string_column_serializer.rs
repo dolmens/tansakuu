@@ -16,12 +16,7 @@ impl ColumnSerializer for StringColumnSerializer {
             .downcast_ref::<StringColumnBuildingSegmentData>()
             .unwrap();
 
-        let array = string_column_data
-            .values
-            .iter()
-            .map(|s| Some(s.as_str()))
-            .collect::<StringArray>();
-
+        let array = string_column_data.values.iter().collect::<StringArray>();
         Arc::new(array)
     }
 }

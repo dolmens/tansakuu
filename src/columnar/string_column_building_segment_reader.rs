@@ -7,7 +7,7 @@ use crate::{util::chunked_vec::ChunkedVec, DocId};
 use super::StringColumnBuildingSegmentData;
 
 pub struct StringColumnBuildingSegmentReader {
-    values: ChunkedVec<String>,
+    values: ChunkedVec<Option<String>>,
 }
 
 impl StringColumnBuildingSegmentReader
@@ -20,7 +20,11 @@ where
     }
 
     pub fn get(&self, docid: DocId) -> Option<&str> {
-        self.values.get(docid as usize).map(|s| s.as_str())
+        self.values
+            .get(docid as usize)
+            .unwrap()
+            .as_ref()
+            .map(|s| s.as_str())
     }
 
     pub fn doc_count(&self) -> usize {
@@ -38,10 +42,10 @@ mod tests {
 
     #[test]
     fn test_basic() -> Result<(), Box<dyn Error>> {
-        let mut chunked_vec_writer = ChunkedVecWriter::<String>::new(4, 4);
-        chunked_vec_writer.push("hello".to_string());
-        chunked_vec_writer.push("world".to_string());
-        chunked_vec_writer.push("ok".to_string());
+        let mut chunked_vec_writer = ChunkedVecWriter::<Option<String>>::new(4, 4);
+        chunked_vec_writer.push(Some("hello".to_string()));
+        chunked_vec_writer.push(Some("world".to_string()));
+        chunked_vec_writer.push(Some("ok".to_string()));
         let values = chunked_vec_writer.reader();
         let column_data = Arc::new(StringColumnBuildingSegmentData::new(values));
         let reader = StringColumnBuildingSegmentReader::new(column_data);

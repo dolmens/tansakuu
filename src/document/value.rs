@@ -62,6 +62,42 @@ pub trait Value<'a>: Send + Sync + Debug {
     }
 
     #[inline]
+    fn as_i8(&self) -> Option<i8> {
+        self.as_leaf().and_then(|leaf| leaf.as_i8())
+    }
+
+    #[inline]
+    fn as_i16(&self) -> Option<i16> {
+        self.as_leaf().and_then(|leaf| leaf.as_i16())
+    }
+
+    #[inline]
+    fn as_i32(&self) -> Option<i32> {
+        self.as_leaf().and_then(|leaf| leaf.as_i32())
+    }
+
+    #[inline]
+    fn as_u8(&self) -> Option<u8> {
+        self.as_leaf().and_then(|leaf| leaf.as_u8())
+    }
+
+    #[inline]
+    fn as_u16(&self) -> Option<u16> {
+        self.as_leaf().and_then(|leaf| leaf.as_u16())
+    }
+
+    #[inline]
+    fn as_u32(&self) -> Option<u32> {
+        self.as_leaf().and_then(|leaf| leaf.as_u32())
+    }
+
+    #[inline]
+    /// If the Value is a i32, returns the associated i32. Returns None otherwise.
+    fn as_f32(&self) -> Option<f32> {
+        self.as_leaf().and_then(|leaf| leaf.as_f32())
+    }
+
+    #[inline]
     /// If the Value is a datetime, returns the associated datetime. Returns None otherwise.
     fn as_datetime(&self) -> Option<DateTime> {
         self.as_leaf().and_then(|leaf| leaf.as_datetime())
@@ -138,10 +174,24 @@ pub enum ReferenceValueLeaf<'a> {
     Null,
     /// The str type is used for any text information.
     Str(&'a str),
-    /// Unsigned 64-bits Integer `u64`
-    U64(u64),
+    /// Signed 8-bits Integer `i8`
+    I8(i8),
+    /// Signed 16-bits Integer `i16`
+    I16(i16),
+    /// Signed 32-bits Integer `i32`
+    I32(i32),
     /// Signed 64-bits Integer `i64`
     I64(i64),
+    /// Unsigned 8-bits Integer `u8`
+    U8(u8),
+    /// Unsigned 16-bits Integer `u16`
+    U16(u16),
+    /// Unsigned 32-bits Integer `u32`
+    U32(u32),
+    /// Unsigned 64-bits Integer `u64`
+    U64(u64),
+    /// 32-bits Float `f32`
+    F32(f32),
     /// 64-bits Float `f64`
     F64(f64),
     /// Date/time with nanoseconds precision
@@ -164,8 +214,15 @@ impl<'a, T: Value<'a> + ?Sized> From<ReferenceValueLeaf<'a>> for ReferenceValue<
         match value {
             ReferenceValueLeaf::Null => ReferenceValue::Leaf(ReferenceValueLeaf::Null),
             ReferenceValueLeaf::Str(val) => ReferenceValue::Leaf(ReferenceValueLeaf::Str(val)),
-            ReferenceValueLeaf::U64(val) => ReferenceValue::Leaf(ReferenceValueLeaf::U64(val)),
+            ReferenceValueLeaf::I8(val) => ReferenceValue::Leaf(ReferenceValueLeaf::I8(val)),
+            ReferenceValueLeaf::I16(val) => ReferenceValue::Leaf(ReferenceValueLeaf::I16(val)),
+            ReferenceValueLeaf::I32(val) => ReferenceValue::Leaf(ReferenceValueLeaf::I32(val)),
             ReferenceValueLeaf::I64(val) => ReferenceValue::Leaf(ReferenceValueLeaf::I64(val)),
+            ReferenceValueLeaf::U8(val) => ReferenceValue::Leaf(ReferenceValueLeaf::U8(val)),
+            ReferenceValueLeaf::U16(val) => ReferenceValue::Leaf(ReferenceValueLeaf::U16(val)),
+            ReferenceValueLeaf::U32(val) => ReferenceValue::Leaf(ReferenceValueLeaf::U32(val)),
+            ReferenceValueLeaf::U64(val) => ReferenceValue::Leaf(ReferenceValueLeaf::U64(val)),
+            ReferenceValueLeaf::F32(val) => ReferenceValue::Leaf(ReferenceValueLeaf::F32(val)),
             ReferenceValueLeaf::F64(val) => ReferenceValue::Leaf(ReferenceValueLeaf::F64(val)),
             ReferenceValueLeaf::Date(val) => ReferenceValue::Leaf(ReferenceValueLeaf::Date(val)),
             ReferenceValueLeaf::Facet(val) => ReferenceValue::Leaf(ReferenceValueLeaf::Facet(val)),
@@ -219,10 +276,94 @@ impl<'a> ReferenceValueLeaf<'a> {
     }
 
     #[inline]
+    /// If the Value is a i8, returns the associated i8. Returns None otherwise.
+    pub fn as_i8(&self) -> Option<i8> {
+        if let Self::I8(val) = self {
+            Some(*val)
+        } else if let Self::I64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a i16, returns the associated i16. Returns None otherwise.
+    pub fn as_i16(&self) -> Option<i16> {
+        if let Self::I16(val) = self {
+            Some(*val)
+        } else if let Self::I64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a i32, returns the associated i32. Returns None otherwise.
+    pub fn as_i32(&self) -> Option<i32> {
+        if let Self::I32(val) = self {
+            Some(*val)
+        } else if let Self::I64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a u8, returns the associated u8. Returns None otherwise.
+    pub fn as_u8(&self) -> Option<u8> {
+        if let Self::U8(val) = self {
+            Some(*val)
+        } else if let Self::U64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a u16, returns the associated u16. Returns None otherwise.
+    pub fn as_u16(&self) -> Option<u16> {
+        if let Self::U16(val) = self {
+            Some(*val)
+        } else if let Self::U64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a u32, returns the associated u32. Returns None otherwise.
+    pub fn as_u32(&self) -> Option<u32> {
+        if let Self::U32(val) = self {
+            Some(*val)
+        } else if let Self::U64(val) = self {
+            Some(*val as _)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
     /// If the Value is a f64, returns the associated f64. Returns None otherwise.
     pub fn as_f64(&self) -> Option<f64> {
         if let Self::F64(val) = self {
             Some(*val)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    /// If the Value is a f32, returns the associated f32. Returns None otherwise.
+    pub fn as_f32(&self) -> Option<f32> {
+        if let Self::F32(val) = self {
+            Some(*val)
+        } else if let Self::F64(val) = self {
+            Some(*val as _)
         } else {
             None
         }

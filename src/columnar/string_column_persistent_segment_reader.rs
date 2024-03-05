@@ -21,7 +21,11 @@ impl StringColumnPersistentSegmentReader {
     }
 
     pub fn get(&self, docid: DocId) -> Option<&str> {
-        Some(self.values.value(docid as usize))
+        if self.values.is_null(docid as usize) {
+            None
+        } else {
+            Some(self.values.value(docid as usize))
+        }
     }
 
     pub fn doc_count(&self) -> usize {

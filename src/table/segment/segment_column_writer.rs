@@ -10,33 +10,35 @@ use crate::{
 use super::BuildingSegmentColumnData;
 
 pub struct SegmentColumnWriter {
-    columns: HashMap<String, Box<dyn ColumnWriter>>,
+    columns: Vec<Box<dyn ColumnWriter>>,
 }
 
 impl SegmentColumnWriter {
     pub fn new(schema: &SchemaRef) -> Self {
-        let mut columns: HashMap<String, Box<dyn ColumnWriter>> = HashMap::new();
         let column_writer_factory = ColumnWriterFactory::default();
-        for column in schema.columns() {
-            let column_writer = column_writer_factory.create(column);
-            columns.insert(column.name().to_string(), column_writer);
-        }
+        let columns = schema
+            .columns()
+            .iter()
+            .map(|field| column_writer_factory.create(field))
+            .collect();
 
         Self { columns }
     }
 
     pub fn add_document(&mut self, document: &InnerInputDocument, _docid: DocId) {
-        for (name, value) in document.iter_fields_and_values() {
-            if let Some(writer) = self.columns.get_mut(name) {
-                writer.add_value(value);
+        for writer in &mut self.columns {
+            if let Some(value) = document.get_field(writer.field().name()) {
+                writer.add_value(Some(value));
+            } else {
+                writer.add_value(None);
             }
         }
     }
 
     pub fn column_data(&self) -> BuildingSegmentColumnData {
         let mut columns = HashMap::new();
-        for (name, writer) in &self.columns {
-            columns.insert(name.to_string(), writer.column_data());
+        for writer in &self.columns {
+            columns.insert(writer.field().name().to_string(), writer.column_data());
         }
 
         BuildingSegmentColumnData::new(columns)

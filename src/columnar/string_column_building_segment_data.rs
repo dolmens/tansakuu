@@ -3,16 +3,20 @@ use crate::{util::chunked_vec::ChunkedVec, DocId};
 use super::ColumnBuildingSegmentData;
 
 pub struct StringColumnBuildingSegmentData {
-    pub values: ChunkedVec<String>,
+    pub values: ChunkedVec<Option<String>>,
 }
 
 impl StringColumnBuildingSegmentData {
-    pub fn new(values: ChunkedVec<String>) -> Self {
+    pub fn new(values: ChunkedVec<Option<String>>) -> Self {
         Self { values }
     }
 
     pub fn get(&self, docid: DocId) -> Option<&str> {
-        self.values.get(docid as usize).map(|s| s.as_str())
+        self.values
+            .get(docid as usize)
+            .unwrap()
+            .as_ref()
+            .map(|s| s.as_str())
     }
 
     pub fn doc_count(&self) -> usize {

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use crate::document::OwnedValue;
+use crate::{document::OwnedValue, schema::FieldRef};
 
 use super::ColumnBuildingSegmentData;
 
 pub trait ColumnWriter {
-    fn add_value(&mut self, value: &OwnedValue);
+    fn field(&self) -> &FieldRef;
+    fn add_value(&mut self, value: Option<&OwnedValue>);
     fn column_data(&self) -> Arc<dyn ColumnBuildingSegmentData>;
 }

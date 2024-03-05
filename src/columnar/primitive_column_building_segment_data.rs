@@ -3,16 +3,16 @@ use crate::{types::NativeType, util::chunked_vec::ChunkedVec, DocId};
 use super::ColumnBuildingSegmentData;
 
 pub struct PrimitiveColumnBuildingSegmentData<T: NativeType> {
-    pub values: ChunkedVec<T>,
+    pub values: ChunkedVec<Option<T>>,
 }
 
 impl<T: NativeType> PrimitiveColumnBuildingSegmentData<T> {
-    pub fn new(values: ChunkedVec<T>) -> Self {
+    pub fn new(values: ChunkedVec<Option<T>>) -> Self {
         Self { values }
     }
 
     pub fn get(&self, docid: DocId) -> Option<T> {
-        self.values.get(docid as usize).copied()
+        self.values.get(docid as usize).unwrap().as_ref().copied()
     }
 
     pub fn doc_count(&self) -> usize {

@@ -27,16 +27,18 @@ impl<T: PrimitiveType> Default for PrimitiveColumnSerializer<T> {
     }
 }
 
-impl<T: PrimitiveType> ColumnSerializer for PrimitiveColumnSerializer<T> {
+impl<T: PrimitiveType> ColumnSerializer for PrimitiveColumnSerializer<T>
+where
+    PrimitiveArray<T::ArrowPrimitive>: From<Vec<Option<T::Native>>>,
+{
     fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef {
         let primitive_column_data = column_data
             .as_any()
             .downcast_ref::<PrimitiveColumnBuildingSegmentData<T::Native>>()
             .unwrap();
 
-        let array = PrimitiveArray::<T::ArrowPrimitive>::from_iter_values(
-            primitive_column_data.values.clone().into_iter(),
-        );
+        let values: Vec<_> = primitive_column_data.values.clone().into_iter().collect();
+        let array: PrimitiveArray<T::ArrowPrimitive> = values.into();
 
         Arc::new(array)
     }
