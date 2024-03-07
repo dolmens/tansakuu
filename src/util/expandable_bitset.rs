@@ -1,16 +1,16 @@
-use std::{
-    alloc::{handle_alloc_error, Layout},
-    ptr::NonNull,
-    sync::Arc,
-};
+use std::sync::Arc;
 
-use super::atomic::{AcqRelU64, AcqRelUsize, RelaxedAtomicPtr};
+use super::{
+    atomic::{AcqRelU64, AcqRelUsize, RelaxedAtomicPtr},
+    LinkedList, LinkedListWriter,
+};
 
 type AtomicWord = AcqRelU64;
 const BITS: usize = std::mem::size_of::<AtomicWord>() * 8;
 
 pub struct ExpandableBitsetWriter {
     data: Arc<ExpandableBitsetData>,
+    recycle_list: LinkedListWriter<RecycleNode>,
 }
 
 #[derive(Clone)]
@@ -18,16 +18,15 @@ pub struct ExpandableBitset {
     data: Arc<ExpandableBitsetData>,
 }
 
-struct RecycleNode {
-    layout: Layout,
-    ptr: NonNull<u8>,
-    next: Option<NonNull<RecycleNode>>,
+struct ExpandableBitsetData {
+    len: AcqRelUsize,
+    data: RelaxedAtomicPtr<AtomicWord>,
+    recycle_list: LinkedList<RecycleNode>,
 }
 
-struct ExpandableBitsetData {
-    data: RelaxedAtomicPtr<AtomicWord>,
-    capacity: AcqRelUsize,
-    recycle_list: RelaxedAtomicPtr<RecycleNode>,
+struct RecycleNode {
+    ptr: *mut AtomicWord,
+    len: usize,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
@@ -37,20 +36,16 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
 impl ExpandableBitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
         let len = (capacity + BITS - 1) / BITS;
-        let capacity = len * BITS;
-        let layout = Layout::array::<AtomicWord>(len).unwrap();
-        let data = unsafe { std::alloc::alloc(layout) };
-        let data = NonNull::new(data)
-            .unwrap_or_else(|| handle_alloc_error(layout))
-            .cast::<AtomicWord>();
-        for i in 0..len {
-            unsafe {
-                std::ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
-            }
-        }
-        let data = Arc::new(ExpandableBitsetData::new(capacity, layout, data));
+        let data = (0..len)
+            .map(|_| AtomicWord::new(0))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let data = Box::into_raw(data) as *mut AtomicWord;
+        let mut recycle_list = LinkedListWriter::new();
+        recycle_list.push(RecycleNode::new(data, len));
+        let data = Arc::new(ExpandableBitsetData::new(data, len, recycle_list.list()));
 
-        Self { data }
+        Self { data, recycle_list }
     }
 
     pub fn bitset(&self) -> ExpandableBitset {
@@ -63,15 +58,14 @@ impl ExpandableBitsetWriter {
         if index >= self.capacity() {
             self.expand(index);
         }
-        let data = self.data_ptr();
         let (quot, rem) = quot_and_rem(index);
-        let slot = unsafe { &*data.as_ptr().add(quot) };
+        let data = self.data.data();
+        let slot = &data[quot];
         slot.store(slot.load() | (1 << rem));
     }
 
     fn expand(&mut self, index: usize) {
-        let capacity = self.capacity();
-        let len = capacity / BITS;
+        let len = self.data.len.load();
         let mut next_len = len;
         let add_len = std::cmp::max(len / 2, 1);
         loop {
@@ -81,38 +75,18 @@ impl ExpandableBitsetWriter {
             }
         }
 
-        let old_data = self.data_ptr();
-
-        let layout = Layout::array::<AtomicWord>(next_len).unwrap();
-        let data = unsafe { std::alloc::alloc(layout) };
-        let data = NonNull::new(data)
-            .unwrap_or_else(|| handle_alloc_error(layout))
-            .cast::<AtomicWord>();
-
+        let mut data: Vec<_> = (0..next_len).map(|_| AtomicWord::new(0)).collect();
+        let current_data = self.data.data();
         for i in 0..len {
-            unsafe {
-                std::ptr::write(
-                    data.as_ptr().add(i),
-                    std::ptr::read(old_data.as_ptr().add(i)),
-                );
-            }
+            data[i] = AtomicWord::new(current_data[i].load());
         }
+        let data = data.into_boxed_slice();
+        let data_ptr = Box::into_raw(data) as *mut AtomicWord;
+        self.recycle_list.push(RecycleNode::new(data_ptr, next_len));
 
-        for i in len..next_len {
-            unsafe {
-                std::ptr::write(data.as_ptr().add(i), AtomicWord::new(0));
-            }
-        }
-
-        let recycle_node = ExpandableBitsetData::new_recycle_node(
-            layout,
-            data.cast(),
-            Some(NonNull::new(self.data.recycle_list.load()).unwrap()),
-        );
-        self.data.recycle_list.store(recycle_node.as_ptr());
-
-        self.data.data.store(data.as_ptr());
-        self.data.capacity.store(next_len * BITS);
+        // First data_ptr then len
+        self.data.data.store(data_ptr);
+        self.data.len.store(next_len);
     }
 
     pub fn contains(&self, index: usize) -> bool {
@@ -122,59 +96,33 @@ impl ExpandableBitsetWriter {
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
-
-    pub fn data_ptr(&self) -> NonNull<AtomicWord> {
-        self.data.data_ptr()
-    }
 }
 
 impl ExpandableBitsetData {
-    fn new(capacity: usize, layout: Layout, data: NonNull<AtomicWord>) -> Self {
-        let recycle_node = Self::new_recycle_node(layout, data.cast(), None);
-
+    fn new(data: *mut AtomicWord, len: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
-            data: RelaxedAtomicPtr::new(data.as_ptr()),
-            capacity: AcqRelUsize::new(capacity),
-            recycle_list: RelaxedAtomicPtr::new(recycle_node.as_ptr()),
+            len: AcqRelUsize::new(len),
+            data: RelaxedAtomicPtr::new(data),
+            recycle_list,
         }
-    }
-
-    fn new_recycle_node(
-        layout: Layout,
-        ptr: NonNull<u8>,
-        next: Option<NonNull<RecycleNode>>,
-    ) -> NonNull<RecycleNode> {
-        let node_layout = Layout::new::<RecycleNode>();
-        let node = unsafe { std::alloc::alloc(node_layout) };
-        let node = NonNull::new(node)
-            .unwrap_or_else(|| handle_alloc_error(layout))
-            .cast::<RecycleNode>();
-        unsafe {
-            std::ptr::write(node.as_ptr(), RecycleNode { layout, ptr, next });
-        }
-
-        node
     }
 
     fn capacity(&self) -> usize {
-        self.capacity.load()
-    }
-
-    fn data_ptr(&self) -> NonNull<AtomicWord> {
-        unsafe { NonNull::new_unchecked(self.data.load()) }
+        self.len.load() * BITS
     }
 
     fn data(&self) -> &[AtomicWord] {
-        let capacity = self.capacity();
-        let data = self.data_ptr();
-        unsafe { std::slice::from_raw_parts(data.as_ptr(), capacity / BITS) }
+        // First len then data_ptr
+        let len = self.len.load();
+        let data_ptr = self.data.load();
+        unsafe { std::slice::from_raw_parts(data_ptr, len) }
     }
 
     fn contains(&self, index: usize) -> bool {
-        if index < self.capacity() {
-            let (quot, rem) = quot_and_rem(index);
-            let data = self.data_ptr();
-            let slot = unsafe { &*data.as_ptr().add(quot) };
+        let (quot, rem) = quot_and_rem(index);
+        let data = self.data();
+        if quot < data.len() {
+            let slot = &data[quot];
             (slot.load() & (1 << rem)) != 0
         } else {
             false
@@ -182,19 +130,22 @@ impl ExpandableBitsetData {
     }
 }
 
+impl RecycleNode {
+    fn new(ptr: *mut AtomicWord, len: usize) -> Self {
+        Self { ptr, len }
+    }
+
+    fn release(&self) {
+        unsafe {
+            let _ = Box::from_raw(std::slice::from_raw_parts_mut(self.ptr, self.len));
+        }
+    }
+}
+
 impl Drop for ExpandableBitsetData {
     fn drop(&mut self) {
-        let mut recycle_node = self.recycle_list.load();
-        while !recycle_node.is_null() {
-            let node = recycle_node;
-            let node_ref = unsafe { node.as_ref().unwrap() };
-            recycle_node = node_ref
-                .next
-                .map_or_else(|| std::ptr::null_mut(), |p| p.as_ptr());
-            unsafe {
-                std::alloc::dealloc(node_ref.ptr.as_ptr(), node_ref.layout);
-                std::alloc::dealloc(node.cast(), Layout::new::<RecycleNode>());
-            }
+        for recycle_node in self.recycle_list.iter() {
+            recycle_node.release();
         }
     }
 }
