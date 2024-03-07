@@ -33,7 +33,6 @@ macro_rules! doc(
     };
 );
 
-
 impl InputDocument {
     pub fn new() -> Self {
         Self {

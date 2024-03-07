@@ -22,7 +22,7 @@ pub type SchemaRef = Arc<Schema>;
 #[derive(Debug)]
 pub struct Field {
     name: String,
-    field_type: DataType,
+    data_type: DataType,
     nullable: bool,
     multi: bool,
     columnar: bool,
@@ -85,8 +85,6 @@ pub const NOT_NULL: FieldOptions = FieldOptions {
     unique_key: false,
     primary_key: false,
 };
-
-
 
 pub const MULTI: FieldOptions = FieldOptions {
     not_null: false,
@@ -160,14 +158,14 @@ impl SchemaBuilder {
     }
 
     pub fn add_text_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, DataType::String, options);
+        self.add_field(field_name, DataType::Str, options);
     }
 
     pub fn add_i64_field(&mut self, field_name: String, options: FieldOptions) {
         self.add_field(field_name, DataType::Int64, options);
     }
 
-    pub fn add_field(&mut self, field_name: String, field_type: DataType, options: FieldOptions) {
+    pub fn add_field(&mut self, field_name: String, data_type: DataType, options: FieldOptions) {
         assert!(
             !self.schema.fields_map.contains_key(&field_name),
             "Field `{field_name}` already exist."
@@ -182,7 +180,7 @@ impl SchemaBuilder {
         let field = Arc::new(Field {
             nullable: !options.not_null,
             name: field_name,
-            field_type,
+            data_type,
             multi: options.multi,
             columnar: options.columnar,
             stored: options.stored,
@@ -338,7 +336,7 @@ impl Field {
     }
 
     pub fn data_type(&self) -> &DataType {
-        &self.field_type
+        &self.data_type
     }
 
     pub fn is_column(&self) -> bool {

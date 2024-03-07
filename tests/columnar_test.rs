@@ -15,8 +15,8 @@ use tansakuu::{
 #[test]
 fn test_column_string() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::String, COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::String, COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), DataType::Str, COLUMNAR);
+    schema_builder.add_field("f2".to_string(), DataType::Str, COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -421,12 +421,8 @@ fn test_column_list_i64() {
 #[test]
 fn test_column_list_string() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::String, MULTI | COLUMNAR);
-    schema_builder.add_field(
-        "f2".to_string(),
-        DataType::String,
-        MULTI | COLUMNAR | NOT_NULL,
-    );
+    schema_builder.add_field("f1".to_string(), DataType::Str, MULTI | COLUMNAR);
+    schema_builder.add_field("f2".to_string(), DataType::Str, MULTI | COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);

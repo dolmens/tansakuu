@@ -19,7 +19,7 @@ impl ColumnReaderFactory {
     pub fn create(&self, field: &Field, table_data: &TableData) -> Box<dyn ColumnReader> {
         if !field.is_multi() {
             match field.data_type() {
-                DataType::String => Box::new(StringColumnReader::new(field, table_data)),
+                DataType::Str => Box::new(StringColumnReader::new(field, table_data)),
 
                 DataType::Int8 => {
                     Box::new(PrimitiveColumnReader::<Int8Type>::new(field, table_data))
@@ -55,7 +55,7 @@ impl ColumnReaderFactory {
             }
         } else {
             match field.data_type() {
-                DataType::String => Box::new(ListStringColumnReader::new(field, table_data)),
+                DataType::Str => Box::new(ListStringColumnReader::new(field, table_data)),
 
                 DataType::Int8 => Box::new(ListPrimitiveColumnReader::<Int8Type>::new(
                     field, table_data,
