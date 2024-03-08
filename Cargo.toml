@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ahash = "0.8.11"
 aho-corasick = "1.1.2"
 allocator-api2 = "0.2.16"
 arc-swap = "1.6.0"

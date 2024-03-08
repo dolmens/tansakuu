@@ -12,6 +12,7 @@ mod inverted_index_serializer;
 mod inverted_index_writer;
 mod persistent_segment_posting_reader;
 mod segment_posting;
+mod token_hasher;
 
 pub use buffered_posting_iterator::BufferedPostingIterator;
 pub use inverted_index_building_segment_data::InvertedIndexBuildingSegmentData;
@@ -24,3 +25,4 @@ pub use inverted_index_segment_data_builder::InvertedIndexSegmentDataBuilder;
 pub use inverted_index_serializer::InvertedIndexSerializer;
 pub use inverted_index_writer::InvertedIndexWriter;
 pub use segment_posting::SegmentPosting;
+pub use token_hasher::TokenHasher;

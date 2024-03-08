@@ -26,7 +26,7 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
     ) -> Box<dyn crate::index::IndexSegmentData> {
         let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
             PostingFormat::builder()
-                .with_text_index_options(text_index_options)
+                .with_index_options(text_index_options)
                 .build()
         } else {
             PostingFormat::default()

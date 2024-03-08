@@ -16,11 +16,11 @@ pub struct PostingFormatBuilder {
 }
 
 impl PostingFormatBuilder {
-    pub fn with_text_index_options(self, text_index_options: &TextIndexOptions) -> Self {
+    pub fn with_index_options(self, index_options: &TextIndexOptions) -> Self {
         Self {
-            has_tflist: text_index_options.has_tflist,
-            has_fieldmask: text_index_options.has_fieldmask,
-            has_position_list: text_index_options.has_position_list,
+            has_tflist: index_options.has_tflist,
+            has_fieldmask: index_options.has_fieldmask,
+            has_position_list: index_options.has_position_list,
         }
     }
 

@@ -18,7 +18,7 @@ impl ColumnSerializerFactory {
     pub fn create(&self, field: &Field) -> Box<dyn ColumnSerializer> {
         if !field.is_multi() {
             match field.data_type() {
-                DataType::Str => Box::new(StringColumnSerializer::default()),
+                DataType::Str | DataType::Text => Box::new(StringColumnSerializer::default()),
 
                 DataType::Int8 => Box::new(PrimitiveColumnSerializer::<Int8Type>::default()),
                 DataType::Int16 => Box::new(PrimitiveColumnSerializer::<Int16Type>::default()),
@@ -34,7 +34,7 @@ impl ColumnSerializerFactory {
             }
         } else {
             match field.data_type() {
-                DataType::Str => Box::new(ListStringColumnSerializer::default()),
+                DataType::Str | DataType::Text => Box::new(ListStringColumnSerializer::default()),
 
                 DataType::Int8 => Box::new(ListPrimitiveColumnSerializer::<Int8Type>::default()),
                 DataType::Int16 => Box::new(ListPrimitiveColumnSerializer::<Int16Type>::default()),

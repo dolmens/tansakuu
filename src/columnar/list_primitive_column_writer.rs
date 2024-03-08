@@ -40,7 +40,7 @@ macro_rules! impl_list_primitive_column_writer {
             fn add_value(&mut self, value: Option<&crate::document::OwnedValue>) {
                 if let Some(iter) = value.map(|value| value.as_array()).flatten() {
                     let values: Vec<_> = iter
-                        .map(|elem| elem.$get_value().unwrap_or_default())
+                        .map(|elem| elem.$get_value().map(|v| v as $ty).unwrap_or_default())
                         .collect();
                     self.writer.push(Some(values.into_boxed_slice()));
                 } else {
@@ -59,14 +59,14 @@ macro_rules! impl_list_primitive_column_writer {
     };
 }
 
-impl_list_primitive_column_writer!(i8, as_i8);
-impl_list_primitive_column_writer!(i16, as_i16);
-impl_list_primitive_column_writer!(i32, as_i32);
+impl_list_primitive_column_writer!(i8, as_i64);
+impl_list_primitive_column_writer!(i16, as_i64);
+impl_list_primitive_column_writer!(i32, as_i64);
 impl_list_primitive_column_writer!(i64, as_i64);
-impl_list_primitive_column_writer!(u8, as_u8);
-impl_list_primitive_column_writer!(u16, as_u16);
-impl_list_primitive_column_writer!(u32, as_u32);
+impl_list_primitive_column_writer!(u8, as_u64);
+impl_list_primitive_column_writer!(u16, as_u64);
+impl_list_primitive_column_writer!(u32, as_u64);
 impl_list_primitive_column_writer!(u64, as_u64);
 
-impl_list_primitive_column_writer!(f32, as_f32);
+impl_list_primitive_column_writer!(f32, as_f64);
 impl_list_primitive_column_writer!(f64, as_f64);

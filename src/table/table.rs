@@ -5,6 +5,7 @@ use arc_swap::ArcSwap;
 use crate::{
     directory::RamDirectory,
     schema::{Schema, SchemaRef},
+    tokenizer::TokenizerManager,
     Directory,
 };
 
@@ -19,6 +20,7 @@ struct TableInner {
     reader: ArcSwap<TableReader>,
     table_data: Mutex<TableData>,
     schema: SchemaRef,
+    tokenizers: TokenizerManager,
     settings: TableSettingsRef,
 }
 
@@ -42,6 +44,7 @@ impl Table {
                 reader,
                 table_data: Mutex::new(table_data),
                 schema,
+                tokenizers: TokenizerManager::default(),
                 settings,
             }),
         }
@@ -61,6 +64,10 @@ impl Table {
 
     pub fn schema(&self) -> &SchemaRef {
         &self.inner.schema
+    }
+
+    pub fn tokenizers(&self) -> &TokenizerManager {
+        &self.inner.tokenizers
     }
 
     pub fn settings(&self) -> &TableSettingsRef {

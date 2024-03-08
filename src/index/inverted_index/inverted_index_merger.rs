@@ -39,7 +39,7 @@ impl IndexMerger for InvertedIndexMerger {
         }
         let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
             PostingFormat::builder()
-                .with_text_index_options(text_index_options)
+                .with_index_options(text_index_options)
                 .build()
         } else {
             PostingFormat::builder().build()

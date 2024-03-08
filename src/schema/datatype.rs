@@ -1,6 +1,7 @@
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DataType {
     Str,
+    Text,
     Int8,
     Int16,
     Int32,

@@ -21,24 +21,10 @@ pub enum OwnedValue {
     Str(String),
     /// Pre-tokenized str type,
     PreTokStr(PreTokenizedString),
-    /// Signed 8-bits Integer `i8`
-    I8(i8),
-    /// Signed 16-bits Integer `i16`
-    I16(i16),
-    /// Signed 32-bits Integer `i32`
-    I32(i32),
     /// Signed 64-bits Integer `i64`
     I64(i64),
-    /// Unsigned 8-bits Integer `u8`
-    U8(u8),
-    /// Unsigned 16-bits Integer `u16`
-    U16(u16),
-    /// Unsigned 32-bits Integer `u32`
-    U32(u32),
     /// Unsigned 64-bits Integer `u64`
     U64(u64),
-    /// 32-bits Float `f32`
-    F32(f32),
     /// 64-bits Float `f64`
     F64(f64),
     /// Bool value
@@ -73,15 +59,8 @@ impl<'a> Value<'a> for &'a OwnedValue {
             OwnedValue::Null => ReferenceValueLeaf::Null.into(),
             OwnedValue::Str(val) => ReferenceValueLeaf::Str(val).into(),
             OwnedValue::PreTokStr(val) => ReferenceValueLeaf::PreTokStr(val).into(),
-            OwnedValue::I8(val) => ReferenceValueLeaf::I8(*val).into(),
-            OwnedValue::I16(val) => ReferenceValueLeaf::I16(*val).into(),
-            OwnedValue::I32(val) => ReferenceValueLeaf::I32(*val).into(),
             OwnedValue::I64(val) => ReferenceValueLeaf::I64(*val).into(),
-            OwnedValue::U8(val) => ReferenceValueLeaf::U8(*val).into(),
-            OwnedValue::U16(val) => ReferenceValueLeaf::U16(*val).into(),
-            OwnedValue::U32(val) => ReferenceValueLeaf::U32(*val).into(),
             OwnedValue::U64(val) => ReferenceValueLeaf::U64(*val).into(),
-            OwnedValue::F32(val) => ReferenceValueLeaf::F32(*val).into(),
             OwnedValue::F64(val) => ReferenceValueLeaf::F64(*val).into(),
             OwnedValue::Bool(val) => ReferenceValueLeaf::Bool(*val).into(),
             OwnedValue::Date(val) => ReferenceValueLeaf::Date(*val).into(),
@@ -102,15 +81,8 @@ impl<'a, V: Value<'a>> From<ReferenceValue<'a, V>> for OwnedValue {
             ReferenceValue::Leaf(leaf) => match leaf {
                 ReferenceValueLeaf::Null => OwnedValue::Null,
                 ReferenceValueLeaf::Str(val) => OwnedValue::Str(val.to_string()),
-                ReferenceValueLeaf::I8(val) => OwnedValue::I8(val),
-                ReferenceValueLeaf::I16(val) => OwnedValue::I16(val),
-                ReferenceValueLeaf::I32(val) => OwnedValue::I32(val),
                 ReferenceValueLeaf::I64(val) => OwnedValue::I64(val),
-                ReferenceValueLeaf::U8(val) => OwnedValue::U8(val),
-                ReferenceValueLeaf::U16(val) => OwnedValue::U16(val),
-                ReferenceValueLeaf::U32(val) => OwnedValue::U32(val),
                 ReferenceValueLeaf::U64(val) => OwnedValue::U64(val),
-                ReferenceValueLeaf::F32(val) => OwnedValue::F32(val),
                 ReferenceValueLeaf::F64(val) => OwnedValue::F64(val),
                 ReferenceValueLeaf::Date(val) => OwnedValue::Date(val),
                 ReferenceValueLeaf::Facet(val) => OwnedValue::Facet(val.clone()),
@@ -148,9 +120,45 @@ impl From<Ipv6Addr> for OwnedValue {
     }
 }
 
+impl From<u8> for OwnedValue {
+    fn from(v: u8) -> OwnedValue {
+        OwnedValue::U64(v as u64)
+    }
+}
+
+impl From<u16> for OwnedValue {
+    fn from(v: u16) -> OwnedValue {
+        OwnedValue::U64(v as u64)
+    }
+}
+
+impl From<u32> for OwnedValue {
+    fn from(v: u32) -> OwnedValue {
+        OwnedValue::U64(v as u64)
+    }
+}
+
 impl From<u64> for OwnedValue {
     fn from(v: u64) -> OwnedValue {
         OwnedValue::U64(v)
+    }
+}
+
+impl From<i8> for OwnedValue {
+    fn from(v: i8) -> OwnedValue {
+        OwnedValue::I64(v as i64)
+    }
+}
+
+impl From<i16> for OwnedValue {
+    fn from(v: i16) -> OwnedValue {
+        OwnedValue::I64(v as i64)
+    }
+}
+
+impl From<i32> for OwnedValue {
+    fn from(v: i32) -> OwnedValue {
+        OwnedValue::I64(v as i64)
     }
 }
 
@@ -160,21 +168,16 @@ impl From<i64> for OwnedValue {
     }
 }
 
+impl From<f32> for OwnedValue {
+    fn from(v: f32) -> OwnedValue {
+        OwnedValue::F64(v as f64)
+    }
+}
+
+
 impl From<f64> for OwnedValue {
     fn from(v: f64) -> OwnedValue {
         OwnedValue::F64(v)
-    }
-}
-
-impl From<i8> for OwnedValue {
-    fn from(v: i8) -> OwnedValue {
-        OwnedValue::I8(v)
-    }
-}
-
-impl From<i16> for OwnedValue {
-    fn from(v: i16) -> OwnedValue {
-        OwnedValue::I16(v)
     }
 }
 
@@ -214,8 +217,57 @@ impl From<Vec<i8>> for OwnedValue {
     }
 }
 
+impl From<Vec<i16>> for OwnedValue {
+    fn from(values: Vec<i16>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<i32>> for OwnedValue {
+    fn from(values: Vec<i32>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+
 impl From<Vec<i64>> for OwnedValue {
     fn from(values: Vec<i64>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<u8>> for OwnedValue {
+    fn from(values: Vec<u8>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<u16>> for OwnedValue {
+    fn from(values: Vec<u16>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<u32>> for OwnedValue {
+    fn from(values: Vec<u32>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<u64>> for OwnedValue {
+    fn from(values: Vec<u64>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<f32>> for OwnedValue {
+    fn from(values: Vec<f32>) -> OwnedValue {
+        OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
+    }
+}
+
+impl From<Vec<f64>> for OwnedValue {
+    fn from(values: Vec<f64>) -> OwnedValue {
         OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
     }
 }

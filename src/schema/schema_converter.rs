@@ -15,7 +15,7 @@ impl SchemaConverter {
         for field in schema.columns() {
             if !field.is_multi() {
                 let arrow_field = match field.data_type() {
-                    DataType::Str => arrow_schema::Field::new(
+                    DataType::Str | DataType::Text => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Utf8,
                         field.is_nullable(),
@@ -76,7 +76,7 @@ impl SchemaConverter {
                 arrow_fields.push(arrow_field);
             } else {
                 let arrow_field = match field.data_type() {
-                    DataType::Str => {
+                    DataType::Str | DataType::Text => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Utf8, true)
                     }
 

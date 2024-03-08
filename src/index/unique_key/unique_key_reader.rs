@@ -1,5 +1,8 @@
 use crate::{
-    index::IndexReader, query::Term, schema::Index, table::TableData, util::hash::hash_string_64,
+    index::{inverted_index::TokenHasher, IndexReader},
+    query::Term,
+    schema::Index,
+    table::TableData,
     DocId,
 };
 
@@ -59,14 +62,14 @@ impl UniqueKeyReader {
     }
 
     pub fn lookup(&self, term: &Term) -> Option<DocId> {
-        let hashkey = hash_string_64(term.keyword());
+        let hashkey = TokenHasher::default().hash_bytes(term.keyword().as_bytes());
         self.get_by_hashkey(hashkey)
     }
 }
 
 impl IndexReader for UniqueKeyReader {
     fn lookup(&self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator>> {
-        let hashkey = hash_string_64(term.keyword());
+        let hashkey = TokenHasher::default().hash_bytes(term.keyword().as_bytes());
         self.get_by_hashkey(hashkey).map(|docid| {
             Box::new(UniqueKeyPostingIterator::new(docid)) as Box<dyn crate::index::PostingIterator>
         })

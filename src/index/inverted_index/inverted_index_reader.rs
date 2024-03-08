@@ -10,8 +10,9 @@ use crate::{
     query::Term,
     schema::{Index, IndexType},
     table::TableData,
-    util::hash::hash_string_64,
 };
+
+use super::TokenHasher;
 
 pub struct InvertedIndexReader {
     posting_format: PostingFormat,
@@ -23,7 +24,7 @@ impl InvertedIndexReader {
     pub fn new(index: &Index, table_data: &TableData) -> Self {
         let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
             PostingFormat::builder()
-                .with_text_index_options(text_index_options)
+                .with_index_options(text_index_options)
                 .build()
         } else {
             PostingFormat::default()
@@ -61,7 +62,7 @@ impl InvertedIndexReader {
 
 impl IndexReader for InvertedIndexReader {
     fn lookup<'a>(&'a self, term: &Term) -> Option<Box<dyn crate::index::PostingIterator + 'a>> {
-        let hashkey = hash_string_64(term.keyword());
+        let hashkey = TokenHasher::default().hash_bytes(term.keyword().as_bytes());
         let mut segment_postings = vec![];
         for segment_reader in &self.persistent_segments {
             if let Some(segment_posting) = segment_reader.segment_posting(hashkey) {

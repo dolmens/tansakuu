@@ -1,16 +1,13 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::collections::{BTreeSet, HashMap};
 
 use crate::{
     document::InnerInputDocument,
-    index::{IndexWriter, IndexWriterFactory},
+    index::{IndexWriter, IndexWriterFactory, IndexWriterResource},
     schema::SchemaRef,
     DocId,
 };
 
-use super::{BuildingSegmentIndexData, SegmentStat};
+use super::BuildingSegmentIndexData;
 
 pub struct SegmentIndexWriter {
     indexes: HashMap<String, Box<dyn IndexWriter>>,
@@ -18,11 +15,11 @@ pub struct SegmentIndexWriter {
 }
 
 impl SegmentIndexWriter {
-    pub fn new(schema: &SchemaRef, recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
+    pub fn new(schema: &SchemaRef, writer_resource: &IndexWriterResource) -> Self {
         let mut indexes: HashMap<String, Box<dyn IndexWriter>> = HashMap::new();
         let index_writer_factory = IndexWriterFactory::default();
         for index in schema.indexes() {
-            let index_writer = index_writer_factory.create(index, recent_segment_stat);
+            let index_writer = index_writer_factory.create(index, writer_resource);
             indexes.insert(index.name().to_string(), index_writer);
         }
 
@@ -38,7 +35,7 @@ impl SegmentIndexWriter {
             if let Some((field, field_indexes)) = self.schema.field(field) {
                 for index in field_indexes.iter() {
                     let index_writer = self.indexes.get_mut(index.name()).unwrap();
-                    index_writer.add_field(field.name(), value);
+                    index_writer.add_field(field, value);
                     indexes.insert(index.name().to_string());
                 }
             }

@@ -12,7 +12,7 @@ impl ColumnWriterFactory {
     pub fn create(&self, field: &FieldRef) -> Box<dyn ColumnWriter> {
         if !field.is_multi() {
             match field.data_type() {
-                DataType::Str => Box::new(StringColumnWriter::new(field.clone())),
+                DataType::Str | DataType::Text => Box::new(StringColumnWriter::new(field.clone())),
 
                 DataType::Int8 => Box::new(PrimitiveColumnWriter::<i8>::new(field.clone())),
                 DataType::Int16 => Box::new(PrimitiveColumnWriter::<i16>::new(field.clone())),
@@ -28,7 +28,9 @@ impl ColumnWriterFactory {
             }
         } else {
             match field.data_type() {
-                DataType::Str => Box::new(ListStringColumnWriter::new(field.clone())),
+                DataType::Str | DataType::Text => {
+                    Box::new(ListStringColumnWriter::new(field.clone()))
+                }
 
                 DataType::Int8 => Box::new(ListPrimitiveColumnWriter::<i8>::new(field.clone())),
                 DataType::Int16 => Box::new(ListPrimitiveColumnWriter::<i16>::new(field.clone())),

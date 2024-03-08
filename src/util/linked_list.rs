@@ -2,6 +2,8 @@ use std::{ptr, sync::Arc};
 
 use super::atomic::AcqRelAtomicPtr;
 
+/// Append only, single Writer, multiple Reader, wait free, linked list
+
 pub struct LinkedListWriter<T> {
     list: Arc<LinkedListData<T>>,
     tail: *mut Node<T>,

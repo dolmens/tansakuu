@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    deletionmap::BuildingDeletionMapWriter, document::InnerInputDocument, schema::SchemaRef, DocId,
-    ESTIMATE_SEGMENT_DOC_COUNT, ESTIMATE_SEGMENT_INC_FACTOR,
+    deletionmap::BuildingDeletionMapWriter, document::InnerInputDocument,
+    index::IndexWriterResource, schema::SchemaRef, DocId, ESTIMATE_SEGMENT_DOC_COUNT,
+    ESTIMATE_SEGMENT_INC_FACTOR,
 };
 
-use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter, SegmentStat};
+use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter};
 
 pub struct SegmentWriter {
     doc_count: usize,
@@ -16,10 +17,12 @@ pub struct SegmentWriter {
 }
 
 impl SegmentWriter {
-    pub fn new(schema: &SchemaRef, recent_segment_stat: Option<&Arc<SegmentStat>>) -> Self {
+    pub fn new(schema: &SchemaRef, index_writer_resource: &IndexWriterResource) -> Self {
         let column_writer = SegmentColumnWriter::new(schema);
-        let index_writer = SegmentIndexWriter::new(schema, recent_segment_stat);
-        let recent_segment_doc_count = recent_segment_stat.map_or(0, |s| s.doc_count);
+        let index_writer = SegmentIndexWriter::new(schema, index_writer_resource);
+        let recent_segment_doc_count = index_writer_resource
+            .recent_segment_stat()
+            .map_or(0, |s| s.doc_count);
         let estimate_segment_doc_count = if recent_segment_doc_count > 0 {
             ((recent_segment_doc_count as f64) * ESTIMATE_SEGMENT_INC_FACTOR) as usize
         } else {

@@ -36,7 +36,7 @@ pub struct TextIndexOptions {
     pub has_tflist: bool,
     pub has_fieldmask: bool,
     pub has_position_list: bool,
-    pub tokenizer: String,
+    pub tokenizer: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -158,7 +158,7 @@ impl SchemaBuilder {
     }
 
     pub fn add_text_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, DataType::Str, options);
+        self.add_field(field_name, DataType::Text, options);
     }
 
     pub fn add_i64_field(&mut self, field_name: String, options: FieldOptions) {
@@ -321,8 +321,8 @@ impl Index {
         &self.index_type
     }
 
-    pub fn field_offset(&self, field: &str) -> Option<usize> {
-        self.fields.iter().position(|f| f.name() == field)
+    pub fn field_offset(&self, field: &FieldRef) -> Option<usize> {
+        self.fields.iter().position(|f| Arc::ptr_eq(f, field))
     }
 
     pub fn fields(&self) -> &[FieldRef] {

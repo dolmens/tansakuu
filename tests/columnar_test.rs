@@ -87,7 +87,7 @@ fn test_column_i8() {
 
     let mut writer = table.writer();
 
-    let doc = doc!(f1 => 0_i8, f2 => 0_i8);
+    let doc = doc!(f1 => 0, f2 => 0);
     writer.add_document(doc);
     let doc = doc!(f1 => i8::MIN, f2 => i8::MAX);
     writer.add_document(doc);
@@ -305,8 +305,8 @@ fn test_column_list_i8() {
 
     let mut writer = table.writer();
 
-    let f1_0 = vec![1_i8, 3, 5];
-    let f2_0 = vec![4_i8, 7];
+    let f1_0 = vec![1, 3, 5];
+    let f2_0 = vec![4, 7];
     let doc = doc!(f1 => f1_0.clone(), f2 => f2_0.clone());
     writer.add_document(doc);
     let doc = doc!();

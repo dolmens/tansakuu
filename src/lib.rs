@@ -29,6 +29,8 @@ pub const INVALID_DOCID: DocId = DocId::MAX;
 pub const END_POSITION: u32 = u32::MAX - 1;
 pub const INVALID_POSITION: u32 = u32::MAX;
 
+pub const FIELD_POS_GAP: usize = 100;
+
 pub const DOC_LIST_BLOCK_LEN: usize = 128;
 pub const MAX_UNCOMPRESSED_DOC_LIST_LEN: usize = 5;
 

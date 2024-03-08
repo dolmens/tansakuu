@@ -123,10 +123,12 @@
 //! ```
 mod alphanum_only;
 mod ascii_folding_filter;
+mod chained_token_stream;
 mod empty_tokenizer;
 mod facet_tokenizer;
 mod lower_caser;
 mod ngram_tokenizer;
+mod owned_token_stream;
 mod raw_tokenizer;
 mod regex_tokenizer;
 mod remove_long;
@@ -143,9 +145,13 @@ pub use tantivy_tokenizer_api::{BoxTokenStream, Token, TokenFilter, TokenStream,
 
 pub use self::alphanum_only::AlphaNumOnlyFilter;
 pub use self::ascii_folding_filter::AsciiFoldingFilter;
+pub use self::chained_token_stream::ChainedTokenStream;
 pub use self::facet_tokenizer::FacetTokenizer;
 pub use self::lower_caser::LowerCaser;
 pub use self::ngram_tokenizer::NgramTokenizer;
+pub use self::owned_token_stream::{
+    OwnedMultiTokenStream, OwnedTextAnalyzerStream, OwnedTokenStream,
+};
 pub use self::raw_tokenizer::RawTokenizer;
 pub use self::regex_tokenizer::RegexTokenizer;
 pub use self::remove_long::RemoveLongFilter;

@@ -3,6 +3,7 @@ use std::io;
 use std::io::{Read, Write};
 
 use tantivy_common::BinarySerializable;
+use tantivy_tokenizer_api::BoxTokenStream;
 
 use crate::tokenizer::{Token, TokenStream};
 
@@ -57,6 +58,12 @@ impl BinarySerializable for PreTokenizedString {
 pub struct PreTokenizedStream {
     tokenized_string: PreTokenizedString,
     current_token: i64,
+}
+
+impl PreTokenizedStream {
+    pub fn into_boxed_stream<'a>(self) -> BoxTokenStream<'a> {
+        BoxTokenStream::new(self)
+    }
 }
 
 impl From<PreTokenizedString> for PreTokenizedStream {

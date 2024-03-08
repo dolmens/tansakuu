@@ -51,7 +51,7 @@ impl ArrowSchemaValidator {
 
             if !field.is_multi() {
                 let matched = match field.data_type() {
-                    DataType::Str => {
+                    DataType::Str | DataType::Text => {
                         matches!(arrow_field_type, arrow_schema::DataType::Utf8)
                     }
 

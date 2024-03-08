@@ -1,4 +1,7 @@
-use crate::{deletionmap::DeletionMapWriter, document::Document, query::Term, DocId, END_DOCID};
+use crate::{
+    deletionmap::DeletionMapWriter, document::Document, index::IndexWriterResourceBuilder,
+    query::Term, DocId, END_DOCID,
+};
 
 use super::{segment::SegmentWriter, Table};
 
@@ -11,8 +14,12 @@ pub struct TableWriter {
 impl TableWriter {
     pub fn new(table: &Table) -> Self {
         let mut table_data = table.data().lock().unwrap();
+        let tokenizers = table.tokenizers();
         let recent_segment_stat = table_data.recent_segment_stat();
-        let segment_writer = SegmentWriter::new(table.schema(), recent_segment_stat);
+        let index_writer_resource = IndexWriterResourceBuilder::new(tokenizers)
+            .set_recent_segment_stat(recent_segment_stat)
+            .build();
+        let segment_writer = SegmentWriter::new(table.schema(), &index_writer_resource);
         table_data.add_building_segment(segment_writer.building_segment_data().clone());
         let deletionmap_writer = DeletionMapWriter::new(&mut table_data);
         table.reinit_reader(table_data.clone());
@@ -52,8 +59,12 @@ impl TableWriter {
         let directory = table_data.directory();
         self.deletionmap_writer.save(directory);
         table_data.dump_building_segment(self.segment_writer.building_segment_data().clone());
+        let tokenizers = self.table.tokenizers();
         let recent_segment_stat = table_data.recent_segment_stat();
-        self.segment_writer = SegmentWriter::new(self.table.schema(), recent_segment_stat);
+        let index_writer_resource = IndexWriterResourceBuilder::new(tokenizers)
+            .set_recent_segment_stat(recent_segment_stat)
+            .build();
+        self.segment_writer = SegmentWriter::new(self.table.schema(), &index_writer_resource);
         let new_segment = self.segment_writer.building_segment_data().clone();
         table_data.add_building_segment(new_segment);
         self.deletionmap_writer = DeletionMapWriter::new(&mut table_data);
