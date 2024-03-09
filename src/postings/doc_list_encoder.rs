@@ -1,6 +1,9 @@
 use std::{
     io::{self, Write},
-    sync::Arc,
+    sync::{
+        atomic::{fence, Ordering},
+        Arc,
+    },
 };
 
 use tantivy_common::CountingWriter;
@@ -250,8 +253,14 @@ impl DocListFlushInfo {
         DocListFlushInfoSnapshot::with_value(self.value.load())
     }
 
+    pub fn load_with_fence(&self) -> DocListFlushInfoSnapshot {
+        fence(Ordering::Acquire);
+        DocListFlushInfoSnapshot::with_value(self.value.load())
+    }
+
     fn store(&self, flush_info: DocListFlushInfoSnapshot) {
         self.value.store(flush_info.value);
+        fence(Ordering::Release);
     }
 }
 

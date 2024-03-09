@@ -1,6 +1,6 @@
 use std::{
     io::{self, Write},
-    sync::Arc,
+    sync::{Arc, atomic::{fence, Ordering}},
 };
 
 use tantivy_common::CountingWriter;
@@ -228,8 +228,14 @@ impl SkipListFlushInfo {
         SkipListFlushInfoSnapshot::with_value(self.value.load())
     }
 
+    pub fn load_with_fence(&self) -> SkipListFlushInfoSnapshot {
+        fence(Ordering::Acquire);
+        SkipListFlushInfoSnapshot::with_value(self.value.load())
+    }
+
     fn store(&self, flush_info: SkipListFlushInfoSnapshot) {
         self.value.store(flush_info.value);
+        fence(Ordering::Release);
     }
 }
 
