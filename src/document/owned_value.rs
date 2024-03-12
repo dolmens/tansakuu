@@ -174,7 +174,6 @@ impl From<f32> for OwnedValue {
     }
 }
 
-
 impl From<f64> for OwnedValue {
     fn from(v: f64) -> OwnedValue {
         OwnedValue::F64(v)
@@ -228,7 +227,6 @@ impl From<Vec<i32>> for OwnedValue {
         OwnedValue::Array(values.iter().map(|&v| v.into()).collect())
     }
 }
-
 
 impl From<Vec<i64>> for OwnedValue {
     fn from(values: Vec<i64>) -> OwnedValue {

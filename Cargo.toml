@@ -33,4 +33,5 @@ time = { version = "0.3.31", features = ["serde-human-readable"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 
 [dev-dependencies]
+mockall = "0.12.1"
 rand = "0.8.5"

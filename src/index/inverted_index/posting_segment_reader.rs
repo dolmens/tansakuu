@@ -11,7 +11,7 @@ use super::{
     SegmentPosting,
 };
 
-pub struct InvertedIndexPostingSegmentReader<'a> {
+pub struct PostingSegmentReader<'a> {
     base_docid: DocId,
     inner_reader: SegmentReaderInner<'a>,
 }
@@ -29,10 +29,8 @@ struct BuildingSegmentReader<'a> {
     building_posting_reader: BuildingPostingReader<'a>,
 }
 
-impl<'a> InvertedIndexPostingSegmentReader<'a> {
-    pub fn open(
-        segment_posting: &'static SegmentPosting<'a>,
-    ) -> InvertedIndexPostingSegmentReader<'a> {
+impl<'a> PostingSegmentReader<'a> {
+    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> Self {
         Self {
             base_docid: segment_posting.base_docid(),
             inner_reader: SegmentReaderInner::open(segment_posting),
@@ -88,7 +86,7 @@ impl<'a> InvertedIndexPostingSegmentReader<'a> {
 }
 
 impl<'a> SegmentReaderInner<'a> {
-    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> SegmentReaderInner<'a> {
+    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> Self {
         match segment_posting.posting_data() {
             SegmentPostingData::Persistent(persistent_segment_posting) => {
                 Self::Persistent(PersistentSegmentReader::open(persistent_segment_posting))
@@ -171,7 +169,7 @@ impl<'a> SegmentReaderInner<'a> {
 impl<'a> PersistentSegmentReader<'a> {
     pub fn open(
         persistent_segment_posting: &'static PersistentSegmentPosting<'a>,
-    ) -> PersistentSegmentReader<'a> {
+    ) -> Self {
         let posting_reader = PersistentSegmentPostingReader::open(
             persistent_segment_posting.term_info.clone(),
             persistent_segment_posting.index_data,
@@ -218,7 +216,7 @@ impl<'a> PersistentSegmentReader<'a> {
 }
 
 impl<'a> BuildingSegmentReader<'a> {
-    pub fn open(segment_posting: &'static BuildingSegmentPosting<'a>) -> BuildingSegmentReader<'a> {
+    pub fn open(segment_posting: &'static BuildingSegmentPosting<'a>) -> Self {
         Self {
             building_posting_reader: BuildingPostingReader::open(
                 segment_posting.building_posting_list,

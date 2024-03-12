@@ -32,7 +32,7 @@ impl<'a> BufferedPostingIterator<'a> {
         let posting_reader = InvertedIndexPostingReader::new(segment_postings);
 
         Self {
-            current_docid: u32::MAX,
+            current_docid: INVALID_DOCID,
             current_ttf: 0,
             current_tf: 0,
             need_decode_tf: false,

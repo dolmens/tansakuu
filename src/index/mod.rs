@@ -11,7 +11,8 @@ mod index_writer_factory;
 mod index_writer_resource;
 pub mod inverted_index;
 mod posting_iterator;
-mod unique_key;
+pub mod range;
+pub mod unique_key;
 
 pub use index_merger::IndexMerger;
 pub use index_merger_factory::IndexMergerFactory;

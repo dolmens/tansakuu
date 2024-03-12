@@ -1,6 +1,9 @@
 use std::{
     io::{self, Write},
-    sync::{Arc, atomic::{fence, Ordering}},
+    sync::{
+        atomic::{fence, Ordering},
+        Arc,
+    },
 };
 
 use tantivy_common::CountingWriter;

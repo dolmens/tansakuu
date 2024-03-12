@@ -5,12 +5,10 @@ use crate::{
     DocId, INVALID_DOCID,
 };
 
-use super::{
-    inverted_index_posting_segment_reader::InvertedIndexPostingSegmentReader, SegmentPosting,
-};
+use super::{posting_segment_reader::PostingSegmentReader, SegmentPosting};
 
 pub struct InvertedIndexPostingReader<'a> {
-    segment_reader: Option<InvertedIndexPostingSegmentReader<'a>>,
+    segment_reader: Option<PostingSegmentReader<'a>>,
     cursor: usize,
     postings: Vec<SegmentPosting<'a>>,
 }
@@ -94,7 +92,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
         if cursor >= self.postings.len() {
             return false;
         }
-        self.segment_reader = Some(InvertedIndexPostingSegmentReader::open(unsafe {
+        self.segment_reader = Some(PostingSegmentReader::open(unsafe {
             std::mem::transmute(&self.postings[cursor])
         }));
         self.cursor = cursor + 1;

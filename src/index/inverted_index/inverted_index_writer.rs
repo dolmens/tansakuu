@@ -1,5 +1,7 @@
 use std::{
-    collections::{hash_map::RandomState, BTreeSet, HashMap},
+    cell::RefCell,
+    collections::{hash_map::RandomState, HashMap},
+    rc::Rc,
     sync::Arc,
 };
 
@@ -20,14 +22,12 @@ use crate::{
 
 use super::{InvertedIndexBuildingSegmentData, TokenHasher};
 
-pub type PostingTable =
-    LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+type PostingTable = LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
 
 pub struct InvertedIndexWriter {
     posting_table: PostingTable,
-    posting_writers: Vec<BuildingPostingWriter>,
-    posting_indexes: HashMap<u64, usize>,
-    modified_postings: BTreeSet<usize>,
+    posting_writers: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
+    modified_postings: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
     tokenizer: TextAnalyzer,
     posting_format: PostingFormat,
@@ -72,9 +72,8 @@ impl InvertedIndexWriter {
 
         Self {
             posting_table,
-            posting_writers: Vec::new(),
-            posting_indexes: HashMap::new(),
-            modified_postings: BTreeSet::new(),
+            posting_writers: HashMap::new(),
+            modified_postings: HashMap::new(),
             index_data: Arc::new(InvertedIndexBuildingSegmentData::new(index, postings)),
             tokenizer,
             posting_format,
@@ -203,7 +202,7 @@ impl InvertedIndexWriter {
             let values = value.as_array().unwrap();
             let tokens = values
                 .enumerate()
-                .filter_map(|(pos, value)| value.as_i64().map(|s| (pos, s)))
+                .filter_map(|(pos, value)| value.as_u64().map(|s| (pos, s)))
                 .map(|(pos, v)| Token {
                     offset_from: 0,
                     offset_to: 1,
@@ -214,7 +213,7 @@ impl InvertedIndexWriter {
                 .collect::<Vec<_>>();
             Some(OwnedMultiTokenStream::new(tokens).into_boxed_stream())
         } else {
-            match value.as_i64() {
+            match value.as_u64() {
                 Some(value) => {
                     let token = value.to_string();
                     Some(OwnedTokenStream::new(token).into_boxed_stream())
@@ -237,32 +236,34 @@ impl IndexWriter for InvertedIndexWriter {
             while token_stream.advance() {
                 let token = token_stream.token();
                 let hashkey = TokenHasher::default().hash_token(token);
-                let writer_index = self
-                    .posting_indexes
+                let posting_writer = self
+                    .posting_writers
                     .entry(hashkey)
                     .or_insert_with(|| {
-                        let posting_writer =
-                            BuildingPostingWriter::new(self.posting_format.clone());
-                        let building_posting_list = posting_writer.building_posting_list().clone();
+                        let posting_writer = Rc::new(RefCell::new(BuildingPostingWriter::new(
+                            self.posting_format.clone(),
+                        )));
+                        let building_posting_list =
+                            posting_writer.borrow().building_posting_list().clone();
                         self.posting_table.insert(hashkey, building_posting_list);
-                        self.posting_writers.push(posting_writer);
-                        self.posting_writers.len() - 1
+                        posting_writer
                     })
                     .clone();
-                let posting_writer = &mut self.posting_writers[writer_index];
+                self.modified_postings
+                    .entry(hashkey)
+                    .or_insert_with(|| posting_writer.clone());
 
                 posting_writer
+                    .borrow_mut()
                     .add_pos(field_offset, token.position as u32)
                     .unwrap();
-                self.modified_postings.insert(writer_index);
             }
         }
     }
 
     fn end_document(&mut self, docid: DocId) {
-        for &writer_index in &self.modified_postings {
-            let posting_writer = &mut self.posting_writers[writer_index];
-            posting_writer.end_doc(docid).unwrap();
+        for (_, posting_writer) in &self.modified_postings {
+            posting_writer.borrow_mut().end_doc(docid).unwrap();
         }
         self.modified_postings.clear();
     }
