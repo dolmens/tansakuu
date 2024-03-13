@@ -3,7 +3,7 @@ use std::{collections::BinaryHeap, io};
 use crate::{
     index::inverted_index::SegmentMultiPostingData,
     postings::{BuildingPostingReader, DocListBlock, DocListFormat, PostingRead},
-    DocId, END_DOCID,
+    DocId, END_DOCID, INVALID_DOCID,
 };
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
 };
 
 pub struct PostingSegmentMultiReader<'a> {
-    initialized: bool,
+    current_docid: DocId,
     base_docid: DocId,
     pick_heap: BinaryHeap<PostingPick>,
     posting_count: usize,
@@ -76,7 +76,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
         let heap = BinaryHeap::with_capacity(posting_count);
 
         Self {
-            initialized: false,
+            current_docid: INVALID_DOCID,
             base_docid,
             pick_heap: heap,
             posting_count,
@@ -85,18 +85,18 @@ impl<'a> PostingSegmentMultiReader<'a> {
         }
     }
 
-    // Every time this seek will consume one docid
     pub fn seek(&mut self, docid: DocId) -> io::Result<DocId> {
-        if !self.initialized {
-            self.initialized = true;
+        if self.current_docid == INVALID_DOCID {
             self.init_read(docid)?;
             if self.pick_heap.is_empty() {
+                self.current_docid = END_DOCID;
                 return Ok(END_DOCID);
             }
         }
 
         loop {
             if self.pick_heap.is_empty() {
+                self.current_docid = END_DOCID;
                 return Ok(END_DOCID);
             }
             let mut posting_pick = self.pick_heap.pop().unwrap();
@@ -128,6 +128,10 @@ impl<'a> PostingSegmentMultiReader<'a> {
                     self.pick_heap.push(posting_pick);
                 }
             }
+            if current_docid == self.current_docid {
+                continue;
+            }
+            self.current_docid = current_docid;
             if docid <= current_docid {
                 return Ok(current_docid);
             }
@@ -231,7 +235,7 @@ impl<'a> BuildingSegmentMultiReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BinaryHeap, io, mem::MaybeUninit};
+    use std::{collections::BinaryHeap, io};
 
     use crate::{
         index::inverted_index::{
@@ -259,66 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn test_traverse_buffer() -> io::Result<()> {
-        let doc_list_format = DocListFormat::builder().build();
-        let mut pick_heap = BinaryHeap::new();
-        let mut doc_list_blocks: Vec<_> = (0..3)
-            .map(|_| DocListBlock::new(&doc_list_format))
-            .collect();
-
-        doc_list_blocks[0].base_docid = 10;
-        doc_list_blocks[0].docids[0] = 1;
-        doc_list_blocks[0].docids[1] = 10;
-        doc_list_blocks[0].len = 2;
-        doc_list_blocks[0].last_docid = 21;
-        pick_heap.push(PostingPick::new(11, 0));
-
-        doc_list_blocks[1].base_docid = 10;
-        doc_list_blocks[1].docids[0] = 3;
-        doc_list_blocks[1].docids[1] = 2;
-        doc_list_blocks[1].docids[2] = 2;
-        doc_list_blocks[1].docids[3] = 10;
-        doc_list_blocks[1].len = 4;
-        doc_list_blocks[1].last_docid = 27;
-        pick_heap.push(PostingPick::new(13, 1));
-
-        doc_list_blocks[2].base_docid = 10;
-        doc_list_blocks[2].docids[0] = 2;
-        doc_list_blocks[2].docids[1] = 4;
-        doc_list_blocks[2].docids[2] = 10;
-        doc_list_blocks[2].len = 3;
-        doc_list_blocks[2].last_docid = 26;
-        pick_heap.push(PostingPick::new(12, 2));
-
-        let mut uninit_reader = MaybeUninit::<PostingSegmentMultiReader>::uninit();
-        let reader = unsafe { &mut (*uninit_reader.as_mut_ptr()) };
-        unsafe {
-            std::ptr::write(&mut reader.initialized, true);
-            std::ptr::write(&mut reader.base_docid, 10);
-            std::ptr::write(&mut reader.pick_heap, pick_heap);
-            std::ptr::write(&mut reader.posting_count, 3);
-            std::ptr::write(&mut reader.doc_list_blocks, doc_list_blocks);
-        }
-
-        let expect = vec![11, 12, 13, 15, 16, 17];
-        let mut docids = vec![];
-        let mut docid = 0;
-        for _ in 0..6 {
-            docid = reader.seek(docid)?;
-            docids.push(docid);
-        }
-        assert_eq!(docids, expect);
-
-        unsafe {
-            let _ = std::ptr::read(&mut reader.pick_heap);
-            let _ = std::ptr::read(&mut reader.doc_list_blocks);
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_complete_process() -> io::Result<()> {
+    fn test_basic() -> io::Result<()> {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let posting_format = PostingFormat::default();
         let doc_list_format = posting_format.doc_list_format().clone();
@@ -369,6 +314,65 @@ mod tests {
             docids.push(docid);
         }
         let expect: Vec<_> = (0..((BLOCK_LEN + 3) * 3) as DocId)
+            .map(|docid| docid + base_docid)
+            .collect();
+        assert_eq!(docids, expect);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_duplicate_docids() -> io::Result<()> {
+        const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
+        let posting_format = PostingFormat::default();
+        let doc_list_format = posting_format.doc_list_format().clone();
+        let mut posting_writer1 = BuildingPostingWriter::new(posting_format.clone());
+        for i in 0..BLOCK_LEN + 3 {
+            posting_writer1.add_pos(0, 0)?;
+            posting_writer1.end_doc((i * 2) as DocId)?;
+        }
+        let mut posting_writer2 = BuildingPostingWriter::new(posting_format.clone());
+        for i in 0..BLOCK_LEN + 3 {
+            posting_writer2.add_pos(0, 0)?;
+            posting_writer2.end_doc((i * 2 + 1) as DocId)?;
+        }
+        let mut posting_writer3 = BuildingPostingWriter::new(posting_format.clone());
+        for i in 0..BLOCK_LEN + 3 {
+            posting_writer3.add_pos(0, 0)?;
+            posting_writer3.end_doc((i * 2 + 1) as DocId)?;
+        }
+        let segment_posting1 = BuildingSegmentPosting {
+            building_posting_list: posting_writer1.building_posting_list(),
+        };
+        let segment_posting2 = BuildingSegmentPosting {
+            building_posting_list: posting_writer2.building_posting_list(),
+        };
+        let segment_posting3 = BuildingSegmentPosting {
+            building_posting_list: posting_writer3.building_posting_list(),
+        };
+        let base_docid = 10;
+        let multi_posting_data = SegmentMultiPostingData::Building(vec![
+            segment_posting1,
+            segment_posting2,
+            segment_posting3,
+        ]);
+
+        let segment_multi_posting = SegmentMultiPosting::new(base_docid, multi_posting_data);
+
+        let mut reader = PostingSegmentMultiReader::open(doc_list_format, unsafe {
+            std::mem::transmute(&segment_multi_posting)
+        });
+
+        let mut docids = vec![];
+        let mut docid = 0;
+        loop {
+            docid = reader.seek(docid)?;
+            if docid == END_DOCID {
+                break;
+            }
+            docids.push(docid);
+        }
+        let expect: Vec<_> = (0..((BLOCK_LEN + 3) * 2) as DocId)
             .map(|docid| docid + base_docid)
             .collect();
         assert_eq!(docids, expect);

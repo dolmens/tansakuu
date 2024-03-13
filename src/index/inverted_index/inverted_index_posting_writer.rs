@@ -2,14 +2,19 @@ use std::{cell::RefCell, collections::HashMap, hash::RandomState, rc::Rc};
 
 use crate::{
     postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat},
-    util::{ha3_capacity_policy::Ha3CapacityPolicy, layered_hashmap::LayeredHashMapWriter},
+    util::{
+        ha3_capacity_policy::Ha3CapacityPolicy,
+        layered_hashmap::{LayeredHashMap, LayeredHashMapWriter},
+    },
     DocId, HASHMAP_INITIAL_CAPACITY,
 };
 
-type PostingTable = LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+pub type BuildingPostingTable =
+    LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+pub type BuildingPostingData = LayeredHashMap<u64, BuildingPostingList>;
 
 pub struct InvertedIndexPostingWriter {
-    posting_table: PostingTable,
+    posting_table: BuildingPostingTable,
     posting_writers: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
     modified_postings: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
     posting_format: PostingFormat,
@@ -24,8 +29,11 @@ impl InvertedIndexPostingWriter {
         } else {
             HASHMAP_INITIAL_CAPACITY
         };
-        let posting_table =
-            PostingTable::with_capacity(hashmap_initial_capacity, hasher_builder, capacity_policy);
+        let posting_table = BuildingPostingTable::with_capacity(
+            hashmap_initial_capacity,
+            hasher_builder,
+            capacity_policy,
+        );
 
         Self {
             posting_table,
@@ -33,6 +41,10 @@ impl InvertedIndexPostingWriter {
             modified_postings: HashMap::new(),
             posting_format,
         }
+    }
+
+    pub fn posting_data(&self) -> BuildingPostingData {
+        self.posting_table.hashmap()
     }
 
     pub fn add_token(&mut self, hash: u64, field_offset: usize) {

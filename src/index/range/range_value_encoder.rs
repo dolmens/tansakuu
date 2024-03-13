@@ -1,9 +1,9 @@
 #[derive(Default)]
-pub struct RangeFieldEncoder {}
+pub struct RangeValueEncoder {}
 
 const MASK: u64 = 0xF;
 
-impl RangeFieldEncoder {
+impl RangeValueEncoder {
     pub fn tokenize(&self, value: u64) -> Vec<u64> {
         let mut value = value;
         let mut tokens = Vec::with_capacity(16);
@@ -66,13 +66,13 @@ impl RangeFieldEncoder {
 
 #[cfg(test)]
 mod tests {
-    use crate::index::range::range_field_encoder::MASK;
+    use crate::index::range::range_value_encoder::MASK;
 
-    use super::RangeFieldEncoder;
+    use super::RangeValueEncoder;
 
     macro_rules! assert_ranges {
         ($start:expr, $end:expr, $expected_bottom:expr, $expected_higher:expr) => {
-            let encoder = RangeFieldEncoder::default();
+            let encoder = RangeValueEncoder::default();
             let (bottom_ranges, higher_ranges) = encoder.searching_ranges($start, $end);
             assert_eq!(bottom_ranges, $expected_bottom);
             assert_eq!(higher_ranges, $expected_higher);
@@ -93,7 +93,7 @@ mod tests {
             token >>= 4;
             expect.push(token + (level << 60));
         }
-        assert_eq!(RangeFieldEncoder::default().tokenize(value), expect);
+        assert_eq!(RangeValueEncoder::default().tokenize(value), expect);
     }
 
     #[test]

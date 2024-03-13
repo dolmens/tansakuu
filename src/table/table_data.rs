@@ -190,10 +190,11 @@ impl TableData {
             let index_data = building_segment_data
                 .index_data()
                 .index_data(index.name())
-                .unwrap()
-                .clone();
-            let index_serializer = index_serializer_factory.create(index, index_data);
+                .unwrap();
+            let index_serializer = index_serializer_factory.create(index);
             index_serializer.serialize(
+                index,
+                index_data,
                 self.directory.as_ref(),
                 &index_path,
                 docid_mapping.as_ref(),

@@ -24,6 +24,10 @@ impl SegmentColumnSerializer {
         schema: &Schema,
         column_data: &HashMap<String, Arc<dyn ColumnBuildingSegmentData>>,
     ) {
+        if schema.columns().is_empty() {
+            return;
+        }
+
         let schema_converter = SchemaConverter::default();
         let arrow_schema = schema_converter.convert_to_arrow(schema);
         let arrow_schema = Arc::new(arrow_schema);

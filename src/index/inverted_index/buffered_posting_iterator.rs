@@ -179,9 +179,9 @@ impl<'a> BufferedPostingIterator<'a> {
 impl<'a> PostingIterator for BufferedPostingIterator<'a> {
     /// SAFETY: param docid < END_DOCID && current_docid < END_DOCID
     fn seek(&mut self, docid: crate::DocId) -> io::Result<crate::DocId> {
-        if self.current_docid != INVALID_DOCID && docid <= self.current_docid {
-            return Ok(self.current_docid);
-        }
+        // if self.current_docid != INVALID_DOCID && docid <= self.current_docid {
+        //     return Ok(self.current_docid);
+        // }
 
         if self.doc_buffer_cursor == self.doc_list_block.len
             || self.doc_list_block.last_docid < docid

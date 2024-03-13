@@ -4,6 +4,7 @@ use crate::schema::{IndexRef, IndexType};
 
 use super::{
     inverted_index::{InvertedIndexBuildingSegmentData, InvertedIndexSerializer},
+    range::RangeIndexSerializer,
     unique_key::UniqueKeySerializer,
     IndexSegmentData, IndexSerializer,
 };
@@ -12,30 +13,12 @@ use super::{
 pub struct IndexSerializerFactory {}
 
 impl IndexSerializerFactory {
-    pub fn create(
-        &self,
-        index: &IndexRef,
-        index_data: Arc<dyn IndexSegmentData>,
-    ) -> Box<dyn IndexSerializer> {
+    pub fn create(&self, index: &IndexRef) -> Box<dyn IndexSerializer> {
         match index.index_type() {
-            IndexType::Text(_) => {
-                let inverted_index_data = index_data
-                    .downcast_arc::<InvertedIndexBuildingSegmentData>()
-                    .ok()
-                    .unwrap();
-                Box::new(InvertedIndexSerializer::new(
-                    index.clone(),
-                    inverted_index_data,
-                ))
-            }
-            IndexType::PrimaryKey => {
-                let primary_key_data = index_data.downcast_arc().ok().unwrap();
-                Box::new(UniqueKeySerializer::new(index, primary_key_data))
-            }
-            IndexType::UniqueKey => {
-                let unique_key_data = index_data.downcast_arc().ok().unwrap();
-                Box::new(UniqueKeySerializer::new(index, unique_key_data))
-            }
+            IndexType::Text(_) => Box::new(InvertedIndexSerializer::default()),
+            IndexType::PrimaryKey => Box::new(UniqueKeySerializer::default()),
+            IndexType::UniqueKey => Box::new(UniqueKeySerializer::default()),
+            IndexType::Range => Box::new(RangeIndexSerializer::default()),
         }
     }
 }

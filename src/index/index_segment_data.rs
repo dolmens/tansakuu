@@ -9,7 +9,7 @@ pub trait IndexSegmentDataBuilder {
         &self,
         index: &Index,
         directory: &dyn Directory,
-        index_directory: &Path,
+        index_path: &Path,
     ) -> Box<dyn IndexSegmentData>;
 }
 

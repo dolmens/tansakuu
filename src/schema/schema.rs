@@ -44,6 +44,7 @@ pub enum IndexType {
     Text(TextIndexOptions),
     PrimaryKey,
     UniqueKey,
+    Range,
 }
 
 #[derive(Debug)]
@@ -161,10 +162,6 @@ impl SchemaBuilder {
         self.add_field(field_name, DataType::Text, options);
     }
 
-    pub fn add_i64_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, DataType::Int64, options);
-    }
-
     pub fn add_field(&mut self, field_name: String, data_type: DataType, options: FieldOptions) {
         assert!(
             !self.schema.fields_map.contains_key(&field_name),
@@ -199,7 +196,17 @@ impl SchemaBuilder {
             } else if options.unique_key {
                 IndexType::UniqueKey
             } else {
-                IndexType::Text(Default::default())
+                match field.data_type() {
+                    DataType::UInt64
+                    | DataType::UInt32
+                    | DataType::UInt16
+                    | DataType::UInt8
+                    | DataType::Int64
+                    | DataType::Int32
+                    | DataType::Int16
+                    | DataType::Int8 => IndexType::Range,
+                    _ => IndexType::Text(Default::default()),
+                }
             };
             self.add_index(field.name().to_string(), index_type, &fields);
         }
@@ -361,7 +368,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::schema::{
-        schema::FieldOptions, IndexType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY,
+        schema::FieldOptions, DataType, IndexType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY,
     };
 
     #[test]
@@ -485,8 +492,8 @@ mod tests {
     fn test_columns() {
         let mut builder = SchemaBuilder::default();
         builder.add_text_field("f1".to_string(), COLUMNAR | INDEXED);
-        builder.add_i64_field("f2".to_string(), INDEXED);
-        builder.add_i64_field("f3".to_string(), COLUMNAR);
+        builder.add_field("f2".to_string(), DataType::Int64, INDEXED);
+        builder.add_field("f3".to_string(), DataType::Int64, COLUMNAR);
         let fields: Vec<_> = builder.schema.fields().iter().map(|f| f.name()).collect();
         assert_eq!(fields, vec!["f1", "f2", "f3"]);
         let columns: Vec<_> = builder.schema.columns().iter().map(|f| f.name()).collect();

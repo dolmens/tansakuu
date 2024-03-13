@@ -1,62 +1,49 @@
-use std::{io::Write, sync::Arc};
+use std::{io::Write, path::Path};
 
 use tantivy_common::TerminatingWrite;
 
 use crate::{
-    index::{IndexSegmentData, IndexSerializer},
     postings::{
         doc_list_encoder_builder,
         positions::{position_list_encoder_builder, PositionListEncode},
         DocListEncode, PostingFormat, PostingIterator, PostingWriter, TermDictBuilder, TermInfo,
     },
-    schema::{IndexRef, IndexType},
     Directory, DocId, END_DOCID, END_POSITION,
 };
 
-use super::InvertedIndexBuildingSegmentData;
+use super::BuildingPostingData;
 
 #[derive(Default)]
-pub struct InvertedIndexSerializer {}
+pub struct InvertedIndexPostingSerializer {}
 
-impl IndexSerializer for InvertedIndexSerializer {
-    fn serialize(
+impl InvertedIndexPostingSerializer {
+    pub fn serialize(
         &self,
-        index: &IndexRef,
-        index_data: &Arc<dyn IndexSegmentData>,
+        name: &str,
+        posting_format: &PostingFormat,
+        posting_data: &BuildingPostingData,
         directory: &dyn Directory,
-        index_path: &std::path::Path,
+        index_path: &Path,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
-        let posting_format = if let IndexType::Text(text_index_options) = index.index_type() {
-            PostingFormat::builder()
-                .with_index_options(text_index_options)
-                .build()
-        } else {
-            PostingFormat::builder().build()
-        };
-        let doc_list_format = posting_format.doc_list_format().clone();
-
-        let index_name = index.name();
-
-        let dict_path = index_path.join(index_name.to_string() + ".dict");
+        let dict_path = index_path.join(name.to_string() + ".dict");
         let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let mut term_dict_writer = TermDictBuilder::new(dict_output_writer);
 
-        let skip_list_path = index_path.join(index_name.to_string() + ".skiplist");
+        let skip_list_path = index_path.join(name.to_string() + ".skiplist");
         let mut skip_list_output_writer = directory.open_write(&skip_list_path).unwrap();
-        let posting_path = index_path.join(index_name.to_string() + ".posting");
+        let posting_path = index_path.join(name.to_string() + ".posting");
         let mut posting_output_writer = directory.open_write(&posting_path).unwrap();
 
         let mut position_skip_list_output_writer = if posting_format.has_position_list() {
-            let position_skip_list_path =
-                index_path.join(index_name.to_string() + ".positions.skiplist");
+            let position_skip_list_path = index_path.join(name.to_string() + ".positions.skiplist");
             Some(directory.open_write(&position_skip_list_path).unwrap())
         } else {
             None
         };
 
         let mut position_list_output_writer = if posting_format.has_position_list() {
-            let position_list_path = index_path.join(index_name.to_string() + ".positions");
+            let position_list_path = index_path.join(name.to_string() + ".positions");
             Some(directory.open_write(&position_list_path).unwrap())
         } else {
             None
@@ -67,26 +54,17 @@ impl IndexSerializer for InvertedIndexSerializer {
         let mut position_list_start = 0;
         let mut position_skip_list_start = 0;
 
-        let inverted_index_data = index_data
-            .clone()
-            .downcast_arc::<InvertedIndexBuildingSegmentData>()
-            .ok()
-            .unwrap();
-
-        let mut postings: Vec<_> = inverted_index_data
-            .postings
-            .iter()
-            .map(|(k, v)| (k.clone(), v))
-            .collect();
+        let mut postings: Vec<_> = posting_data.iter().map(|(k, v)| (k.clone(), v)).collect();
         postings.sort_by(|a, b| a.0.to_be_bytes().cmp(&b.0.to_be_bytes()));
 
         for (hashkey, posting) in postings {
             let mut posting_iterator = PostingIterator::open_building_posting_list(posting);
 
-            let doc_list_encoder = doc_list_encoder_builder(doc_list_format)
-                .with_writer(posting_output_writer.by_ref())
-                .with_skip_list_output_writer(skip_list_output_writer.by_ref())
-                .build();
+            let doc_list_encoder =
+                doc_list_encoder_builder(posting_format.doc_list_format().clone())
+                    .with_writer(posting_output_writer.by_ref())
+                    .with_skip_list_output_writer(skip_list_output_writer.by_ref())
+                    .build();
 
             let position_list_encoder = if posting_format.has_position_list() {
                 Some(

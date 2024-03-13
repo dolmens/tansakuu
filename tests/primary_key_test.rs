@@ -2,7 +2,7 @@ use tansakuu::{
     columnar::{PrimitiveColumnReader, StringColumnReader},
     document::InputDocument,
     query::Term,
-    schema::{SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
+    schema::{DataType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
     types::Int64Type,
     DocId, END_DOCID,
@@ -29,7 +29,11 @@ fn get_all_docs(index_reader: &TableIndexReader, term: &Term) -> Vec<DocId> {
 #[test]
 fn test_primary_key() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_i64_field("item_id".to_string(), COLUMNAR | INDEXED | PRIMARY_KEY);
+    schema_builder.add_field(
+        "item_id".to_string(),
+        DataType::Int64,
+        COLUMNAR | INDEXED | PRIMARY_KEY,
+    );
     schema_builder.add_text_field("title".to_string(), COLUMNAR | INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();

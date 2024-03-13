@@ -1,10 +1,21 @@
-use crate::{schema::Index, table::TableData, index::IndexReader};
+use crate::{
+    index::{
+        inverted_index::{MultiPostingIterator, TokenHasher},
+        IndexReader,
+    },
+    postings::PostingFormat,
+    schema::Index,
+    table::TableData,
+};
 
-use super::RangeIndexBuildingSegmentReader;
+use super::{RangeIndexBuildingSegmentReader, RangeQueryEncoder, RangeValueEncoder};
 
 pub struct RangeIndexReader {
     // persistent_segments: Vec<>
     building_segments: Vec<RangeIndexBuildingSegmentReader>,
+    range_value_encoder: RangeValueEncoder,
+    range_query_encoder: RangeQueryEncoder,
+    token_hasher: TokenHasher,
 }
 
 impl RangeIndexReader {
@@ -20,12 +31,40 @@ impl RangeIndexReader {
             building_segments.push(index_segment_reader);
         }
 
-        Self { building_segments }
+        Self {
+            building_segments,
+            range_value_encoder: RangeValueEncoder::default(),
+            range_query_encoder: RangeQueryEncoder::default(),
+            token_hasher: TokenHasher::default(),
+        }
     }
 }
 
 impl IndexReader for RangeIndexReader {
-    fn lookup<'a>(&'a self, key: &crate::query::Term) -> Option<Box<dyn crate::index::PostingIterator + 'a>> {
-        unimplemented!()
+    fn lookup<'a>(
+        &'a self,
+        term: &crate::query::Term,
+    ) -> Option<Box<dyn crate::index::PostingIterator + 'a>> {
+        let (left, right) = self.range_query_encoder.decode(term.keyword());
+        let (bottom_ranges, higher_ranges) = self.range_value_encoder.searching_ranges(left, right);
+        let bottom_keys: Vec<_> = bottom_ranges
+            .into_iter()
+            .flat_map(|(l, r)| (l..=r).map(|v| self.token_hasher.hash_bytes(&v.to_le_bytes())))
+            .collect();
+        let higher_keys: Vec<_> = higher_ranges
+            .into_iter()
+            .flat_map(|(l, r)| (l..=r).map(|v| self.token_hasher.hash_bytes(&v.to_le_bytes())))
+            .collect();
+
+        let mut postings = vec![];
+        for segment_reader in &self.building_segments {
+            if let Some(segment_posting) = segment_reader.lookup(&bottom_keys, &higher_keys) {
+                postings.push(segment_posting);
+            }
+        }
+        Some(Box::new(MultiPostingIterator::new(
+            PostingFormat::default(),
+            postings,
+        )))
     }
 }
