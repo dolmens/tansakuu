@@ -1,12 +1,8 @@
-use std::sync::Arc;
-
 use crate::schema::{IndexRef, IndexType};
 
 use super::{
-    inverted_index::{InvertedIndexBuildingSegmentData, InvertedIndexSerializer},
-    range::RangeIndexSerializer,
-    unique_key::UniqueKeySerializer,
-    IndexSegmentData, IndexSerializer,
+    inverted_index::InvertedIndexSerializer, range::RangeIndexSerializer,
+    unique_key::UniqueKeySerializer, IndexSerializer,
 };
 
 #[derive(Default)]

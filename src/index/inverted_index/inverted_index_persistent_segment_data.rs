@@ -1,36 +1,14 @@
-use tantivy_common::OwnedBytes;
+use crate::index::IndexSegmentData;
 
-use crate::{
-    index::IndexSegmentData,
-    postings::{PostingFormat, TermDict},
-};
+use super::PersistentPostingData;
 
 pub struct InvertedIndexPersistentSegmentData {
-    pub posting_format: PostingFormat,
-    pub term_dict: TermDict,
-    pub skip_list_data: OwnedBytes,
-    pub doc_list_data: OwnedBytes,
-    pub position_skip_list_data: OwnedBytes,
-    pub position_list_data: OwnedBytes,
+    pub posting_data: PersistentPostingData,
 }
 
 impl InvertedIndexPersistentSegmentData {
-    pub fn new(
-        posting_format: PostingFormat,
-        term_dict: TermDict,
-        skip_list_data: OwnedBytes,
-        doc_list_data: OwnedBytes,
-        position_skip_list_data: OwnedBytes,
-        position_list_data: OwnedBytes,
-    ) -> Self {
-        Self {
-            posting_format,
-            term_dict,
-            skip_list_data,
-            doc_list_data,
-            position_skip_list_data,
-            position_list_data,
-        }
+    pub fn new(posting_data: PersistentPostingData) -> Self {
+        Self { posting_data }
     }
 }
 

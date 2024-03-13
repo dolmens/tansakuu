@@ -1,13 +1,11 @@
-use tantivy_common::{HasLen, OwnedBytes};
-
 use crate::{
     index::IndexSegmentDataBuilder,
-    postings::{PostingFormat, TermDict},
+    postings::PostingFormat,
     schema::{Index, IndexType},
     Directory,
 };
 
-use super::InvertedIndexPersistentSegmentData;
+use super::{InvertedIndexPersistentSegmentData, PostingDataLoader};
 
 #[derive(Default)]
 pub struct InvertedIndexSegmentDataBuilder {}
@@ -26,46 +24,11 @@ impl IndexSegmentDataBuilder for InvertedIndexSegmentDataBuilder {
         } else {
             PostingFormat::default()
         };
-        let index_name = index.name();
-        let dict_path = index_path.join(index_name.to_string() + ".dict");
-        let dict_data = directory.open_read(&dict_path).unwrap();
-        let term_dict = TermDict::open(dict_data).unwrap();
+        let posting_data_loader = PostingDataLoader::default();
+        let posting_data = posting_data_loader
+            .load(index.name(), posting_format, directory, index_path)
+            .unwrap();
 
-        let skip_list_path = index_path.join(index_name.to_string() + ".skiplist");
-        let skip_list_slice = directory.open_read(&skip_list_path).unwrap();
-        let skip_list_data = if skip_list_slice.len() > 0 {
-            skip_list_slice.read_bytes().unwrap()
-        } else {
-            OwnedBytes::empty()
-        };
-
-        let posting_path = index_path.join(index_name.to_string() + ".posting");
-        let posting_data = directory.open_read(&posting_path).unwrap();
-        let posting_data = posting_data.read_bytes().unwrap();
-
-        let position_skip_list_data = if posting_format.has_position_list() {
-            let position_skip_list_path =
-                index_path.join(index_name.to_string() + ".positions.skiplist");
-            let position_skip_list_slice = directory.open_read(&position_skip_list_path).unwrap();
-            position_skip_list_slice.read_bytes().unwrap()
-        } else {
-            OwnedBytes::empty()
-        };
-        let position_list_data = if posting_format.has_position_list() {
-            let position_list_path = index_path.join(index_name.to_string() + ".positions");
-            let position_list_slice = directory.open_read(&position_list_path).unwrap();
-            position_list_slice.read_bytes().unwrap()
-        } else {
-            OwnedBytes::empty()
-        };
-
-        Box::new(InvertedIndexPersistentSegmentData::new(
-            posting_format,
-            term_dict,
-            skip_list_data,
-            posting_data,
-            position_skip_list_data,
-            position_list_data,
-        ))
+        Box::new(InvertedIndexPersistentSegmentData::new(posting_data))
     }
 }

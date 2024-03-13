@@ -3,7 +3,7 @@ use crate::{
     DocId,
 };
 
-use super::InvertedIndexPersistentSegmentData;
+use super::PersistentPostingData;
 
 #[derive(Clone)]
 pub struct SegmentPosting<'a> {
@@ -20,7 +20,7 @@ pub enum SegmentPostingData<'a> {
 #[derive(Clone)]
 pub struct PersistentSegmentPosting<'a> {
     pub term_info: TermInfo,
-    pub index_data: &'a InvertedIndexPersistentSegmentData,
+    pub posting_data: &'a PersistentPostingData,
 }
 
 #[derive(Clone)]
@@ -32,13 +32,13 @@ impl<'a> SegmentPosting<'a> {
     pub fn new_persistent_segment(
         base_docid: DocId,
         term_info: TermInfo,
-        index_data: &'a InvertedIndexPersistentSegmentData,
+        posting_data: &'a PersistentPostingData,
     ) -> Self {
         Self {
             base_docid,
             posting_data: SegmentPostingData::Persistent(PersistentSegmentPosting {
                 term_info,
-                index_data,
+                posting_data,
             }),
         }
     }

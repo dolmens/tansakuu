@@ -53,7 +53,7 @@ impl SegmentMerger {
                 &docid_mappings,
             );
 
-            let index_directory = segment_path.join("index");
+            let index_path = segment_path.join("index");
             let index_merger_factory = IndexMergerFactory::default();
             for index in schema.indexes() {
                 let index_merger = index_merger_factory.create(index);
@@ -61,13 +61,7 @@ impl SegmentMerger {
                     .iter()
                     .map(|seg| seg.index_data(index.name()))
                     .collect();
-                index_merger.merge(
-                    directory,
-                    &index_directory,
-                    index,
-                    &index_data,
-                    &docid_mappings,
-                );
+                index_merger.merge(directory, &index_path, index, &index_data, &docid_mappings);
             }
 
             let meta = SegmentMetaData::new(total_doc_count);

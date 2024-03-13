@@ -167,12 +167,10 @@ impl<'a> SegmentReaderInner<'a> {
 }
 
 impl<'a> PersistentSegmentReader<'a> {
-    pub fn open(
-        persistent_segment_posting: &'static PersistentSegmentPosting<'a>,
-    ) -> Self {
+    pub fn open(persistent_segment_posting: &'static PersistentSegmentPosting<'a>) -> Self {
         let posting_reader = PersistentSegmentPostingReader::open(
             persistent_segment_posting.term_info.clone(),
-            persistent_segment_posting.index_data,
+            persistent_segment_posting.posting_data,
         );
 
         Self { posting_reader }

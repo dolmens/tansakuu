@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    index::inverted_index::{
-        BuildingSegmentPosting, SegmentMultiPosting, SegmentMultiPostingData, SegmentPosting,
-    },
+    index::inverted_index::{BuildingSegmentPosting, SegmentMultiPosting, SegmentMultiPostingData},
     postings::BuildingPostingList,
     util::layered_hashmap::LayeredHashMap,
     DocId,

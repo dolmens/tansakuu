@@ -17,13 +17,12 @@ impl IndexSegmentDataBuilder for RangeIndexSegmentDataBuilder {
     ) -> Box<dyn crate::index::IndexSegmentData> {
         let posting_format = PostingFormat::default();
         let posting_data_loader = PostingDataLoader::default();
-        let bottom_index_path = index_path.join("bottom");
+        let index_path = index_path.join(index.name());
         let bottom_posting_data = posting_data_loader
-            .load("botom", &posting_format, directory, &bottom_index_path)
+            .load("bottom", posting_format, directory, &index_path)
             .unwrap();
-        let higher_index_path = index_path.join("higher");
         let higher_posting_data = posting_data_loader
-            .load("higher", &posting_format, directory, &higher_index_path)
+            .load("higher", posting_format, directory, &index_path)
             .unwrap();
 
         Box::new(RangeIndexPersistentSegmentData {

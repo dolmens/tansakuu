@@ -23,6 +23,7 @@ impl InvertedIndexPersistentSegmentReader {
     pub fn segment_posting(&self, hashkey: u64) -> Option<SegmentPosting<'_>> {
         if let Some(term_info) = self
             .index_data
+            .posting_data
             .term_dict
             .get(hashkey.to_be_bytes())
             .ok()
@@ -31,7 +32,7 @@ impl InvertedIndexPersistentSegmentReader {
             Some(SegmentPosting::new_persistent_segment(
                 self.base_docid,
                 term_info,
-                &self.index_data,
+                &self.index_data.posting_data,
             ))
         } else {
             None
@@ -41,6 +42,7 @@ impl InvertedIndexPersistentSegmentReader {
     pub fn posting_reader(&self, hashkey: u64) -> Option<PersistentSegmentPostingReader<'_>> {
         if let Some(term_info) = self
             .index_data
+            .posting_data
             .term_dict
             .get(hashkey.to_be_bytes())
             .ok()
@@ -48,7 +50,7 @@ impl InvertedIndexPersistentSegmentReader {
         {
             Some(PersistentSegmentPostingReader::open(
                 term_info,
-                &self.index_data,
+                &self.index_data.posting_data,
             ))
         } else {
             None

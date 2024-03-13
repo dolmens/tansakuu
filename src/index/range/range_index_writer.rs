@@ -10,7 +10,7 @@ use crate::{
     schema::{DataType, IndexRef},
 };
 
-use super::{RangeValueEncoder, RangeIndexBuildingSegmentData};
+use super::{RangeIndexBuildingSegmentData, RangeValueEncoder};
 
 pub struct RangeIndexWriter {
     bottom_writer: InvertedIndexPostingWriter,
@@ -20,7 +20,7 @@ pub struct RangeIndexWriter {
 }
 
 impl RangeIndexWriter {
-    pub fn new(index: IndexRef, writer_resource: &IndexWriterResource) -> Self {
+    pub fn new(index: IndexRef, _writer_resource: &IndexWriterResource) -> Self {
         // TODO: use seg stat to get a better initialize size
         let bottom_writer = InvertedIndexPostingWriter::new(PostingFormat::default(), 0);
         let higher_writer = InvertedIndexPostingWriter::new(PostingFormat::default(), 0);

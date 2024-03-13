@@ -197,7 +197,10 @@ impl<'a> PersistentSegmentMultiReader<'a> {
         let posting_readers = segment_multi_posting
             .iter()
             .map(|posting| {
-                PersistentSegmentPostingReader::open(posting.term_info.clone(), posting.index_data)
+                PersistentSegmentPostingReader::open(
+                    posting.term_info.clone(),
+                    posting.posting_data,
+                )
             })
             .collect();
         Self { posting_readers }
@@ -241,7 +244,7 @@ mod tests {
         index::inverted_index::{
             segment_posting::BuildingSegmentPosting, SegmentMultiPosting, SegmentMultiPostingData,
         },
-        postings::{BuildingPostingWriter, DocListBlock, DocListFormat, PostingFormat},
+        postings::{BuildingPostingWriter, PostingFormat},
         DocId, DOC_LIST_BLOCK_LEN, END_DOCID,
     };
 

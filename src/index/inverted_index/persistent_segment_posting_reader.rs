@@ -6,7 +6,7 @@ use crate::postings::{
     DocListDecode, DocListDecoder, PostingFormat, PostingRead, TermInfo,
 };
 
-use super::InvertedIndexPersistentSegmentData;
+use super::PersistentPostingData;
 
 pub type PersistentSegmentDataReader<'a> = Cursor<&'a [u8]>;
 
@@ -23,17 +23,17 @@ pub struct PersistentSegmentPostingReader<'a> {
     position_list_decoder: Option<PersistentSegmentPositionListDecoder<'a>>,
     term_info: TermInfo,
     posting_format: PostingFormat,
-    index_data: &'a InvertedIndexPersistentSegmentData,
+    posting_data: &'a PersistentPostingData,
 }
 
 impl<'a> PersistentSegmentPostingReader<'a> {
-    pub fn open(term_info: TermInfo, index_data: &'a InvertedIndexPersistentSegmentData) -> Self {
-        let posting_format = index_data.posting_format.clone();
+    pub fn open(term_info: TermInfo, posting_data: &'a PersistentPostingData) -> Self {
+        let posting_format = posting_data.posting_format.clone();
         let doc_list_format = posting_format.doc_list_format().clone();
 
-        let doc_list_data = &index_data.doc_list_data.as_slice()[term_info.doc_list_range()];
+        let doc_list_data = &posting_data.doc_list_data.as_slice()[term_info.doc_list_range()];
         let doc_list_data = Cursor::new(doc_list_data);
-        let skip_list_data = &index_data.skip_list_data.as_slice()[term_info.skip_list_range()];
+        let skip_list_data = &posting_data.skip_list_data.as_slice()[term_info.skip_list_range()];
 
         let doc_list_decoder =
             DocListDecoder::open(doc_list_format, term_info.df, doc_list_data, skip_list_data);
@@ -43,15 +43,15 @@ impl<'a> PersistentSegmentPostingReader<'a> {
             position_list_decoder: None,
             term_info,
             posting_format,
-            index_data,
+            posting_data,
         }
     }
 
     fn init_position_list_decoder(&mut self) {
         let position_list_data =
-            &self.index_data.position_list_data.as_slice()[self.term_info.position_list_range()];
+            &self.posting_data.position_list_data.as_slice()[self.term_info.position_list_range()];
         let position_list_data = Cursor::new(position_list_data);
-        let position_skip_list_data = &self.index_data.position_skip_list_data.as_slice()
+        let position_skip_list_data = &self.posting_data.position_skip_list_data.as_slice()
             [self.term_info.position_skip_list_range()];
 
         self.position_list_decoder = Some(PositionListDecoder::open(

@@ -8,7 +8,7 @@ pub trait IndexMerger {
     fn merge(
         &self,
         directory: &dyn Directory,
-        index_directory: &Path,
+        index_path: &Path,
         index: &Index,
         segments: &[&Arc<dyn IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],

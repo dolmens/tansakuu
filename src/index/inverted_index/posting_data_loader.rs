@@ -11,6 +11,7 @@ use crate::{
 pub struct PostingDataLoader {}
 
 pub struct PersistentPostingData {
+    pub posting_format: PostingFormat,
     pub term_dict: TermDict,
     pub skip_list_data: OwnedBytes,
     pub doc_list_data: OwnedBytes,
@@ -22,7 +23,7 @@ impl PostingDataLoader {
     pub fn load(
         &self,
         name: &str,
-        posting_format: &PostingFormat,
+        posting_format: PostingFormat,
         directory: &dyn Directory,
         index_path: &Path,
     ) -> io::Result<PersistentPostingData> {
@@ -58,6 +59,7 @@ impl PostingDataLoader {
         };
 
         Ok(PersistentPostingData {
+            posting_format,
             term_dict,
             skip_list_data,
             doc_list_data: posting_data,

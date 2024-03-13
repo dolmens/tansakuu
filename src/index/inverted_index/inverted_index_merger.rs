@@ -22,7 +22,7 @@ impl IndexMerger for InvertedIndexMerger {
     fn merge(
         &self,
         directory: &dyn Directory,
-        index_directory: &std::path::Path,
+        index_path: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
@@ -32,7 +32,7 @@ impl IndexMerger for InvertedIndexMerger {
             let index_segment_data = segment
                 .downcast_ref::<InvertedIndexPersistentSegmentData>()
                 .unwrap();
-            let term_dict = &index_segment_data.term_dict;
+            let term_dict = &index_segment_data.posting_data.term_dict;
             for (term, _) in term_dict.iter() {
                 terms.insert(term);
             }
@@ -46,24 +46,24 @@ impl IndexMerger for InvertedIndexMerger {
         };
         let doc_list_format = posting_format.doc_list_format().clone();
 
-        let dict_path = index_directory.join(index.name().to_string() + ".dict");
+        let dict_path = index_path.join(index.name().to_string() + ".dict");
         let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let mut term_dict_writer = TermDictBuilder::new(dict_output_writer);
 
-        let skip_list_path = index_directory.join(index.name().to_string() + ".skiplist");
+        let skip_list_path = index_path.join(index.name().to_string() + ".skiplist");
         let mut skip_list_output_writer = directory.open_write(&skip_list_path).unwrap();
-        let posting_path = index_directory.join(index.name().to_string() + ".posting");
+        let posting_path = index_path.join(index.name().to_string() + ".posting");
         let mut posting_output_writer = directory.open_write(&posting_path).unwrap();
 
         let mut position_skip_list_output_writer = if posting_format.has_position_list() {
             let position_skip_list_path =
-                index_directory.join(index.name().to_string() + ".positions.skiplist");
+                index_path.join(index.name().to_string() + ".positions.skiplist");
             Some(directory.open_write(&position_skip_list_path).unwrap())
         } else {
             None
         };
         let mut position_list_output_writer = if posting_format.has_position_list() {
-            let position_list_path = index_directory.join(index.name().to_string() + ".positions");
+            let position_list_path = index_path.join(index.name().to_string() + ".positions");
             Some(directory.open_write(&position_list_path).unwrap())
         } else {
             None

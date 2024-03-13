@@ -100,7 +100,6 @@ mod tests {
     fn test_single_segment() -> io::Result<()> {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let posting_format = PostingFormat::default();
-        let doc_list_format = posting_format.doc_list_format().clone();
         let mut posting_writer1 = BuildingPostingWriter::new(posting_format.clone());
         for i in 0..BLOCK_LEN + 3 {
             posting_writer1.add_pos(0, 0)?;

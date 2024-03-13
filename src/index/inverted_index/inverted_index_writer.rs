@@ -1,36 +1,25 @@
-use std::{
-    cell::RefCell,
-    collections::{hash_map::RandomState, HashMap},
-    rc::Rc,
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use tantivy_tokenizer_api::{BoxTokenStream, Token, TokenStream};
 
 use crate::{
     document::{OwnedValue, Value},
     index::{IndexWriter, IndexWriterResource},
-    postings::{BuildingPostingList, BuildingPostingWriter, PostingFormat, PostingFormatBuilder},
+    postings::PostingFormatBuilder,
     schema::{DataType, FieldRef, IndexRef, IndexType},
     tokenizer::{
         ChainedTokenStream, OwnedMultiTokenStream, OwnedTextAnalyzerStream, OwnedTokenStream,
         PreTokenizedStream, TextAnalyzer,
     },
-    util::{ha3_capacity_policy::Ha3CapacityPolicy, layered_hashmap::LayeredHashMapWriter},
     DocId, FIELD_POS_GAP, HASHMAP_INITIAL_CAPACITY,
 };
 
-use super::{InvertedIndexBuildingSegmentData, TokenHasher};
-
-type PostingTable = LayeredHashMapWriter<u64, BuildingPostingList, RandomState, Ha3CapacityPolicy>;
+use super::{InvertedIndexBuildingSegmentData, InvertedIndexPostingWriter, TokenHasher};
 
 pub struct InvertedIndexWriter {
-    posting_table: PostingTable,
-    posting_writers: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
-    modified_postings: HashMap<u64, Rc<RefCell<BuildingPostingWriter>>>,
+    posting_writer: InvertedIndexPostingWriter,
     index_data: Arc<InvertedIndexBuildingSegmentData>,
     tokenizer: TextAnalyzer,
-    posting_format: PostingFormat,
 }
 
 impl InvertedIndexWriter {
@@ -54,8 +43,6 @@ impl InvertedIndexWriter {
         let posting_format = PostingFormatBuilder::default()
             .with_index_options(index_options)
             .build();
-        let hasher_builder = RandomState::new();
-        let capacity_policy = Ha3CapacityPolicy;
         let hashmap_initial_capacity = writer_resource
             .recent_segment_stat()
             .and_then(|stat| stat.index_term_count.get(index.name()))
@@ -66,17 +53,14 @@ impl InvertedIndexWriter {
         } else {
             HASHMAP_INITIAL_CAPACITY
         };
-        let posting_table =
-            PostingTable::with_capacity(hashmap_initial_capacity, hasher_builder, capacity_policy);
-        let postings = posting_table.hashmap();
+        let posting_writer =
+            InvertedIndexPostingWriter::new(posting_format, hashmap_initial_capacity);
+        let posting_data = posting_writer.posting_data();
 
         Self {
-            posting_table,
-            posting_writers: HashMap::new(),
-            modified_postings: HashMap::new(),
-            index_data: Arc::new(InvertedIndexBuildingSegmentData::new(index, postings)),
+            posting_writer,
+            index_data: Arc::new(InvertedIndexBuildingSegmentData::new(index, posting_data)),
             tokenizer,
-            posting_format,
         }
     }
 
@@ -236,36 +220,17 @@ impl IndexWriter for InvertedIndexWriter {
             while token_stream.advance() {
                 let token = token_stream.token();
                 let hashkey = TokenHasher::default().hash_token(token);
-                let posting_writer = self
-                    .posting_writers
-                    .entry(hashkey)
-                    .or_insert_with(|| {
-                        let posting_writer = Rc::new(RefCell::new(BuildingPostingWriter::new(
-                            self.posting_format.clone(),
-                        )));
-                        let building_posting_list =
-                            posting_writer.borrow().building_posting_list().clone();
-                        self.posting_table.insert(hashkey, building_posting_list);
-                        posting_writer
-                    })
-                    .clone();
-                self.modified_postings
-                    .entry(hashkey)
-                    .or_insert_with(|| posting_writer.clone());
-
-                posting_writer
-                    .borrow_mut()
-                    .add_pos(field_offset, token.position as u32)
-                    .unwrap();
+                self.posting_writer.add_token_with_position(
+                    hashkey,
+                    field_offset,
+                    token.position as u32,
+                );
             }
         }
     }
 
     fn end_document(&mut self, docid: DocId) {
-        for (_, posting_writer) in &self.modified_postings {
-            posting_writer.borrow_mut().end_doc(docid).unwrap();
-        }
-        self.modified_postings.clear();
+        self.posting_writer.end_document(docid);
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {

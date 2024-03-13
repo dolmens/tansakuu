@@ -46,7 +46,7 @@ fn test_range_index() {
     let expect = vec![1, 2, 3];
     assert_eq!(docids, expect);
 
-    // writer.new_segment();
+    writer.new_segment();
 
     let reader = table.reader();
     let index_reader = reader.index_reader();
@@ -54,5 +54,18 @@ fn test_range_index() {
     let term = Term::new("f0".to_string(), "1,3".to_string());
     let docids = get_all_docs(index_reader, &term);
     let expect = vec![1, 2, 3];
+    assert_eq!(docids, expect);
+
+    for i in 0..6_u64 {
+        let doc = doc!(f0 => i);
+        writer.add_document(doc);
+    }
+
+    let reader = table.reader();
+    let index_reader = reader.index_reader();
+
+    let term = Term::new("f0".to_string(), "1,3".to_string());
+    let docids = get_all_docs(index_reader, &term);
+    let expect = vec![1, 2, 3, 7, 8, 9];
     assert_eq!(docids, expect);
 }

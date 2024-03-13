@@ -13,7 +13,7 @@ impl IndexMerger for UniqueKeyMerger {
     fn merge(
         &self,
         directory: &dyn Directory,
-        index_directory: &std::path::Path,
+        index_path: &std::path::Path,
         index: &crate::schema::Index,
         segments: &[&Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
@@ -33,7 +33,7 @@ impl IndexMerger for UniqueKeyMerger {
         let mut keys: Vec<_> = keys.iter().collect();
         keys.sort_by(|a, b| a.0.cmp(b.0));
 
-        let index_path = index_directory.join(index.name());
+        let index_path = index_path.join(index.name());
         let writer = directory.open_write(&index_path).unwrap();
         let mut primary_key_dict_writer = UniqueKeyDictBuilder::new(writer);
         for (key, docid) in keys.iter() {
