@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    persistent_segment_posting_reader::PersistentSegmentPostingReader, BuildingSegmentPosting,
+    persistent_posting_reader::PersistentPostingReader, BuildingSegmentPosting,
     PersistentSegmentPosting, SegmentMultiPosting,
 };
 
@@ -55,7 +55,7 @@ enum SegmentMultiReaderInner<'a> {
 }
 
 struct PersistentSegmentMultiReader<'a> {
-    posting_readers: Vec<PersistentSegmentPostingReader<'a>>,
+    posting_readers: Vec<PersistentPostingReader<'a>>,
 }
 
 struct BuildingSegmentMultiReader<'a> {
@@ -197,7 +197,7 @@ impl<'a> PersistentSegmentMultiReader<'a> {
         let posting_readers = segment_multi_posting
             .iter()
             .map(|posting| {
-                PersistentSegmentPostingReader::open(
+                PersistentPostingReader::open(
                     posting.term_info.clone(),
                     posting.posting_data,
                 )

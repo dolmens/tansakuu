@@ -33,7 +33,7 @@ fn test_range_index() {
     let table = Table::create(schema, settings);
 
     let mut writer = table.writer();
-    for i in 0..6_u64 {
+    for i in 0..17_u64 {
         let doc = doc!(f0 => i);
         writer.add_document(doc);
     }
@@ -46,6 +46,12 @@ fn test_range_index() {
     let expect = vec![1, 2, 3];
     assert_eq!(docids, expect);
 
+    let term = Term::new("f0".to_string(), "0,16".to_string());
+    let docids = get_all_docs(index_reader, &term);
+    let expect: Vec<_> = (0..17).collect();
+    assert_eq!(docids, expect);
+
+    // Serialize
     writer.new_segment();
 
     let reader = table.reader();
@@ -66,6 +72,27 @@ fn test_range_index() {
 
     let term = Term::new("f0".to_string(), "1,3".to_string());
     let docids = get_all_docs(index_reader, &term);
-    let expect = vec![1, 2, 3, 7, 8, 9];
+    let expect = vec![1, 2, 3, 18, 19, 20];
+    assert_eq!(docids, expect);
+
+    let term = Term::new("f0".to_string(), "0,16".to_string());
+    let docids = get_all_docs(index_reader, &term);
+    let expect: Vec<_> = (0..23).collect();
+    assert_eq!(docids, expect);
+
+    // Merge
+    writer.new_segment();
+
+    let reader = table.reader();
+    let index_reader = reader.index_reader();
+
+    let term = Term::new("f0".to_string(), "1,3".to_string());
+    let docids = get_all_docs(index_reader, &term);
+    let expect = vec![1, 2, 3, 18, 19, 20];
+    assert_eq!(docids, expect);
+
+    let term = Term::new("f0".to_string(), "0,16".to_string());
+    let docids = get_all_docs(index_reader, &term);
+    let expect: Vec<_> = (0..23).collect();
     assert_eq!(docids, expect);
 }

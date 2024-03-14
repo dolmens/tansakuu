@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::DocId;
 
 use super::{
-    persistent_segment_posting_reader::PersistentSegmentPostingReader,
+    persistent_posting_reader::PersistentPostingReader,
     InvertedIndexPersistentSegmentData, SegmentPosting,
 };
 
@@ -39,21 +39,7 @@ impl InvertedIndexPersistentSegmentReader {
         }
     }
 
-    pub fn posting_reader(&self, hashkey: u64) -> Option<PersistentSegmentPostingReader<'_>> {
-        if let Some(term_info) = self
-            .index_data
-            .posting_data
-            .term_dict
-            .get(hashkey.to_be_bytes())
-            .ok()
-            .unwrap()
-        {
-            Some(PersistentSegmentPostingReader::open(
-                term_info,
-                &self.index_data.posting_data,
-            ))
-        } else {
-            None
-        }
+    pub fn posting_reader(&self, hashkey: u64) -> Option<PersistentPostingReader<'_>> {
+        PersistentPostingReader::lookup(&self.index_data.posting_data, hashkey).unwrap()
     }
 }

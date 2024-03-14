@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    persistent_segment_posting_reader::PersistentSegmentPostingReader,
+    persistent_posting_reader::PersistentPostingReader,
     segment_posting::{BuildingSegmentPosting, PersistentSegmentPosting, SegmentPostingData},
     SegmentPosting,
 };
@@ -22,7 +22,7 @@ enum SegmentReaderInner<'a> {
 }
 
 struct PersistentSegmentReader<'a> {
-    posting_reader: PersistentSegmentPostingReader<'a>,
+    posting_reader: PersistentPostingReader<'a>,
 }
 
 struct BuildingSegmentReader<'a> {
@@ -168,7 +168,7 @@ impl<'a> SegmentReaderInner<'a> {
 
 impl<'a> PersistentSegmentReader<'a> {
     pub fn open(persistent_segment_posting: &'static PersistentSegmentPosting<'a>) -> Self {
-        let posting_reader = PersistentSegmentPostingReader::open(
+        let posting_reader = PersistentPostingReader::open(
             persistent_segment_posting.term_info.clone(),
             persistent_segment_posting.posting_data,
         );

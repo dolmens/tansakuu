@@ -31,7 +31,7 @@ impl IndexSerializer for RangeIndexSerializer {
         let bottom_postings = &range_index_data.bottom_postings;
         posting_serializer.serialize(
             "bottom",
-            &posting_format,
+            posting_format,
             bottom_postings,
             directory,
             &index_path,
@@ -40,7 +40,7 @@ impl IndexSerializer for RangeIndexSerializer {
         let higher_postings = &range_index_data.higher_postings;
         posting_serializer.serialize(
             "higher",
-            &posting_format,
+            posting_format,
             higher_postings,
             directory,
             &index_path,

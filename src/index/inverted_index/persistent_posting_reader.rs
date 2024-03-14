@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{self, Cursor};
 
 use crate::postings::{
     positions::{PositionListDecode, PositionListDecoder},
@@ -8,25 +8,25 @@ use crate::postings::{
 
 use super::PersistentPostingData;
 
-pub type PersistentSegmentDataReader<'a> = Cursor<&'a [u8]>;
+type PersistentPostingInputReader<'a> = Cursor<&'a [u8]>;
 
-pub type PersistentSegmentSkipListReader<'a> = SkipListReader<&'a [u8]>;
+type PersistentPostingSkipListReader<'a> = SkipListReader<&'a [u8]>;
 
-pub type PersistentSegmentDocListDecoder<'a> =
-    DocListDecoder<PersistentSegmentDataReader<'a>, PersistentSegmentSkipListReader<'a>>;
+type PersistentPostingDocListDecoder<'a> =
+    DocListDecoder<PersistentPostingInputReader<'a>, PersistentPostingSkipListReader<'a>>;
 
-pub type PersistentSegmentPositionListDecoder<'a> =
-    PositionListDecoder<PersistentSegmentDataReader<'a>, PersistentSegmentSkipListReader<'a>>;
+type PersistentPostingPositionListDecoder<'a> =
+    PositionListDecoder<PersistentPostingInputReader<'a>, PersistentPostingSkipListReader<'a>>;
 
-pub struct PersistentSegmentPostingReader<'a> {
-    doc_list_decoder: PersistentSegmentDocListDecoder<'a>,
-    position_list_decoder: Option<PersistentSegmentPositionListDecoder<'a>>,
+pub struct PersistentPostingReader<'a> {
+    doc_list_decoder: PersistentPostingDocListDecoder<'a>,
+    position_list_decoder: Option<PersistentPostingPositionListDecoder<'a>>,
     term_info: TermInfo,
     posting_format: PostingFormat,
     posting_data: &'a PersistentPostingData,
 }
 
-impl<'a> PersistentSegmentPostingReader<'a> {
+impl<'a> PersistentPostingReader<'a> {
     pub fn open(term_info: TermInfo, posting_data: &'a PersistentPostingData) -> Self {
         let posting_format = posting_data.posting_format.clone();
         let doc_list_format = posting_format.doc_list_format().clone();
@@ -47,6 +47,42 @@ impl<'a> PersistentSegmentPostingReader<'a> {
         }
     }
 
+    pub fn lookup(
+        posting_data: &'a PersistentPostingData,
+        hashkey: u64,
+    ) -> io::Result<Option<Self>> {
+        let reader = posting_data
+            .term_dict
+            .get(hashkey.to_be_bytes())?
+            .map(|term_info| {
+                let posting_format = posting_data.posting_format.clone();
+                let doc_list_format = posting_format.doc_list_format().clone();
+
+                let doc_list_data =
+                    &posting_data.doc_list_data.as_slice()[term_info.doc_list_range()];
+                let doc_list_data = Cursor::new(doc_list_data);
+                let skip_list_data =
+                    &posting_data.skip_list_data.as_slice()[term_info.skip_list_range()];
+
+                let doc_list_decoder = DocListDecoder::open(
+                    doc_list_format,
+                    term_info.df,
+                    doc_list_data,
+                    skip_list_data,
+                );
+
+                Self {
+                    doc_list_decoder,
+                    position_list_decoder: None,
+                    term_info,
+                    posting_format,
+                    posting_data,
+                }
+            });
+
+        Ok(reader)
+    }
+
     fn init_position_list_decoder(&mut self) {
         let position_list_data =
             &self.posting_data.position_list_data.as_slice()[self.term_info.position_list_range()];
@@ -62,7 +98,7 @@ impl<'a> PersistentSegmentPostingReader<'a> {
     }
 }
 
-impl<'a> PostingRead for PersistentSegmentPostingReader<'a> {
+impl<'a> PostingRead for PersistentPostingReader<'a> {
     fn decode_doc_buffer(
         &mut self,
         docid: crate::DocId,

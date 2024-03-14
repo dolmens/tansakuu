@@ -40,7 +40,7 @@ impl IndexSerializer for InvertedIndexSerializer {
         let posting_serializer = InvertedIndexPostingSerializer::default();
         posting_serializer.serialize(
             index_name,
-            &posting_format,
+            posting_format,
             &inverted_index_data.postings,
             directory,
             index_path,
