@@ -117,10 +117,11 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
             let (ok, prev_key, block_last_key, start_offset, end_offset, skipped_item_count) =
                 self.skip_list_reader.seek(key)?;
             self.read_count = skipped_item_count;
+            self.current_key = block_last_key;
+            self.current_offset = start_offset;
+            self.prev_value = self.skip_list_reader.prev_value();
+            self.current_value = self.skip_list_reader.prev_value();
             if ok {
-                self.current_key = block_last_key;
-                self.prev_value = self.skip_list_reader.prev_value();
-                self.current_value = self.skip_list_reader.current_value();
                 return Ok((
                     true,
                     prev_key,
@@ -130,10 +131,6 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
                     skipped_item_count,
                 ));
             }
-            self.current_key = prev_key;
-            self.current_offset = start_offset;
-            self.prev_value = self.skip_list_reader.prev_value();
-            self.current_value = self.skip_list_reader.prev_value();
         }
 
         while self.current_cursor < self.building_block_snapshot.len() {
