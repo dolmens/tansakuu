@@ -118,6 +118,9 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
                 self.skip_list_reader.seek(key)?;
             self.read_count = skipped_item_count;
             if ok {
+                self.current_key = block_last_key;
+                self.prev_value = self.skip_list_reader.prev_value();
+                self.current_value = self.skip_list_reader.current_value();
                 return Ok((
                     true,
                     prev_key,
