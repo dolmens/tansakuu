@@ -177,7 +177,7 @@ mod tests {
             building_posting_list::BuildingPostingReader, positions::PositionListBlock,
             BuildingPostingWriter, DocListBlock, PostingFormat, PostingRead,
         },
-        DocId, DOC_LIST_BLOCK_LEN, POSITION_LIST_BLOCK_LEN,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN, POSITION_LIST_BLOCK_LEN,
     };
 
     #[test]
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -206,6 +206,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -228,7 +229,7 @@ mod tests {
         assert_eq!(doc_list_block.base_docid, 0);
         assert_eq!(doc_list_block.last_docid, docids[0]);
         assert_eq!(doc_list_block.len, 1);
-        assert_eq!(doc_list_block.docids[0], docids[0]);
+        assert_eq!(doc_list_block.docids[0], docids_deltas[0]);
         assert_eq!(doc_list_block.termfreqs.as_ref().unwrap()[0], termfreqs[0]);
 
         assert!(posting_reader.eof());
@@ -400,7 +401,7 @@ mod tests {
         let mut posting_writer = BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -408,6 +409,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -492,7 +494,7 @@ mod tests {
         assert_eq!(posting_reader.df(), 0);
         assert_eq!(posting_reader.read_count(), 0);
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -500,6 +502,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -534,7 +537,7 @@ mod tests {
         assert_eq!(doc_list_block.base_docid, 0);
         assert_eq!(doc_list_block.last_docid, docids[0]);
         assert_eq!(doc_list_block.len, 1);
-        assert_eq!(doc_list_block.docids[0], docids[0]);
+        assert_eq!(doc_list_block.docids[0], docids_deltas[0]);
         assert_eq!(
             doc_list_block.termfreqs.as_ref().unwrap()[0],
             positions[0].len() as u32
@@ -559,12 +562,12 @@ mod tests {
         assert_eq!(doc_list_block.base_docid, 0);
         assert_eq!(doc_list_block.last_docid, docids[1]);
         assert_eq!(doc_list_block.len, 2);
-        assert_eq!(doc_list_block.docids[0], docids[0]);
+        assert_eq!(doc_list_block.docids[0], docids_deltas[0]);
         assert_eq!(
             doc_list_block.termfreqs.as_ref().unwrap()[0],
             positions[0].len() as u32
         );
-        assert_eq!(doc_list_block.docids[1], docids[1]);
+        assert_eq!(doc_list_block.docids[1], docids_deltas[1]);
         assert_eq!(
             doc_list_block.termfreqs.as_ref().unwrap()[1],
             positions[1].len() as u32

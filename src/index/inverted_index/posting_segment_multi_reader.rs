@@ -106,7 +106,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
             let doc_buffer_cursor = posting_pick.doc_buffer_cursor;
             if doc_buffer_cursor < doc_list_block.len {
                 posting_pick.current_docid =
-                    current_docid + doc_list_block.docids[doc_buffer_cursor];
+                    current_docid + doc_list_block.docids[doc_buffer_cursor] as DocId;
                 posting_pick.doc_buffer_cursor += 1;
                 self.pick_heap.push(posting_pick);
             } else {
@@ -123,7 +123,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
                     doc_list_block.base_docid += self.base_docid;
                     doc_list_block.last_docid += self.base_docid;
                     posting_pick.current_docid =
-                        doc_list_block.base_docid + doc_list_block.docids[0];
+                        doc_list_block.base_docid + doc_list_block.docids[0] as DocId;
                     posting_pick.doc_buffer_cursor = 1;
                     self.pick_heap.push(posting_pick);
                 }
@@ -153,7 +153,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
             {
                 doc_list_block.base_docid += self.base_docid;
                 doc_list_block.last_docid += self.base_docid;
-                let current_docid = doc_list_block.base_docid + doc_list_block.docids[0];
+                let current_docid = doc_list_block.base_docid + doc_list_block.docids[0] as DocId;
                 self.pick_heap
                     .push(PostingPick::new(current_docid, posting_index));
             }
@@ -197,10 +197,7 @@ impl<'a> PersistentSegmentMultiReader<'a> {
         let posting_readers = segment_multi_posting
             .iter()
             .map(|posting| {
-                PersistentPostingReader::open(
-                    posting.term_info.clone(),
-                    posting.posting_data,
-                )
+                PersistentPostingReader::open(posting.term_info.clone(), posting.posting_data)
             })
             .collect();
         Self { posting_readers }

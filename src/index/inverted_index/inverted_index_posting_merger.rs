@@ -3,8 +3,8 @@ use std::{collections::BTreeSet, path::Path};
 use crate::{postings::PostingIterator, Directory, DocId, END_DOCID, END_POSITION};
 
 use super::{
-    persistent_posting_reader::PersistentPostingReader,
-    InvertedIndexPostingSerializeWriter, PersistentPostingData,
+    persistent_posting_reader::PersistentPostingReader, InvertedIndexPostingSerializeWriter,
+    PersistentPostingData,
 };
 
 #[derive(Default)]

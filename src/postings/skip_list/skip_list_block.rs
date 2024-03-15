@@ -10,7 +10,7 @@ pub struct SkipListBlock {
 }
 
 impl SkipListBlock {
-    pub fn new(skip_list_format: &SkipListFormat) -> Self {
+    pub fn new(skip_list_format: SkipListFormat) -> Self {
         let values = if skip_list_format.has_value() {
             Some(
                 std::iter::repeat(0)

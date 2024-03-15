@@ -57,7 +57,12 @@ impl DeferredBuildingSkipListWriter {
 }
 
 impl SkipListWrite for DeferredBuildingSkipListWriter {
-    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> std::io::Result<()> {
+    fn add_skip_item_with_value(
+        &mut self,
+        key: u64,
+        offset: u64,
+        value: u64,
+    ) -> std::io::Result<()> {
         if self.skip_list_writer.is_none() {
             let skip_list_writer = BuildingSkipListWriter::new(self.skip_list_format);
             let building_skip_list = skip_list_writer.building_skip_list().clone();
@@ -65,7 +70,7 @@ impl SkipListWrite for DeferredBuildingSkipListWriter {
             self.skip_list_writer = Some(Box::new(skip_list_writer));
         }
         let skip_list_writer = self.skip_list_writer.as_mut().unwrap();
-        skip_list_writer.add_skip_item(key, offset, value)
+        skip_list_writer.add_skip_item_with_value(key, offset, value)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

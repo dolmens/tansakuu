@@ -3,7 +3,7 @@ use std::io;
 use crate::{
     index::PostingIterator,
     postings::{positions::PositionListBlock, DocListBlock, PostingFormat},
-    DocId, END_DOCID, END_POSITION, INVALID_DOCID, INVALID_POSITION,
+    DocId, END_DOCID, END_POSITION, INVALID_DOCID,
 };
 
 use super::{inverted_index_posting_reader::InvertedIndexPostingReader, SegmentPosting};
@@ -41,7 +41,7 @@ impl<'a> BufferedPostingIterator<'a> {
             doc_buffer_cursor: 0,
             doc_list_block,
             position_docid: INVALID_DOCID,
-            current_position: INVALID_POSITION,
+            current_position: 0,
             current_position_index: 0,
             position_block_cursor: 0,
             position_list_block: None,
@@ -57,7 +57,8 @@ impl<'a> BufferedPostingIterator<'a> {
         {
             return Ok(false);
         }
-        self.current_docid = self.doc_list_block.base_docid + self.doc_list_block.docids[0];
+        self.current_docid =
+            self.doc_list_block.base_docid + self.doc_list_block.docids[0] as DocId;
         if self.posting_format.has_tflist() {
             self.current_ttf = self.doc_list_block.base_ttf;
         }
@@ -177,7 +178,6 @@ impl<'a> BufferedPostingIterator<'a> {
 }
 
 impl<'a> PostingIterator for BufferedPostingIterator<'a> {
-    /// SAFETY: param docid < END_DOCID && current_docid < END_DOCID
     fn seek(&mut self, docid: crate::DocId) -> io::Result<crate::DocId> {
         // if self.current_docid != INVALID_DOCID && docid <= self.current_docid {
         //     return Ok(self.current_docid);
@@ -193,7 +193,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
         }
 
         while self.current_docid < docid {
-            self.current_docid += self.doc_list_block.docids[self.doc_buffer_cursor];
+            self.current_docid += self.doc_list_block.docids[self.doc_buffer_cursor] as DocId;
             self.doc_buffer_cursor += 1;
         }
 
@@ -205,7 +205,7 @@ impl<'a> PostingIterator for BufferedPostingIterator<'a> {
             return Ok(END_POSITION);
         }
 
-        if self.current_docid >= END_DOCID {
+        if self.current_docid == END_DOCID {
             return Ok(END_POSITION);
         }
 
@@ -252,7 +252,7 @@ mod tests {
             PostingIterator,
         },
         postings::{BuildingPostingWriter, PostingFormat},
-        DocId, DOC_LIST_BLOCK_LEN, END_DOCID, END_POSITION, INVALID_DOCID,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN, END_DOCID, END_POSITION, INVALID_DOCID,
     };
 
     #[test]
@@ -266,7 +266,7 @@ mod tests {
             BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -274,6 +274,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
@@ -394,16 +395,20 @@ mod tests {
             pos = t * 2 + 1;
         }
         assert_eq!(posting_iterator.seek_pos(pos)?, END_POSITION);
+        assert_eq!(posting_iterator.seek_pos(pos)?, END_POSITION);
+        assert_eq!(posting_iterator.seek_pos(END_POSITION)?, END_POSITION);
+        // assert_eq!(posting_iterator.seek_pos(INVALID_POSITION)?, END_POSITION);
 
-        // seek INVALID_DOCID
+        // corner case
 
         let mut posting_iterator =
             BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
-        assert_eq!(posting_iterator.seek(INVALID_DOCID)?, END_DOCID);
-        assert_eq!(posting_iterator.seek(INVALID_DOCID)?, END_DOCID);
+        assert_eq!(posting_iterator.seek(INVALID_DOCID)?, 0);
+        assert_eq!(posting_iterator.seek(1)?, 1);
+        assert_eq!(posting_iterator.seek(1_000_000)?, END_DOCID);
         assert_eq!(posting_iterator.seek(END_DOCID)?, END_DOCID);
 
-        // seek END_DOCID
+        // corner case 2
 
         let mut posting_iterator =
             BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
@@ -429,7 +434,7 @@ mod tests {
             BuildingPostingWriter::new(posting_format.clone());
         let posting_list2 = posting_writer2.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -437,6 +442,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
@@ -732,7 +738,7 @@ mod tests {
             BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -740,6 +746,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 

@@ -1,4 +1,4 @@
-use crate::{DocId, DOC_LIST_BLOCK_LEN};
+use crate::{DocId, DocId32, DOC_LIST_BLOCK_LEN};
 
 use super::DocListFormat;
 
@@ -7,7 +7,7 @@ pub struct DocListBlock {
     pub last_docid: DocId,
     pub base_ttf: u64,
     pub len: usize,
-    pub docids: [DocId; DOC_LIST_BLOCK_LEN],
+    pub docids: [DocId32; DOC_LIST_BLOCK_LEN],
     pub termfreqs: Option<Box<[u32]>>,
     pub fieldmasks: Option<Box<[u8]>>,
 }
@@ -50,12 +50,14 @@ impl DocListBlock {
         unimplemented!()
     }
 
-    pub fn decode_docids(&mut self, last_docid: DocId) {
+    #[cfg(test)]
+    pub fn decode_docids(&self, base_docid: DocId) -> Vec<DocId> {
         self.docids[0..self.len]
-            .iter_mut()
-            .fold(last_docid, |acc, elem| {
-                *elem += acc;
-                *elem
-            });
+            .iter()
+            .scan(base_docid, |acc, &elem| {
+                *acc += elem as DocId;
+                Some(*acc)
+            })
+            .collect()
     }
 }

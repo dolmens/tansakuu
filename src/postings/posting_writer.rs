@@ -97,7 +97,7 @@ mod tests {
             compression::BlockEncoder, doc_list_encoder, positions::none_position_list_encoder,
             PostingFormat,
         },
-        DocId, DOC_LIST_BLOCK_LEN,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN,
     };
 
     use super::PostingWriter;
@@ -120,7 +120,7 @@ mod tests {
         );
         let building_block = posting_writer.doc_list_encoder().building_block().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -128,6 +128,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -145,7 +146,7 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
             termfreqs[0]
@@ -159,12 +160,12 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
             termfreqs[0]
         );
-        assert_eq!(building_block.docids[1].load(), docids[1]);
+        assert_eq!(building_block.docids[1].load(), docids_deltas[1]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[1].load(),
             termfreqs[1]

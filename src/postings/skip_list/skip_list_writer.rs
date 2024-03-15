@@ -17,7 +17,10 @@ use crate::{
 use super::SkipListFormat;
 
 pub trait SkipListWrite {
-    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()>;
+    fn add_skip_item(&mut self, key: u64, offset: u64) -> io::Result<()> {
+        self.add_skip_item_with_value(key, offset, 0)
+    }
+    fn add_skip_item_with_value(&mut self, key: u64, offset: u64, value: u64) -> io::Result<()>;
     fn flush(&mut self) -> io::Result<()>;
     fn written_bytes(&self) -> usize;
 }
@@ -43,7 +46,7 @@ pub struct BuildingSkipListBlock {
 #[derive(Default)]
 pub struct SkipListBlockSnapshot {
     len: usize,
-    pub keys: Option<Box<[u32]>>,
+    pub keys: Box<[u32]>,
     pub offsets: Box<[u32]>,
     pub values: Option<Box<[u32]>>,
 }
@@ -58,7 +61,7 @@ pub struct SkipListFlushInfoSnapshot {
 
 impl<W: Write> SkipListWriter<W> {
     pub fn new(skip_list_format: SkipListFormat, output_writer: W) -> Self {
-        let building_block = Arc::new(BuildingSkipListBlock::new(&skip_list_format));
+        let building_block = Arc::new(BuildingSkipListBlock::new(skip_list_format));
 
         Self {
             last_key: 0,
@@ -82,13 +85,14 @@ impl<W: Write> SkipListWriter<W> {
 }
 
 impl<W: Write> SkipListWrite for SkipListWriter<W> {
-    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
+    fn add_skip_item_with_value(&mut self, key: u64, offset: u64, value: u64) -> io::Result<()> {
         let building_block = self.building_block.as_ref();
+        // TODO: How to ensure the subtract result is u32
         building_block.add_skip_item(
             self.buffer_len,
             (key - self.last_key) as u32,
             (offset - self.last_offset) as u32,
-            value.map(|value| (value - self.last_value) as u32),
+            (value - self.last_value) as u32,
         );
 
         self.buffer_len += 1;
@@ -101,7 +105,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
 
         self.last_key = key;
         self.last_offset = offset;
-        self.last_value = value.unwrap_or_default();
+        self.last_value = value;
 
         Ok(())
     }
@@ -145,7 +149,7 @@ impl<W: Write> SkipListWrite for SkipListWriter<W> {
 }
 
 impl BuildingSkipListBlock {
-    pub fn new(skip_list_format: &SkipListFormat) -> Self {
+    pub fn new(skip_list_format: SkipListFormat) -> Self {
         let flush_info = SkipListFlushInfo::new();
         let keys = std::iter::repeat_with(|| RelaxedU32::new(0))
             .take(SKIPLIST_BLOCK_LEN)
@@ -192,7 +196,7 @@ impl BuildingSkipListBlock {
 
             SkipListBlockSnapshot {
                 len,
-                keys: Some(keys),
+                keys,
                 offsets,
                 values,
             }
@@ -201,11 +205,11 @@ impl BuildingSkipListBlock {
         }
     }
 
-    fn add_skip_item(&self, index: usize, key: u32, offset: u32, value: Option<u32>) {
+    fn add_skip_item(&self, index: usize, key: u32, offset: u32, value: u32) {
         self.keys[index].store(key);
         self.offsets[index].store(offset);
         if let Some(values) = self.values.as_deref() {
-            values[index].store(value.unwrap_or_default());
+            values[index].store(value);
         }
     }
 }
@@ -281,10 +285,10 @@ pub struct BasicSkipListWriter {
 }
 
 impl SkipListWrite for BasicSkipListWriter {
-    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
+    fn add_skip_item_with_value(&mut self, key: u64, offset: u64, value: u64) -> io::Result<()> {
         self.keys.push(key);
         self.offsets.push(offset);
-        self.values.push(value.unwrap_or_default());
+        self.values.push(value);
         Ok(())
     }
 
@@ -306,7 +310,7 @@ mod tests {
             compression::BlockEncoder,
             skip_list::{SkipListFormat, SkipListWrite, SkipListWriter},
         },
-        DocId, SKIPLIST_BLOCK_LEN,
+        DocId32, SKIPLIST_BLOCK_LEN,
     };
 
     #[test]
@@ -316,7 +320,7 @@ mod tests {
         let mut buf = vec![];
         let mut skip_list_writer = SkipListWriter::new(skip_list_format, &mut buf);
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -342,7 +346,7 @@ mod tests {
         let offsets = &offsets[..];
 
         for i in 0..BLOCK_LEN * 2 + 3 {
-            skip_list_writer.add_skip_item(docids[i] as u64, offsets[i], None)?;
+            skip_list_writer.add_skip_item(docids[i] as u64, offsets[i])?;
         }
 
         let flush_info_snapshot = skip_list_writer.building_block.flush_info.load();

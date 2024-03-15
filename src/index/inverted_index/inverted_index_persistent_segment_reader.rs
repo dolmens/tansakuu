@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::DocId;
 
 use super::{
-    persistent_posting_reader::PersistentPostingReader,
-    InvertedIndexPersistentSegmentData, SegmentPosting,
+    persistent_posting_reader::PersistentPostingReader, InvertedIndexPersistentSegmentData,
+    SegmentPosting,
 };
 
 pub struct InvertedIndexPersistentSegmentReader {

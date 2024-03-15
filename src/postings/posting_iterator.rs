@@ -66,7 +66,7 @@ impl<R: PostingRead> PostingIterator<R> {
         }
 
         while self.current_docid < docid {
-            self.current_docid += self.doc_list_block.docids[self.doc_buffer_cursor];
+            self.current_docid += self.doc_list_block.docids[self.doc_buffer_cursor] as DocId;
             self.doc_buffer_cursor += 1;
         }
 
@@ -118,7 +118,8 @@ impl<R: PostingRead> PostingIterator<R> {
             self.current_docid = END_DOCID;
             return Ok(false);
         }
-        self.current_docid = self.doc_list_block.base_docid + self.doc_list_block.docids[0];
+        self.current_docid =
+            self.doc_list_block.base_docid + self.doc_list_block.docids[0] as DocId;
         if self.posting_format.has_tflist() {
             self.current_ttf = self.doc_list_block.base_ttf;
         }
@@ -241,7 +242,7 @@ mod tests {
 
     use crate::{
         postings::{BuildingPostingWriter, PostingFormat, PostingIterator},
-        DocId, DOC_LIST_BLOCK_LEN, END_DOCID, END_POSITION,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN, END_DOCID, END_POSITION,
     };
 
     #[test]
@@ -252,7 +253,7 @@ mod tests {
             BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -260,6 +261,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)
@@ -366,7 +368,7 @@ mod tests {
             BuildingPostingWriter::new(posting_format.clone());
         let posting_list = posting_writer.building_posting_list().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -374,6 +376,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
         let termfreqs: Vec<_> = (0..BLOCK_LEN * 2 + 3)

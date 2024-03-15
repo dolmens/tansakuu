@@ -113,6 +113,7 @@ impl<'a> TokenStream for RegexTokenStream<'a> {
     }
 }
 
+#[cfg(not(miri))]
 #[cfg(test)]
 mod tests {
     use crate::tokenizer::regex_tokenizer::RegexTokenizer;

@@ -264,7 +264,6 @@ impl<W: Write, S: SkipListWrite> PositionListEncoder<W, S> {
                 self.skip_list_writer.add_skip_item(
                     self.item_count_flushed as u64 - 1,
                     self.writer.written_bytes(),
-                    None,
                 )?;
             }
 

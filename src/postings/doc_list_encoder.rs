@@ -10,7 +10,7 @@ use tantivy_common::CountingWriter;
 
 use crate::{
     util::atomic::{AcqRelU64, RelaxedU32, RelaxedU8},
-    DocId, DOC_LIST_BLOCK_LEN, MAX_UNCOMPRESSED_DOC_LIST_LEN,
+    DocId, DocId32, DOC_LIST_BLOCK_LEN, MAX_UNCOMPRESSED_DOC_LIST_LEN,
 };
 
 use super::{
@@ -66,7 +66,7 @@ pub struct BuildingDocListBlock {
 #[derive(Default)]
 pub struct DocListBlockSnapshot {
     len: usize,
-    docids: Option<Box<[DocId]>>,
+    docids: Option<Box<[DocId32]>>,
     termfreqs: Option<Box<[u32]>>,
     fieldmasks: Option<Box<[u8]>>,
 }
@@ -170,10 +170,10 @@ impl<W: Write, S: SkipListWrite> DocListEncoder<W, S> {
             }
 
             if self.df > MAX_UNCOMPRESSED_DOC_LIST_LEN {
-                self.skip_list_writer.add_skip_item(
+                self.skip_list_writer.add_skip_item_with_value(
                     self.last_docid as u64,
                     self.writer.written_bytes(),
-                    Some(self.total_tf),
+                    self.total_tf,
                 )?;
             }
 
@@ -204,7 +204,7 @@ impl<W: Write, S: SkipListWrite> DocListEncode for DocListEncoder<W, S> {
         self.df += 1;
 
         let building_block = self.building_block.as_ref();
-        building_block.add_docid(self.buffer_len, docid - self.last_docid);
+        building_block.add_docid(self.buffer_len, (docid - self.last_docid) as DocId32);
         building_block.add_tf(self.buffer_len, self.current_tf);
         building_block.add_fieldmask(self.buffer_len, self.fieldmask);
 
@@ -355,7 +355,7 @@ impl BuildingDocListBlock {
         }
     }
 
-    fn add_docid(&self, offset: usize, docid: DocId) {
+    fn add_docid(&self, offset: usize, docid: DocId32) {
         self.docids[offset].store(docid);
     }
 
@@ -385,7 +385,7 @@ impl DocListBlockSnapshot {
         self.len == 0
     }
 
-    pub fn docids(&self) -> Option<&[DocId]> {
+    pub fn docids(&self) -> Option<&[DocId32]> {
         self.docids.as_deref().map(|docids| &docids[0..self.len])
     }
 
@@ -433,7 +433,7 @@ mod tests {
             compression::BlockEncoder, skip_list::SkipListWriter, DocListEncode, DocListEncoder,
             DocListFormat,
         },
-        DocId, DOC_LIST_BLOCK_LEN,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN,
     };
 
     #[test]
@@ -447,7 +447,7 @@ mod tests {
         let mut doc_list_encoder = DocListEncoder::new(doc_list_format, &mut buf, skip_list_writer);
         let building_block = doc_list_encoder.building_block().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -455,6 +455,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -472,7 +473,7 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
             termfreqs[0]
@@ -486,12 +487,12 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[0].load(),
             termfreqs[0]
         );
-        assert_eq!(building_block.docids[1].load(), docids[1]);
+        assert_eq!(building_block.docids[1].load(), docids_deltas[1]);
         assert_eq!(
             building_block.termfreqs.as_ref().unwrap()[1].load(),
             termfreqs[1]
@@ -566,7 +567,7 @@ mod tests {
         let mut doc_list_encoder = DocListEncoder::new(doc_list_format, &mut buf, skip_list_writer);
         let building_block = doc_list_encoder.building_block().clone();
 
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
         let docids: Vec<_> = docids_deltas
             .iter()
@@ -574,6 +575,7 @@ mod tests {
                 *acc += x;
                 Some(*acc)
             })
+            .map(|docid| docid as DocId)
             .collect();
         let docids = &docids[..];
 
@@ -604,7 +606,7 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 1);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.fieldmasks.as_ref().unwrap()[0].load(),
             fieldmasks[0]
@@ -618,12 +620,12 @@ mod tests {
         let flush_info_snapshot = building_block.flush_info.load();
         assert_eq!(flush_info_snapshot.flushed_count(), 0);
         assert_eq!(flush_info_snapshot.buffer_len(), 2);
-        assert_eq!(building_block.docids[0].load(), docids[0]);
+        assert_eq!(building_block.docids[0].load(), docids_deltas[0]);
         assert_eq!(
             building_block.fieldmasks.as_ref().unwrap()[0].load(),
             fieldmasks[0]
         );
-        assert_eq!(building_block.docids[1].load(), docids[1]);
+        assert_eq!(building_block.docids[1].load(), docids_deltas[1]);
         assert_eq!(
             building_block.fieldmasks.as_ref().unwrap()[1].load(),
             fieldmasks[1]

@@ -74,6 +74,7 @@ impl SegmentMeta {
     }
 
     pub fn inner_docid(&self, docid: DocId) -> DocId {
+        assert!(docid > self.base_docid);
         docid - self.base_docid
     }
 }

@@ -22,12 +22,12 @@ pub mod util;
 
 pub type VersionId = u64;
 
-pub type DocId = u32;
-pub const END_DOCID: DocId = DocId::MAX - 1;
-pub const INVALID_DOCID: DocId = DocId::MAX;
+pub type DocId = i64;
+pub(crate) type DocId32 = u32;
+pub const INVALID_DOCID: DocId = DocId::MIN;
+pub const END_DOCID: DocId = DocId::MAX;
 
-pub const END_POSITION: u32 = u32::MAX - 1;
-pub const INVALID_POSITION: u32 = u32::MAX;
+pub const END_POSITION: u32 = u32::MAX;
 
 pub const FIELD_POS_GAP: usize = 100;
 

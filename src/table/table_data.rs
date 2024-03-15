@@ -154,7 +154,7 @@ impl TableData {
         }
         let docid_mapping = if deleted_doc_count > 0 {
             let mut docid_mapping = vec![];
-            let mut docid = 0;
+            let mut docid = 0 as DocId;
             for i in 0..total_doc_count {
                 docid_mapping.push(if deletionmap.is_deleted(i as DocId) {
                     None

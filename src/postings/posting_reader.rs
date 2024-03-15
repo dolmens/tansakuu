@@ -134,22 +134,24 @@ mod tests {
             positions::none_position_list_decoder, skip_list::BasicSkipListReader, DocListBlock,
             PostingFormat, PostingRead, PostingReader,
         },
-        DocId, DOC_LIST_BLOCK_LEN,
+        DocId, DocId32, DOC_LIST_BLOCK_LEN,
     };
 
     #[test]
     fn test_with_skip_list() -> io::Result<()> {
         const BLOCK_LEN: usize = DOC_LIST_BLOCK_LEN;
         let mut buf = vec![];
-        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId).collect();
+        let docids_deltas: Vec<_> = (0..(BLOCK_LEN * 2 + 3) as DocId32).collect();
         let docids_deltas = &docids_deltas[..];
-        let docids: Vec<_> = docids_deltas
+        let docid32s: Vec<_> = docids_deltas
             .iter()
             .scan(0, |acc, &x| {
                 *acc += x;
                 Some(*acc)
             })
             .collect();
+        let docid32s = &docid32s[..];
+        let docids: Vec<_> = docid32s.iter().map(|&docid| docid as DocId).collect();
         let docids = &docids[..];
 
         let mut termfreqs = vec![];
@@ -171,7 +173,7 @@ mod tests {
         offset += block_encoder
             .encode_u32(&termfreqs[0..BLOCK_LEN], &mut buf)
             .unwrap();
-        block_last_docids.push(docids[BLOCK_LEN - 1] as u64);
+        block_last_docids.push(docid32s[BLOCK_LEN - 1] as u64);
         block_offsets.push(offset as u64);
 
         offset += block_encoder
@@ -180,7 +182,7 @@ mod tests {
         offset += block_encoder
             .encode_u32(&termfreqs[BLOCK_LEN..BLOCK_LEN * 2], &mut buf)
             .unwrap();
-        block_last_docids.push(docids[BLOCK_LEN * 2 - 1] as u64);
+        block_last_docids.push(docid32s[BLOCK_LEN * 2 - 1] as u64);
         block_offsets.push(offset as u64);
 
         offset += block_encoder
@@ -189,7 +191,7 @@ mod tests {
         offset += block_encoder
             .encode_u32(&termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3], &mut buf)
             .unwrap();
-        block_last_docids.push(docids[BLOCK_LEN * 2 + 3 - 1] as u64);
+        block_last_docids.push(docid32s[BLOCK_LEN * 2 + 3 - 1] as u64);
         block_offsets.push(offset as u64);
 
         let posting_format = PostingFormat::builder().with_tflist().build();
@@ -220,8 +222,8 @@ mod tests {
         assert_eq!(block.last_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(block.base_ttf, 0);
         assert_eq!(block.len, BLOCK_LEN);
-        block.decode_docids(block.base_docid);
-        assert_eq!(block.docids, &docids[0..BLOCK_LEN]);
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(gotids, &docids[0..BLOCK_LEN]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
             &termfreqs[0..BLOCK_LEN]
@@ -234,8 +236,8 @@ mod tests {
         assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(block.base_ttf, 0);
         assert_eq!(block.len, BLOCK_LEN);
-        block.decode_docids(block.base_docid);
-        assert_eq!(block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(gotids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
             &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
@@ -247,11 +249,8 @@ mod tests {
         assert_eq!(block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
         assert_eq!(block.len, 3);
-        block.decode_docids(block.base_docid);
-        assert_eq!(
-            &block.docids[0..3],
-            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
-        );
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(&gotids[0..3], &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..3],
             &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -285,8 +284,8 @@ mod tests {
         assert_eq!(block.base_docid, docids[BLOCK_LEN - 1]);
         assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(block.len, BLOCK_LEN);
-        block.decode_docids(block.base_docid);
-        assert_eq!(block.docids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(gotids, &docids[BLOCK_LEN..BLOCK_LEN * 2]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..BLOCK_LEN],
             &termfreqs[BLOCK_LEN..BLOCK_LEN * 2]
@@ -298,11 +297,8 @@ mod tests {
         assert_eq!(block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
         assert_eq!(block.len, 3);
-        block.decode_docids(block.base_docid);
-        assert_eq!(
-            &block.docids[0..3],
-            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
-        );
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(&gotids[0..3], &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..3],
             &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
@@ -333,11 +329,8 @@ mod tests {
         assert_eq!(block.base_docid, docids[BLOCK_LEN * 2 - 1]);
         assert_eq!(block.last_docid, docids[BLOCK_LEN * 2 + 2]);
         assert_eq!(block.len, 3);
-        block.decode_docids(block.base_docid);
-        assert_eq!(
-            &block.docids[0..3],
-            &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]
-        );
+        let gotids = block.decode_docids(block.base_docid);
+        assert_eq!(&gotids[0..3], &docids[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]);
         assert_eq!(
             &block.termfreqs.as_ref().unwrap()[0..3],
             &termfreqs[BLOCK_LEN * 2..BLOCK_LEN * 2 + 3]

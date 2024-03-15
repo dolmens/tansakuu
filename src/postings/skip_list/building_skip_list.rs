@@ -57,8 +57,9 @@ impl BuildingSkipListWriter {
 }
 
 impl SkipListWrite for BuildingSkipListWriter {
-    fn add_skip_item(&mut self, key: u64, offset: u64, value: Option<u64>) -> io::Result<()> {
-        self.skip_list_writer.add_skip_item(key, offset, value)
+    fn add_skip_item_with_value(&mut self, key: u64, offset: u64, value: u64) -> io::Result<()> {
+        self.skip_list_writer
+            .add_skip_item_with_value(key, offset, value)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -139,7 +140,7 @@ impl<'a> SkipListRead for BuildingSkipListReader<'a> {
             let skipped_count = self.read_count;
 
             self.current_key +=
-                self.building_block_snapshot.keys.as_ref().unwrap()[self.current_cursor] as u64;
+                self.building_block_snapshot.keys.as_ref()[self.current_cursor] as u64;
             self.current_offset += self.building_block_snapshot.offsets[self.current_cursor] as u64;
             self.current_value +=
                 self.building_block_snapshot
@@ -213,7 +214,7 @@ mod tests {
         assert_eq!(end_offset, 0);
         assert_eq!(skipped_count, 0);
 
-        skip_list_writer.add_skip_item(1000, 10, None)?;
+        skip_list_writer.add_skip_item(1000, 10)?;
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
 
@@ -248,7 +249,7 @@ mod tests {
         assert_eq!(skipped, 1);
 
         for i in 1..BLOCK_LEN {
-            skip_list_writer.add_skip_item(((i + 1) * 1000) as u64, ((i + 1) * 10) as u64, None)?;
+            skip_list_writer.add_skip_item(((i + 1) * 1000) as u64, ((i + 1) * 10) as u64)?;
         }
 
         let mut skip_list_reader = BuildingSkipListReader::open(&building_skip_list);
@@ -287,7 +288,6 @@ mod tests {
             skip_list_writer.add_skip_item(
                 ((BLOCK_LEN + i + 1) * 1000) as u64,
                 ((BLOCK_LEN + i + 1) * 10) as u64,
-                None,
             )?;
         }
 
@@ -336,7 +336,7 @@ mod tests {
         let w = thread::spawn(move || {
             for i in 0..BLOCK_LEN + 3 {
                 skip_list_writer
-                    .add_skip_item(((i + 1) * 1000) as u64, ((i + 1) * 10) as u64, None)
+                    .add_skip_item(((i + 1) * 1000) as u64, ((i + 1) * 10) as u64)
                     .unwrap();
             }
         });

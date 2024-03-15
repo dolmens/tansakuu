@@ -36,7 +36,7 @@ impl<R: Read> SkipListReader<R> {
             prev_value: 0,
             current_value: 0,
             current_cursor: 0,
-            skip_list_block: SkipListBlock::new(&skip_list_format),
+            skip_list_block: SkipListBlock::new(skip_list_format),
             input_reader,
             skip_list_format,
         }
