@@ -7,7 +7,7 @@ use crate::{
         IndexWriter, IndexWriterResource,
     },
     postings::PostingFormat,
-    schema::{DataType, IndexRef},
+    schema::{FieldType, IndexRef},
 };
 
 use super::{RangeIndexBuildingSegmentData, RangeValueEncoder};
@@ -45,7 +45,7 @@ impl RangeIndexWriter {
 impl IndexWriter for RangeIndexWriter {
     fn add_field(&mut self, field: &crate::schema::FieldRef, value: &crate::document::OwnedValue) {
         let value = match field.data_type() {
-            DataType::UInt8 | DataType::UInt16 | DataType::UInt32 | DataType::UInt64 => {
+            FieldType::UInt8 | FieldType::UInt16 | FieldType::UInt32 | FieldType::UInt64 => {
                 if let Some(value) = value.as_u64() {
                     value
                 } else {

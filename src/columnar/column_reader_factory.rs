@@ -1,5 +1,5 @@
 use crate::{
-    schema::{DataType, Field},
+    schema::{Field, FieldType},
     table::TableData,
     types::{
         Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
@@ -19,77 +19,77 @@ impl ColumnReaderFactory {
     pub fn create(&self, field: &Field, table_data: &TableData) -> Box<dyn ColumnReader> {
         if !field.is_multi() {
             match field.data_type() {
-                DataType::Str | DataType::Text => {
+                FieldType::Str | FieldType::Text => {
                     Box::new(StringColumnReader::new(field, table_data))
                 }
 
-                DataType::Int8 => {
+                FieldType::Int8 => {
                     Box::new(PrimitiveColumnReader::<Int8Type>::new(field, table_data))
                 }
-                DataType::Int16 => {
+                FieldType::Int16 => {
                     Box::new(PrimitiveColumnReader::<Int16Type>::new(field, table_data))
                 }
-                DataType::Int32 => {
+                FieldType::Int32 => {
                     Box::new(PrimitiveColumnReader::<Int32Type>::new(field, table_data))
                 }
-                DataType::Int64 => {
+                FieldType::Int64 => {
                     Box::new(PrimitiveColumnReader::<Int64Type>::new(field, table_data))
                 }
-                DataType::UInt8 => {
+                FieldType::UInt8 => {
                     Box::new(PrimitiveColumnReader::<UInt8Type>::new(field, table_data))
                 }
-                DataType::UInt16 => {
+                FieldType::UInt16 => {
                     Box::new(PrimitiveColumnReader::<UInt16Type>::new(field, table_data))
                 }
-                DataType::UInt32 => {
+                FieldType::UInt32 => {
                     Box::new(PrimitiveColumnReader::<UInt32Type>::new(field, table_data))
                 }
-                DataType::UInt64 => {
+                FieldType::UInt64 => {
                     Box::new(PrimitiveColumnReader::<UInt64Type>::new(field, table_data))
                 }
 
-                DataType::Float32 => {
+                FieldType::Float32 => {
                     Box::new(PrimitiveColumnReader::<Float32Type>::new(field, table_data))
                 }
-                DataType::Float64 => {
+                FieldType::Float64 => {
                     Box::new(PrimitiveColumnReader::<Float64Type>::new(field, table_data))
                 }
             }
         } else {
             match field.data_type() {
-                DataType::Str | DataType::Text => {
+                FieldType::Str | FieldType::Text => {
                     Box::new(ListStringColumnReader::new(field, table_data))
                 }
 
-                DataType::Int8 => Box::new(ListPrimitiveColumnReader::<Int8Type>::new(
+                FieldType::Int8 => Box::new(ListPrimitiveColumnReader::<Int8Type>::new(
                     field, table_data,
                 )),
-                DataType::Int16 => Box::new(ListPrimitiveColumnReader::<Int16Type>::new(
+                FieldType::Int16 => Box::new(ListPrimitiveColumnReader::<Int16Type>::new(
                     field, table_data,
                 )),
-                DataType::Int32 => Box::new(ListPrimitiveColumnReader::<Int32Type>::new(
+                FieldType::Int32 => Box::new(ListPrimitiveColumnReader::<Int32Type>::new(
                     field, table_data,
                 )),
-                DataType::Int64 => Box::new(ListPrimitiveColumnReader::<Int64Type>::new(
+                FieldType::Int64 => Box::new(ListPrimitiveColumnReader::<Int64Type>::new(
                     field, table_data,
                 )),
-                DataType::UInt8 => Box::new(ListPrimitiveColumnReader::<UInt8Type>::new(
+                FieldType::UInt8 => Box::new(ListPrimitiveColumnReader::<UInt8Type>::new(
                     field, table_data,
                 )),
-                DataType::UInt16 => Box::new(ListPrimitiveColumnReader::<UInt16Type>::new(
+                FieldType::UInt16 => Box::new(ListPrimitiveColumnReader::<UInt16Type>::new(
                     field, table_data,
                 )),
-                DataType::UInt32 => Box::new(ListPrimitiveColumnReader::<UInt32Type>::new(
+                FieldType::UInt32 => Box::new(ListPrimitiveColumnReader::<UInt32Type>::new(
                     field, table_data,
                 )),
-                DataType::UInt64 => Box::new(ListPrimitiveColumnReader::<UInt64Type>::new(
+                FieldType::UInt64 => Box::new(ListPrimitiveColumnReader::<UInt64Type>::new(
                     field, table_data,
                 )),
 
-                DataType::Float32 => Box::new(ListPrimitiveColumnReader::<Float32Type>::new(
+                FieldType::Float32 => Box::new(ListPrimitiveColumnReader::<Float32Type>::new(
                     field, table_data,
                 )),
-                DataType::Float64 => Box::new(ListPrimitiveColumnReader::<Float64Type>::new(
+                FieldType::Float64 => Box::new(ListPrimitiveColumnReader::<Float64Type>::new(
                     field, table_data,
                 )),
             }

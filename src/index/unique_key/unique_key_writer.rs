@@ -3,7 +3,7 @@ use std::{collections::hash_map::RandomState, sync::Arc};
 use crate::{
     document::{OwnedValue, Value},
     index::{inverted_index::TokenHasher, IndexWriter, IndexWriterResource},
-    schema::{DataType, FieldRef},
+    schema::{FieldRef, FieldType},
     util::{capacity_policy::FixedCapacityPolicy, layered_hashmap::LayeredHashMapWriter},
     DocId, HASHMAP_INITIAL_CAPACITY,
 };
@@ -48,7 +48,7 @@ impl IndexWriter for UniqueKeyWriter {
     fn add_field(&mut self, field: &FieldRef, value: &OwnedValue) {
         let token_hasher = TokenHasher::default();
         self.current_key = match field.data_type() {
-            DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
+            FieldType::Int8 | FieldType::Int16 | FieldType::Int32 | FieldType::Int64 => {
                 match value.as_i64() {
                     Some(value) => token_hasher.hash_bytes(value.to_string().as_bytes()),
                     None => {
@@ -56,7 +56,7 @@ impl IndexWriter for UniqueKeyWriter {
                     }
                 }
             }
-            DataType::UInt8 | DataType::UInt16 | DataType::UInt32 | DataType::UInt64 => {
+            FieldType::UInt8 | FieldType::UInt16 | FieldType::UInt32 | FieldType::UInt64 => {
                 match value.as_u64() {
                     Some(value) => token_hasher.hash_bytes(value.to_string().as_bytes()),
                     None => {
@@ -64,7 +64,7 @@ impl IndexWriter for UniqueKeyWriter {
                     }
                 }
             }
-            DataType::Str | DataType::Text => match value.as_str() {
+            FieldType::Str | FieldType::Text => match value.as_str() {
                 Some(value) => token_hasher.hash_bytes(value.as_bytes()),
                 None => {
                     return;

@@ -1,7 +1,5 @@
 use std::{collections::HashMap, ops::BitOr, sync::Arc};
 
-use super::DataType;
-
 #[derive(Default)]
 pub struct SchemaBuilder {
     schema: Schema,
@@ -19,10 +17,32 @@ pub struct Schema {
 
 pub type SchemaRef = Arc<Schema>;
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FieldType {
+    Str,
+    Text,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    Float32,
+    Float64,
+}
+
+impl std::fmt::Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 #[derive(Debug)]
 pub struct Field {
     name: String,
-    data_type: DataType,
+    data_type: FieldType,
     nullable: bool,
     multi: bool,
     columnar: bool,
@@ -159,10 +179,10 @@ impl SchemaBuilder {
     }
 
     pub fn add_text_field(&mut self, field_name: String, options: FieldOptions) {
-        self.add_field(field_name, DataType::Text, options);
+        self.add_field(field_name, FieldType::Text, options);
     }
 
-    pub fn add_field(&mut self, field_name: String, data_type: DataType, options: FieldOptions) {
+    pub fn add_field(&mut self, field_name: String, data_type: FieldType, options: FieldOptions) {
         assert!(
             !self.schema.fields_map.contains_key(&field_name),
             "Field `{field_name}` already exist."
@@ -197,14 +217,14 @@ impl SchemaBuilder {
                 IndexType::UniqueKey
             } else {
                 match field.data_type() {
-                    DataType::UInt64
-                    | DataType::UInt32
-                    | DataType::UInt16
-                    | DataType::UInt8
-                    | DataType::Int64
-                    | DataType::Int32
-                    | DataType::Int16
-                    | DataType::Int8 => IndexType::Range,
+                    FieldType::UInt64
+                    | FieldType::UInt32
+                    | FieldType::UInt16
+                    | FieldType::UInt8
+                    | FieldType::Int64
+                    | FieldType::Int32
+                    | FieldType::Int16
+                    | FieldType::Int8 => IndexType::Range,
                     _ => IndexType::Text(Default::default()),
                 }
             };
@@ -342,7 +362,7 @@ impl Field {
         &self.name
     }
 
-    pub fn data_type(&self) -> &DataType {
+    pub fn data_type(&self) -> &FieldType {
         &self.data_type
     }
 
@@ -368,7 +388,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::schema::{
-        schema::FieldOptions, DataType, IndexType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY,
+        schema::FieldOptions, FieldType, IndexType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY,
     };
 
     #[test]
@@ -492,8 +512,8 @@ mod tests {
     fn test_columns() {
         let mut builder = SchemaBuilder::default();
         builder.add_text_field("f1".to_string(), COLUMNAR | INDEXED);
-        builder.add_field("f2".to_string(), DataType::Int64, INDEXED);
-        builder.add_field("f3".to_string(), DataType::Int64, COLUMNAR);
+        builder.add_field("f2".to_string(), FieldType::Int64, INDEXED);
+        builder.add_field("f3".to_string(), FieldType::Int64, COLUMNAR);
         let fields: Vec<_> = builder.schema.fields().iter().map(|f| f.name()).collect();
         assert_eq!(fields, vec!["f1", "f2", "f3"]);
         let columns: Vec<_> = builder.schema.columns().iter().map(|f| f.name()).collect();

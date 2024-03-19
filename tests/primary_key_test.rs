@@ -2,7 +2,7 @@ use tansakuu::{
     columnar::{PrimitiveColumnReader, StringColumnReader},
     document::InputDocument,
     query::Term,
-    schema::{DataType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
+    schema::{FieldType, SchemaBuilder, COLUMNAR, INDEXED, PRIMARY_KEY},
     table::{Table, TableIndexReader, TableSettings},
     types::Int64Type,
     DocId, END_DOCID,
@@ -31,7 +31,7 @@ fn test_primary_key() {
     let mut schema_builder = SchemaBuilder::new();
     schema_builder.add_field(
         "item_id".to_string(),
-        DataType::Int64,
+        FieldType::Int64,
         COLUMNAR | INDEXED | PRIMARY_KEY,
     );
     schema_builder.add_text_field("title".to_string(), COLUMNAR | INDEXED);

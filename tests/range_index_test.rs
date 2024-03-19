@@ -1,7 +1,7 @@
 use tansakuu::{
     doc,
     query::Term,
-    schema::{DataType, Schema, INDEXED},
+    schema::{FieldType, Schema, INDEXED},
     table::{Table, TableIndexReader, TableSettings},
     DocId, END_DOCID,
 };
@@ -27,7 +27,7 @@ fn get_all_docs(index_reader: &TableIndexReader, term: &Term) -> Vec<DocId> {
 #[test]
 fn test_range_index() {
     let mut schema_builder = Schema::builder();
-    schema_builder.add_field("f0".to_string(), DataType::UInt64, INDEXED);
+    schema_builder.add_field("f0".to_string(), FieldType::UInt64, INDEXED);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);

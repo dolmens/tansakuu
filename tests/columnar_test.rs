@@ -7,7 +7,7 @@ use tansakuu::{
         StringColumnReader,
     },
     doc,
-    schema::{DataType, SchemaBuilder, COLUMNAR, MULTI, NOT_NULL},
+    schema::{FieldType, SchemaBuilder, COLUMNAR, MULTI, NOT_NULL},
     table::{Table, TableSettings},
     types::{Int16Type, Int64Type, Int8Type},
 };
@@ -15,8 +15,8 @@ use tansakuu::{
 #[test]
 fn test_column_string() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Str, COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::Str, COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), FieldType::Str, COLUMNAR);
+    schema_builder.add_field("f2".to_string(), FieldType::Str, COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -79,8 +79,8 @@ fn test_column_string() {
 #[test]
 fn test_column_i8() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Int8, COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::Int8, COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), FieldType::Int8, COLUMNAR);
+    schema_builder.add_field("f2".to_string(), FieldType::Int8, COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -151,8 +151,8 @@ fn test_column_i8() {
 #[test]
 fn test_column_i16() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Int16, COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::Int16, COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), FieldType::Int16, COLUMNAR);
+    schema_builder.add_field("f2".to_string(), FieldType::Int16, COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -222,8 +222,8 @@ fn test_column_i16() {
 #[test]
 fn test_column_i64() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Int64, COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::Int64, COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), FieldType::Int64, COLUMNAR);
+    schema_builder.add_field("f2".to_string(), FieldType::Int64, COLUMNAR | NOT_NULL);
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);
@@ -293,10 +293,10 @@ fn test_column_i64() {
 #[test]
 fn test_column_list_i8() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Int8, MULTI | COLUMNAR);
+    schema_builder.add_field("f1".to_string(), FieldType::Int8, MULTI | COLUMNAR);
     schema_builder.add_field(
         "f2".to_string(),
-        DataType::Int8,
+        FieldType::Int8,
         MULTI | COLUMNAR | NOT_NULL,
     );
     let schema = schema_builder.build();
@@ -357,10 +357,10 @@ fn test_column_list_i8() {
 #[test]
 fn test_column_list_i64() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Int64, MULTI | COLUMNAR);
+    schema_builder.add_field("f1".to_string(), FieldType::Int64, MULTI | COLUMNAR);
     schema_builder.add_field(
         "f2".to_string(),
-        DataType::Int64,
+        FieldType::Int64,
         MULTI | COLUMNAR | NOT_NULL,
     );
     let schema = schema_builder.build();
@@ -421,8 +421,12 @@ fn test_column_list_i64() {
 #[test]
 fn test_column_list_string() {
     let mut schema_builder = SchemaBuilder::new();
-    schema_builder.add_field("f1".to_string(), DataType::Str, MULTI | COLUMNAR);
-    schema_builder.add_field("f2".to_string(), DataType::Str, MULTI | COLUMNAR | NOT_NULL);
+    schema_builder.add_field("f1".to_string(), FieldType::Str, MULTI | COLUMNAR);
+    schema_builder.add_field(
+        "f2".to_string(),
+        FieldType::Str,
+        MULTI | COLUMNAR | NOT_NULL,
+    );
     let schema = schema_builder.build();
     let settings = TableSettings::new();
     let table = Table::create(schema, settings);

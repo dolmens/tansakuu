@@ -6,7 +6,7 @@ use crate::{
     document::{OwnedValue, Value},
     index::{IndexWriter, IndexWriterResource},
     postings::PostingFormatBuilder,
-    schema::{DataType, FieldRef, IndexRef, IndexType},
+    schema::{FieldRef, FieldType, IndexRef, IndexType},
     tokenizer::{
         ChainedTokenStream, OwnedMultiTokenStream, OwnedTextAnalyzerStream, OwnedTokenStream,
         PreTokenizedStream, TextAnalyzer,
@@ -70,12 +70,12 @@ impl InvertedIndexWriter {
         value: &'a OwnedValue,
     ) -> Option<BoxTokenStream<'a>> {
         match field.data_type() {
-            DataType::Str => self.tokenize_str_field(field, value),
-            DataType::Text => self.tokenize_text_field(field, value),
-            DataType::Int8 | DataType::Int16 | DataType::Int32 | DataType::Int64 => {
+            FieldType::Str => self.tokenize_str_field(field, value),
+            FieldType::Text => self.tokenize_text_field(field, value),
+            FieldType::Int8 | FieldType::Int16 | FieldType::Int32 | FieldType::Int64 => {
                 self.tokenize_i64_field(field, value)
             }
-            DataType::UInt8 | DataType::UInt16 | DataType::UInt32 | DataType::UInt64 => {
+            FieldType::UInt8 | FieldType::UInt16 | FieldType::UInt32 | FieldType::UInt64 => {
                 self.tokenize_u64_field(field, value)
             }
             _ => {

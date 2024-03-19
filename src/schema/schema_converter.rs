@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use arrow_schema::Schema as ArrowSchema;
 
-use crate::schema::DataType;
+use crate::schema::FieldType;
 
 use super::Schema;
 
@@ -15,59 +15,59 @@ impl SchemaConverter {
         for field in schema.columns() {
             if !field.is_multi() {
                 let arrow_field = match field.data_type() {
-                    DataType::Str | DataType::Text => arrow_schema::Field::new(
+                    FieldType::Str | FieldType::Text => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Utf8,
                         field.is_nullable(),
                     ),
 
-                    DataType::Int8 => arrow_schema::Field::new(
+                    FieldType::Int8 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Int8,
                         field.is_nullable(),
                     ),
-                    DataType::Int16 => arrow_schema::Field::new(
+                    FieldType::Int16 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Int16,
                         field.is_nullable(),
                     ),
-                    DataType::Int32 => arrow_schema::Field::new(
+                    FieldType::Int32 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Int32,
                         field.is_nullable(),
                     ),
-                    DataType::Int64 => arrow_schema::Field::new(
+                    FieldType::Int64 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Int64,
                         field.is_nullable(),
                     ),
-                    DataType::UInt8 => arrow_schema::Field::new(
+                    FieldType::UInt8 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::UInt8,
                         field.is_nullable(),
                     ),
-                    DataType::UInt16 => arrow_schema::Field::new(
+                    FieldType::UInt16 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::UInt16,
                         field.is_nullable(),
                     ),
-                    DataType::UInt32 => arrow_schema::Field::new(
+                    FieldType::UInt32 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::UInt32,
                         field.is_nullable(),
                     ),
-                    DataType::UInt64 => arrow_schema::Field::new(
+                    FieldType::UInt64 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::UInt64,
                         field.is_nullable(),
                     ),
 
-                    DataType::Float32 => arrow_schema::Field::new(
+                    FieldType::Float32 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Float32,
                         field.is_nullable(),
                     ),
-                    DataType::Float64 => arrow_schema::Field::new(
+                    FieldType::Float64 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Float64,
                         field.is_nullable(),
@@ -76,39 +76,39 @@ impl SchemaConverter {
                 arrow_fields.push(arrow_field);
             } else {
                 let arrow_field = match field.data_type() {
-                    DataType::Str | DataType::Text => {
+                    FieldType::Str | FieldType::Text => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Utf8, true)
                     }
 
-                    DataType::Int8 => {
+                    FieldType::Int8 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Int8, true)
                     }
-                    DataType::Int16 => {
+                    FieldType::Int16 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Int16, true)
                     }
-                    DataType::Int32 => {
+                    FieldType::Int32 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Int32, true)
                     }
-                    DataType::Int64 => {
+                    FieldType::Int64 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Int64, true)
                     }
-                    DataType::UInt8 => {
+                    FieldType::UInt8 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::UInt8, true)
                     }
-                    DataType::UInt16 => {
+                    FieldType::UInt16 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::UInt16, true)
                     }
-                    DataType::UInt32 => {
+                    FieldType::UInt32 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::UInt32, true)
                     }
-                    DataType::UInt64 => {
+                    FieldType::UInt64 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::UInt64, true)
                     }
 
-                    DataType::Float32 => {
+                    FieldType::Float32 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Float32, true)
                     }
-                    DataType::Float64 => {
+                    FieldType::Float64 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Float64, true)
                     }
                 };

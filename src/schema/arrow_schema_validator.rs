@@ -1,4 +1,4 @@
-use super::{DataType, Schema};
+use super::{FieldType, Schema};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArrowSchemaValidationError {
@@ -7,7 +7,7 @@ pub enum ArrowSchemaValidationError {
     #[error("Field mismatch, expect: {0}, got: {1}")]
     FieldMismatch(String, String),
     #[error("Field type mismatch, field type: {0}, multi: {1} arrow type: {2}")]
-    FieldTypeMismatch(DataType, bool, arrow_schema::DataType),
+    FieldTypeMismatch(FieldType, bool, arrow_schema::DataType),
 }
 
 #[derive(Default)]
@@ -51,40 +51,40 @@ impl ArrowSchemaValidator {
 
             if !field.is_multi() {
                 let matched = match field.data_type() {
-                    DataType::Str | DataType::Text => {
+                    FieldType::Str | FieldType::Text => {
                         matches!(arrow_field_type, arrow_schema::DataType::Utf8)
                     }
 
-                    DataType::Int8 => {
+                    FieldType::Int8 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Int8)
                     }
-                    DataType::Int16 => {
+                    FieldType::Int16 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Int16)
                     }
-                    DataType::Int32 => {
+                    FieldType::Int32 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Int32)
                     }
 
-                    DataType::Int64 => {
+                    FieldType::Int64 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Int64)
                     }
-                    DataType::UInt8 => {
+                    FieldType::UInt8 => {
                         matches!(arrow_field_type, arrow_schema::DataType::UInt8)
                     }
-                    DataType::UInt16 => {
+                    FieldType::UInt16 => {
                         matches!(arrow_field_type, arrow_schema::DataType::UInt16)
                     }
-                    DataType::UInt32 => {
+                    FieldType::UInt32 => {
                         matches!(arrow_field_type, arrow_schema::DataType::UInt32)
                     }
-                    DataType::UInt64 => {
+                    FieldType::UInt64 => {
                         matches!(arrow_field_type, arrow_schema::DataType::UInt64)
                     }
 
-                    DataType::Float32 => {
+                    FieldType::Float32 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Float32)
                     }
-                    DataType::Float64 => {
+                    FieldType::Float64 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Float64)
                     }
                 };
