@@ -30,7 +30,7 @@ struct BuildingSegmentReader<'a> {
 }
 
 impl<'a> PostingSegmentReader<'a> {
-    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> Self {
+    pub fn open(segment_posting: &'a SegmentPosting<'a>) -> Self {
         Self {
             base_docid: segment_posting.base_docid(),
             inner_reader: SegmentReaderInner::open(segment_posting),
@@ -86,7 +86,7 @@ impl<'a> PostingSegmentReader<'a> {
 }
 
 impl<'a> SegmentReaderInner<'a> {
-    pub fn open(segment_posting: &'static SegmentPosting<'a>) -> Self {
+    pub fn open(segment_posting: &'a SegmentPosting<'a>) -> Self {
         match segment_posting.posting_data() {
             SegmentPostingData::Persistent(persistent_segment_posting) => {
                 Self::Persistent(PersistentSegmentReader::open(persistent_segment_posting))
@@ -167,7 +167,7 @@ impl<'a> SegmentReaderInner<'a> {
 }
 
 impl<'a> PersistentSegmentReader<'a> {
-    pub fn open(persistent_segment_posting: &'static PersistentSegmentPosting<'a>) -> Self {
+    pub fn open(persistent_segment_posting: &'a PersistentSegmentPosting<'a>) -> Self {
         let posting_reader = PersistentPostingReader::open(
             persistent_segment_posting.term_info.clone(),
             persistent_segment_posting.posting_data,
@@ -214,7 +214,7 @@ impl<'a> PersistentSegmentReader<'a> {
 }
 
 impl<'a> BuildingSegmentReader<'a> {
-    pub fn open(segment_posting: &'static BuildingSegmentPosting<'a>) -> Self {
+    pub fn open(segment_posting: &'a BuildingSegmentPosting<'a>) -> Self {
         Self {
             building_posting_reader: BuildingPostingReader::open(
                 segment_posting.building_posting_list,

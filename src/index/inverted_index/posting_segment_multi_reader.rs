@@ -65,7 +65,7 @@ struct BuildingSegmentMultiReader<'a> {
 impl<'a> PostingSegmentMultiReader<'a> {
     pub fn open(
         doc_list_format: DocListFormat,
-        segment_multi_posting: &'static SegmentMultiPosting<'a>,
+        segment_multi_posting: &'a SegmentMultiPosting<'a>,
     ) -> Self {
         let base_docid = segment_multi_posting.base_docid();
         let posting_count = segment_multi_posting.posting_count();
@@ -164,7 +164,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
 }
 
 impl<'a> SegmentMultiReaderInner<'a> {
-    pub fn open(segment_multi_posting: &'static SegmentMultiPosting<'a>) -> Self {
+    pub fn open(segment_multi_posting: &'a SegmentMultiPosting<'a>) -> Self {
         match segment_multi_posting.posting_data() {
             SegmentMultiPostingData::Persistent(segment_multi_posting) => {
                 Self::Persistent(PersistentSegmentMultiReader::open(segment_multi_posting))
@@ -193,7 +193,7 @@ impl<'a> SegmentMultiReaderInner<'a> {
 }
 
 impl<'a> PersistentSegmentMultiReader<'a> {
-    pub fn open(segment_multi_posting: &'static Vec<PersistentSegmentPosting<'a>>) -> Self {
+    pub fn open(segment_multi_posting: &'a Vec<PersistentSegmentPosting<'a>>) -> Self {
         let posting_readers = segment_multi_posting
             .iter()
             .map(|posting| {
@@ -214,7 +214,7 @@ impl<'a> PersistentSegmentMultiReader<'a> {
 }
 
 impl<'a> BuildingSegmentMultiReader<'a> {
-    pub fn open(segment_multi_posting: &'static Vec<BuildingSegmentPosting<'a>>) -> Self {
+    pub fn open(segment_multi_posting: &'a Vec<BuildingSegmentPosting<'a>>) -> Self {
         let posting_readers = segment_multi_posting
             .iter()
             .map(|posting| BuildingPostingReader::open(posting.building_posting_list))
