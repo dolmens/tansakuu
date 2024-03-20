@@ -1,8 +1,8 @@
 use crate::schema::{FieldRef, FieldType};
 
 use super::{
-    ColumnWriter, ListPrimitiveColumnWriter, ListStringColumnWriter, PrimitiveColumnWriter,
-    StringColumnWriter,
+    ColumnWriter, GeoLocationColumnWriter, MultiPrimitiveColumnWriter, MultiStringColumnWriter,
+    PrimitiveColumnWriter, StringColumnWriter,
 };
 
 #[derive(Default)]
@@ -27,28 +27,38 @@ impl ColumnWriterFactory {
 
                 FieldType::Float32 => Box::new(PrimitiveColumnWriter::<f32>::new(field.clone())),
                 FieldType::Float64 => Box::new(PrimitiveColumnWriter::<f64>::new(field.clone())),
+
+                FieldType::GeoLocation => Box::new(GeoLocationColumnWriter::new(field.clone())),
             }
         } else {
             match field.data_type() {
                 FieldType::Str | FieldType::Text => {
-                    Box::new(ListStringColumnWriter::new(field.clone()))
+                    Box::new(MultiStringColumnWriter::new(field.clone()))
                 }
 
-                FieldType::Int8 => Box::new(ListPrimitiveColumnWriter::<i8>::new(field.clone())),
-                FieldType::Int16 => Box::new(ListPrimitiveColumnWriter::<i16>::new(field.clone())),
-                FieldType::Int32 => Box::new(ListPrimitiveColumnWriter::<i32>::new(field.clone())),
-                FieldType::Int64 => Box::new(ListPrimitiveColumnWriter::<i64>::new(field.clone())),
-                FieldType::UInt8 => Box::new(ListPrimitiveColumnWriter::<u8>::new(field.clone())),
-                FieldType::UInt16 => Box::new(ListPrimitiveColumnWriter::<u16>::new(field.clone())),
-                FieldType::UInt32 => Box::new(ListPrimitiveColumnWriter::<u32>::new(field.clone())),
-                FieldType::UInt64 => Box::new(ListPrimitiveColumnWriter::<u64>::new(field.clone())),
+                FieldType::Int8 => Box::new(MultiPrimitiveColumnWriter::<i8>::new(field.clone())),
+                FieldType::Int16 => Box::new(MultiPrimitiveColumnWriter::<i16>::new(field.clone())),
+                FieldType::Int32 => Box::new(MultiPrimitiveColumnWriter::<i32>::new(field.clone())),
+                FieldType::Int64 => Box::new(MultiPrimitiveColumnWriter::<i64>::new(field.clone())),
+                FieldType::UInt8 => Box::new(MultiPrimitiveColumnWriter::<u8>::new(field.clone())),
+                FieldType::UInt16 => {
+                    Box::new(MultiPrimitiveColumnWriter::<u16>::new(field.clone()))
+                }
+                FieldType::UInt32 => {
+                    Box::new(MultiPrimitiveColumnWriter::<u32>::new(field.clone()))
+                }
+                FieldType::UInt64 => {
+                    Box::new(MultiPrimitiveColumnWriter::<u64>::new(field.clone()))
+                }
 
                 FieldType::Float32 => {
-                    Box::new(ListPrimitiveColumnWriter::<f32>::new(field.clone()))
+                    Box::new(MultiPrimitiveColumnWriter::<f32>::new(field.clone()))
                 }
                 FieldType::Float64 => {
-                    Box::new(ListPrimitiveColumnWriter::<f64>::new(field.clone()))
+                    Box::new(MultiPrimitiveColumnWriter::<f64>::new(field.clone()))
                 }
+
+                FieldType::GeoLocation => unimplemented!(),
             }
         }
     }

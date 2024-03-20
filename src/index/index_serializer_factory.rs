@@ -15,6 +15,7 @@ impl IndexSerializerFactory {
             IndexType::PrimaryKey => Box::new(UniqueKeySerializer::default()),
             IndexType::UniqueKey => Box::new(UniqueKeySerializer::default()),
             IndexType::Range => Box::new(RangeIndexSerializer::default()),
+            IndexType::Spatial(_) => Box::new(InvertedIndexSerializer::default()),
         }
     }
 }

@@ -31,6 +31,7 @@ pub enum FieldType {
     UInt64,
     Float32,
     Float64,
+    GeoLocation,
 }
 
 impl std::fmt::Display for FieldType {
@@ -59,12 +60,18 @@ pub struct TextIndexOptions {
     pub tokenizer: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
+pub struct SpatialIndexOptions {
+    pub precision: f64,
+}
+
+#[derive(Clone, Debug)]
 pub enum IndexType {
     Text(TextIndexOptions),
     PrimaryKey,
     UniqueKey,
     Range,
+    Spatial(SpatialIndexOptions),
 }
 
 #[derive(Debug)]
@@ -85,6 +92,26 @@ pub struct FieldOptions {
     stored: bool,
     unique_key: bool,
     primary_key: bool,
+}
+
+impl Field {
+    pub fn new(
+        name: String,
+        data_type: FieldType,
+        nullable: bool,
+        multi: bool,
+        columnar: bool,
+        stored: bool,
+    ) -> Self {
+        Self {
+            name,
+            data_type,
+            nullable,
+            multi,
+            columnar,
+            stored,
+        }
+    }
 }
 
 pub const BARE_FIELD: FieldOptions = FieldOptions {
@@ -225,6 +252,7 @@ impl SchemaBuilder {
                     | FieldType::Int32
                     | FieldType::Int16
                     | FieldType::Int8 => IndexType::Range,
+                    FieldType::GeoLocation => IndexType::Spatial(Default::default()),
                     _ => IndexType::Text(Default::default()),
                 }
             };

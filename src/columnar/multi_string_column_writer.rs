@@ -5,22 +5,22 @@ use crate::{
     BUILDING_COLUMN_VEC_CHUNK_SIZE, BUILDING_COLUMN_VEC_NODE_SIZE,
 };
 
-use super::{ColumnWriter, ListStringColumnBuildingSegmentData};
+use super::{ColumnWriter, MultiStringColumnBuildingSegmentData};
 
-pub struct ListStringColumnWriter {
+pub struct MultiStringColumnWriter {
     field: FieldRef,
     writer: ChunkedVecWriter<Option<Box<[String]>>>,
-    column_data: Arc<ListStringColumnBuildingSegmentData>,
+    column_data: Arc<MultiStringColumnBuildingSegmentData>,
 }
 
-impl ListStringColumnWriter {
+impl MultiStringColumnWriter {
     pub fn new(field: FieldRef) -> Self {
         let writer = ChunkedVecWriter::new(
             BUILDING_COLUMN_VEC_CHUNK_SIZE,
             BUILDING_COLUMN_VEC_NODE_SIZE,
         );
         let reader = writer.reader();
-        let column_data = Arc::new(ListStringColumnBuildingSegmentData::new(reader));
+        let column_data = Arc::new(MultiStringColumnBuildingSegmentData::new(reader));
 
         Self {
             field,
@@ -30,7 +30,7 @@ impl ListStringColumnWriter {
     }
 }
 
-impl ColumnWriter for ListStringColumnWriter {
+impl ColumnWriter for MultiStringColumnWriter {
     fn field(&self) -> &FieldRef {
         &self.field
     }

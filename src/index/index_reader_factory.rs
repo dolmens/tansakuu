@@ -3,7 +3,10 @@ use crate::{
     table::TableData,
 };
 
-use super::{range::RangeIndexReader, IndexReader, InvertedIndexReader, UniqueKeyReader};
+use super::{
+    range::RangeIndexReader, spatial::SpatialIndexReader, IndexReader, InvertedIndexReader,
+    UniqueKeyReader,
+};
 
 #[derive(Default)]
 pub struct IndexReaderFactory {}
@@ -15,6 +18,7 @@ impl IndexReaderFactory {
             IndexType::PrimaryKey => Box::new(UniqueKeyReader::new(index, table_data)),
             IndexType::UniqueKey => Box::new(UniqueKeyReader::new(index, table_data)),
             IndexType::Range => Box::new(RangeIndexReader::new(index, table_data)),
+            IndexType::Spatial(_) => Box::new(SpatialIndexReader::new(index, table_data)),
         }
     }
 }

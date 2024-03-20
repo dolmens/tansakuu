@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use super::skip_list::SkipListFormat;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub struct DocListFormat {
     has_tflist: bool,
     has_fieldmask: bool,

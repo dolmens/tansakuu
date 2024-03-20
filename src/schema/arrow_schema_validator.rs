@@ -87,6 +87,11 @@ impl ArrowSchemaValidator {
                     FieldType::Float64 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Float64)
                     }
+
+                    FieldType::GeoLocation => {
+                        // TODO: How to check DataType
+                        matches!(arrow_field_type, arrow_schema::DataType::Struct(_))
+                    }
                 };
                 if !matched {
                     return Err(ArrowSchemaValidationError::FieldTypeMismatch(
@@ -96,6 +101,7 @@ impl ArrowSchemaValidator {
                     ));
                 }
             } else {
+                // TODO: What if multi
             }
         }
 

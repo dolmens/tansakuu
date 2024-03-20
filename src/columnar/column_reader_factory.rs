@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    list_string_column_reader::ListStringColumnReader, ColumnReader, ListPrimitiveColumnReader,
-    PrimitiveColumnReader, StringColumnReader,
+    multi_string_column_reader::MultiStringColumnReader, ColumnReader, GeoLocationColumnReader,
+    MultiPrimitiveColumnReader, PrimitiveColumnReader, StringColumnReader,
 };
 
 #[derive(Default)]
@@ -54,44 +54,48 @@ impl ColumnReaderFactory {
                 FieldType::Float64 => {
                     Box::new(PrimitiveColumnReader::<Float64Type>::new(field, table_data))
                 }
+
+                FieldType::GeoLocation => Box::new(GeoLocationColumnReader::new(field, table_data)),
             }
         } else {
             match field.data_type() {
                 FieldType::Str | FieldType::Text => {
-                    Box::new(ListStringColumnReader::new(field, table_data))
+                    Box::new(MultiStringColumnReader::new(field, table_data))
                 }
 
-                FieldType::Int8 => Box::new(ListPrimitiveColumnReader::<Int8Type>::new(
+                FieldType::Int8 => Box::new(MultiPrimitiveColumnReader::<Int8Type>::new(
                     field, table_data,
                 )),
-                FieldType::Int16 => Box::new(ListPrimitiveColumnReader::<Int16Type>::new(
+                FieldType::Int16 => Box::new(MultiPrimitiveColumnReader::<Int16Type>::new(
                     field, table_data,
                 )),
-                FieldType::Int32 => Box::new(ListPrimitiveColumnReader::<Int32Type>::new(
+                FieldType::Int32 => Box::new(MultiPrimitiveColumnReader::<Int32Type>::new(
                     field, table_data,
                 )),
-                FieldType::Int64 => Box::new(ListPrimitiveColumnReader::<Int64Type>::new(
+                FieldType::Int64 => Box::new(MultiPrimitiveColumnReader::<Int64Type>::new(
                     field, table_data,
                 )),
-                FieldType::UInt8 => Box::new(ListPrimitiveColumnReader::<UInt8Type>::new(
+                FieldType::UInt8 => Box::new(MultiPrimitiveColumnReader::<UInt8Type>::new(
                     field, table_data,
                 )),
-                FieldType::UInt16 => Box::new(ListPrimitiveColumnReader::<UInt16Type>::new(
+                FieldType::UInt16 => Box::new(MultiPrimitiveColumnReader::<UInt16Type>::new(
                     field, table_data,
                 )),
-                FieldType::UInt32 => Box::new(ListPrimitiveColumnReader::<UInt32Type>::new(
+                FieldType::UInt32 => Box::new(MultiPrimitiveColumnReader::<UInt32Type>::new(
                     field, table_data,
                 )),
-                FieldType::UInt64 => Box::new(ListPrimitiveColumnReader::<UInt64Type>::new(
+                FieldType::UInt64 => Box::new(MultiPrimitiveColumnReader::<UInt64Type>::new(
                     field, table_data,
                 )),
 
-                FieldType::Float32 => Box::new(ListPrimitiveColumnReader::<Float32Type>::new(
+                FieldType::Float32 => Box::new(MultiPrimitiveColumnReader::<Float32Type>::new(
                     field, table_data,
                 )),
-                FieldType::Float64 => Box::new(ListPrimitiveColumnReader::<Float64Type>::new(
+                FieldType::Float64 => Box::new(MultiPrimitiveColumnReader::<Float64Type>::new(
                     field, table_data,
                 )),
+
+                FieldType::GeoLocation => unimplemented!(),
             }
         }
     }

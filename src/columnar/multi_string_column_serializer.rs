@@ -4,17 +4,17 @@ use arrow::array::{ArrayRef, ListBuilder, StringBuilder};
 
 use super::{
     column_serializer::ColumnSerializer, ColumnBuildingSegmentData,
-    ListStringColumnBuildingSegmentData,
+    MultiStringColumnBuildingSegmentData,
 };
 
 #[derive(Default)]
-pub struct ListStringColumnSerializer {}
+pub struct MultiStringColumnSerializer {}
 
-impl ColumnSerializer for ListStringColumnSerializer {
+impl ColumnSerializer for MultiStringColumnSerializer {
     fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef {
         let list_string_column_data = column_data
             .as_any()
-            .downcast_ref::<ListStringColumnBuildingSegmentData>()
+            .downcast_ref::<MultiStringColumnBuildingSegmentData>()
             .unwrap();
 
         let values = list_string_column_data.values.iter();

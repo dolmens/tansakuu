@@ -1,12 +1,15 @@
 use std::{io, sync::Arc};
 
-use crate::directory::error::OpenWriteError;
+use crate::directory::error::{OpenReadError, OpenWriteError};
 
 #[derive(Debug, Clone, Error)]
 pub enum TansakuuError {
     /// IO Error.
     #[error("An IO error occurred: '{0}'")]
     IoError(Arc<io::Error>),
+    /// Failed to open a file for read.
+    #[error("Failed to open file for read: '{0:?}'")]
+    OpenReadError(#[from] OpenReadError),
     /// Failed to open a file for write.
     #[error("Failed to open file for write: '{0:?}'")]
     OpenWriteError(#[from] OpenWriteError),

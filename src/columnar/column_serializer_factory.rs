@@ -7,8 +7,8 @@ use crate::{
 };
 
 use super::{
-    ColumnSerializer, ListPrimitiveColumnSerializer, ListStringColumnSerializer,
-    PrimitiveColumnSerializer, StringColumnSerializer,
+    ColumnSerializer, GeoLocationColumnSerializer, MultiPrimitiveColumnSerializer,
+    MultiStringColumnSerializer, PrimitiveColumnSerializer, StringColumnSerializer,
 };
 
 #[derive(Default)]
@@ -31,32 +31,46 @@ impl ColumnSerializerFactory {
 
                 FieldType::Float32 => Box::new(PrimitiveColumnSerializer::<Float32Type>::default()),
                 FieldType::Float64 => Box::new(PrimitiveColumnSerializer::<Float64Type>::default()),
+
+                FieldType::GeoLocation => Box::new(GeoLocationColumnSerializer::default()),
             }
         } else {
             match field.data_type() {
-                FieldType::Str | FieldType::Text => Box::new(ListStringColumnSerializer::default()),
+                FieldType::Str | FieldType::Text => {
+                    Box::new(MultiStringColumnSerializer::default())
+                }
 
-                FieldType::Int8 => Box::new(ListPrimitiveColumnSerializer::<Int8Type>::default()),
-                FieldType::Int16 => Box::new(ListPrimitiveColumnSerializer::<Int16Type>::default()),
-                FieldType::Int32 => Box::new(ListPrimitiveColumnSerializer::<Int32Type>::default()),
-                FieldType::Int64 => Box::new(ListPrimitiveColumnSerializer::<Int64Type>::default()),
-                FieldType::UInt8 => Box::new(ListPrimitiveColumnSerializer::<UInt8Type>::default()),
+                FieldType::Int8 => Box::new(MultiPrimitiveColumnSerializer::<Int8Type>::default()),
+                FieldType::Int16 => {
+                    Box::new(MultiPrimitiveColumnSerializer::<Int16Type>::default())
+                }
+                FieldType::Int32 => {
+                    Box::new(MultiPrimitiveColumnSerializer::<Int32Type>::default())
+                }
+                FieldType::Int64 => {
+                    Box::new(MultiPrimitiveColumnSerializer::<Int64Type>::default())
+                }
+                FieldType::UInt8 => {
+                    Box::new(MultiPrimitiveColumnSerializer::<UInt8Type>::default())
+                }
                 FieldType::UInt16 => {
-                    Box::new(ListPrimitiveColumnSerializer::<UInt16Type>::default())
+                    Box::new(MultiPrimitiveColumnSerializer::<UInt16Type>::default())
                 }
                 FieldType::UInt32 => {
-                    Box::new(ListPrimitiveColumnSerializer::<UInt32Type>::default())
+                    Box::new(MultiPrimitiveColumnSerializer::<UInt32Type>::default())
                 }
                 FieldType::UInt64 => {
-                    Box::new(ListPrimitiveColumnSerializer::<UInt64Type>::default())
+                    Box::new(MultiPrimitiveColumnSerializer::<UInt64Type>::default())
                 }
 
                 FieldType::Float32 => {
-                    Box::new(ListPrimitiveColumnSerializer::<Float32Type>::default())
+                    Box::new(MultiPrimitiveColumnSerializer::<Float32Type>::default())
                 }
                 FieldType::Float64 => {
-                    Box::new(ListPrimitiveColumnSerializer::<Float64Type>::default())
+                    Box::new(MultiPrimitiveColumnSerializer::<Float64Type>::default())
                 }
+
+                FieldType::GeoLocation => unimplemented!(),
             }
         }
     }

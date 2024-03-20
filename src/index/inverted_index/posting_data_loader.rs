@@ -1,4 +1,4 @@
-use std::{io, path::Path};
+use std::path::Path;
 
 use tantivy_common::{HasLen, OwnedBytes};
 
@@ -23,10 +23,13 @@ impl PostingDataLoader {
     pub fn load(
         &self,
         name: &str,
-        posting_format: PostingFormat,
         directory: &dyn Directory,
         index_path: &Path,
-    ) -> io::Result<PersistentPostingData> {
+    ) -> crate::Result<PersistentPostingData> {
+        let posting_format_path = index_path.join(name.to_string() + ".format.json");
+        let posting_format_data = directory.atomic_read(&posting_format_path)?;
+        let posting_format: PostingFormat = serde_json::from_slice(&posting_format_data).unwrap();
+
         let dict_path = index_path.join(name.to_string() + ".dict");
         let dict_data = directory.open_read(&dict_path).unwrap();
         let term_dict = TermDict::open(dict_data)?;

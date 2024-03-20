@@ -47,6 +47,10 @@ impl InvertedIndexPostingWriter {
         self.posting_table.hashmap()
     }
 
+    pub fn posting_format(&self) -> &PostingFormat {
+        &self.posting_format
+    }
+
     pub fn add_token(&mut self, hash: u64, field_offset: usize) {
         self.add_token_with_position(hash, field_offset, 0);
     }

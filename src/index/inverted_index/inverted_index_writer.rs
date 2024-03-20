@@ -18,7 +18,7 @@ use super::{InvertedIndexBuildingSegmentData, InvertedIndexPostingWriter, TokenH
 
 pub struct InvertedIndexWriter {
     posting_writer: InvertedIndexPostingWriter,
-    index_data: Arc<InvertedIndexBuildingSegmentData>,
+    index: IndexRef,
     tokenizer: TextAnalyzer,
 }
 
@@ -55,11 +55,10 @@ impl InvertedIndexWriter {
         };
         let posting_writer =
             InvertedIndexPostingWriter::new(posting_format, hashmap_initial_capacity);
-        let posting_data = posting_writer.posting_data();
 
         Self {
             posting_writer,
-            index_data: Arc::new(InvertedIndexBuildingSegmentData::new(index, posting_data)),
+            index,
             tokenizer,
         }
     }
@@ -211,11 +210,7 @@ impl InvertedIndexWriter {
 impl IndexWriter for InvertedIndexWriter {
     fn add_field(&mut self, field: &FieldRef, value: &OwnedValue) {
         if let Some(mut token_stream) = self.tokenize_field(field, value) {
-            let field_offset = self
-                .index_data
-                .index
-                .field_offset(field)
-                .unwrap_or_default();
+            let field_offset = self.index.field_offset(field).unwrap_or_default();
 
             while token_stream.advance() {
                 let token = token_stream.token();
@@ -234,6 +229,10 @@ impl IndexWriter for InvertedIndexWriter {
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {
-        self.index_data.clone()
+        Arc::new(InvertedIndexBuildingSegmentData::new(
+            self.index.clone(),
+            self.posting_writer.posting_format().clone(),
+            self.posting_writer.posting_data(),
+        ))
     }
 }

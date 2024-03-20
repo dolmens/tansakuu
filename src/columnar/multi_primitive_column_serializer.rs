@@ -6,14 +6,14 @@ use crate::types::PrimitiveType;
 
 use super::{
     column_serializer::ColumnSerializer, ColumnBuildingSegmentData,
-    ListPrimitiveColumnBuildingSegmentData,
+    MultiPrimitiveColumnBuildingSegmentData,
 };
 
-pub struct ListPrimitiveColumnSerializer<T: PrimitiveType> {
+pub struct MultiPrimitiveColumnSerializer<T: PrimitiveType> {
     _marker: PhantomData<T>,
 }
 
-impl<T: PrimitiveType> ListPrimitiveColumnSerializer<T> {
+impl<T: PrimitiveType> MultiPrimitiveColumnSerializer<T> {
     pub fn new() -> Self {
         Self {
             _marker: PhantomData,
@@ -21,17 +21,17 @@ impl<T: PrimitiveType> ListPrimitiveColumnSerializer<T> {
     }
 }
 
-impl<T: PrimitiveType> Default for ListPrimitiveColumnSerializer<T> {
+impl<T: PrimitiveType> Default for MultiPrimitiveColumnSerializer<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: PrimitiveType> ColumnSerializer for ListPrimitiveColumnSerializer<T> {
+impl<T: PrimitiveType> ColumnSerializer for MultiPrimitiveColumnSerializer<T> {
     fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef {
         let list_primitive_column_data = column_data
             .as_any()
-            .downcast_ref::<ListPrimitiveColumnBuildingSegmentData<T::Native>>()
+            .downcast_ref::<MultiPrimitiveColumnBuildingSegmentData<T::Native>>()
             .unwrap();
 
         let values = list_primitive_column_data.values.iter();

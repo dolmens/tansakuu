@@ -4,17 +4,17 @@ use arrow::array::StringArray;
 
 use crate::{types::NativeType, util::chunked_vec::ChunkedVec, DocId};
 
-use super::ListPrimitiveColumnBuildingSegmentData;
+use super::MultiPrimitiveColumnBuildingSegmentData;
 
-pub struct ListPrimitiveColumnBuildingSegmentReader<T: NativeType> {
+pub struct MultiPrimitiveColumnBuildingSegmentReader<T: NativeType> {
     values: ChunkedVec<Option<Box<[T]>>>,
 }
 
-impl<T: NativeType> ListPrimitiveColumnBuildingSegmentReader<T>
+impl<T: NativeType> MultiPrimitiveColumnBuildingSegmentReader<T>
 where
     StringArray: for<'a> From<Vec<&'a str>>,
 {
-    pub fn new(column_data: Arc<ListPrimitiveColumnBuildingSegmentData<T>>) -> Self {
+    pub fn new(column_data: Arc<MultiPrimitiveColumnBuildingSegmentData<T>>) -> Self {
         let values = column_data.values.clone();
         Self { values }
     }
@@ -33,10 +33,10 @@ mod tests {
     use std::{error::Error, sync::Arc};
 
     use crate::{
-        columnar::ListPrimitiveColumnBuildingSegmentData, util::chunked_vec::ChunkedVecWriter,
+        columnar::MultiPrimitiveColumnBuildingSegmentData, util::chunked_vec::ChunkedVecWriter,
     };
 
-    use super::ListPrimitiveColumnBuildingSegmentReader;
+    use super::MultiPrimitiveColumnBuildingSegmentReader;
 
     #[test]
     fn test_basic() -> Result<(), Box<dyn Error>> {
@@ -45,8 +45,8 @@ mod tests {
         chunked_vec_writer.push(None);
         chunked_vec_writer.push(Some(vec![4].into_boxed_slice()));
         let values = chunked_vec_writer.reader();
-        let column_data = Arc::new(ListPrimitiveColumnBuildingSegmentData::new(values));
-        let reader = ListPrimitiveColumnBuildingSegmentReader::new(column_data);
+        let column_data = Arc::new(MultiPrimitiveColumnBuildingSegmentData::new(values));
+        let reader = MultiPrimitiveColumnBuildingSegmentReader::new(column_data);
 
         assert_eq!(reader.doc_count(), 3);
 

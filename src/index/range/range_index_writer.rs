@@ -15,7 +15,7 @@ use super::{RangeIndexBuildingSegmentData, RangeValueEncoder};
 pub struct RangeIndexWriter {
     bottom_writer: InvertedIndexPostingWriter,
     higher_writer: InvertedIndexPostingWriter,
-    index_data: Arc<RangeIndexBuildingSegmentData>,
+    index: IndexRef,
     range_encoder: RangeValueEncoder,
 }
 
@@ -25,18 +25,10 @@ impl RangeIndexWriter {
         let bottom_writer = InvertedIndexPostingWriter::new(PostingFormat::default(), 0);
         let higher_writer = InvertedIndexPostingWriter::new(PostingFormat::default(), 0);
 
-        let bottom_postings = bottom_writer.posting_data();
-        let higher_postings = higher_writer.posting_data();
-        let index_data = Arc::new(RangeIndexBuildingSegmentData::new(
-            index,
-            bottom_postings,
-            higher_postings,
-        ));
-
         Self {
             bottom_writer,
             higher_writer,
-            index_data,
+            index,
             range_encoder: RangeValueEncoder::default(),
         }
     }
@@ -63,11 +55,7 @@ impl IndexWriter for RangeIndexWriter {
             .into_iter()
             .map(|k| token_hasher.hash_bytes(&k.to_le_bytes()))
             .collect();
-        let field_offset = self
-            .index_data
-            .index()
-            .field_offset(field)
-            .unwrap_or_default();
+        let field_offset = self.index.field_offset(field).unwrap_or_default();
         self.bottom_writer.add_token(keys[0], field_offset);
         for i in 1..16 {
             self.higher_writer.add_token(keys[i], field_offset);
@@ -80,6 +68,10 @@ impl IndexWriter for RangeIndexWriter {
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {
-        self.index_data.clone()
+        Arc::new(RangeIndexBuildingSegmentData::new(
+            self.index.clone(),
+            self.bottom_writer.posting_data(),
+            self.higher_writer.posting_data(),
+        ))
     }
 }

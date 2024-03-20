@@ -108,6 +108,12 @@ impl InvertedIndexPostingSerializeWriter {
         name: &str,
         posting_format: PostingFormat,
     ) -> Self {
+        let posting_format_path = path.join(name.to_string() + ".format.json");
+        let posting_format_data = serde_json::to_string(&posting_format).unwrap();
+        directory
+            .atomic_write(&posting_format_path, posting_format_data.as_bytes())
+            .unwrap();
+
         let dict_path = path.join(name.to_string() + ".dict");
         let dict_output_writer = directory.open_write(&dict_path).unwrap();
         let term_dict_writer = TermDictBuilder::new(dict_output_writer);

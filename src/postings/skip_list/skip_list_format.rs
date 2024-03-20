@@ -1,4 +1,6 @@
-#[derive(Default, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub struct SkipListFormat {
     has_value: bool,
 }

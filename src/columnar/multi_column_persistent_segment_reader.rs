@@ -4,11 +4,11 @@ use crate::DocId;
 
 use super::ColumnPersistentSegmentData;
 
-pub struct ListColumnPersistentSegmentReader {
+pub struct MultiColumnPersistentSegmentReader {
     values: ListArray,
 }
 
-impl ListColumnPersistentSegmentReader {
+impl MultiColumnPersistentSegmentReader {
     pub fn new(column_data: &ColumnPersistentSegmentData) -> Self {
         let values = column_data
             .array()
@@ -44,7 +44,7 @@ mod tests {
 
     use crate::columnar::ColumnPersistentSegmentData;
 
-    use super::ListColumnPersistentSegmentReader;
+    use super::MultiColumnPersistentSegmentReader;
 
     #[test]
     fn test_basic_i32() {
@@ -56,7 +56,7 @@ mod tests {
         ];
         let list_array = ListArray::from_iter_primitive::<Int32Type, _, _>(data);
         let column_data = ColumnPersistentSegmentData::new(Arc::new(list_array));
-        let list_reader = ListColumnPersistentSegmentReader::new(&column_data);
+        let list_reader = MultiColumnPersistentSegmentReader::new(&column_data);
 
         let expect0: Int32Array = vec![0, 1, 2].into();
         let expect0 = Arc::new(expect0);
@@ -92,7 +92,7 @@ mod tests {
         let array = builder.finish();
 
         let column_data = ColumnPersistentSegmentData::new(Arc::new(array));
-        let list_reader = ListColumnPersistentSegmentReader::new(&column_data);
+        let list_reader = MultiColumnPersistentSegmentReader::new(&column_data);
 
         let expect0 = StringArray::from(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
         let expect0 = Arc::new(expect0);

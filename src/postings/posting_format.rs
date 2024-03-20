@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 use crate::schema::TextIndexOptions;
 
 use super::{skip_list::SkipListFormat, DocListFormat};
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Serialize, Deserialize)]
 pub struct PostingFormat {
     doc_list_format: DocListFormat,
     has_position_list: bool,

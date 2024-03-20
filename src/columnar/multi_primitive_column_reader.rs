@@ -1,24 +1,24 @@
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, StringArray};
+use arrow::array::{ArrayRef, PrimitiveArray};
 
-use crate::{schema::Field, table::TableData, DocId};
+use crate::{schema::Field, table::TableData, types::PrimitiveType, DocId};
 
 use super::{
-    ColumnReader, ListColumnPersistentSegmentReader, ListStringColumnBuildingSegmentReader,
+    ColumnReader, MultiColumnPersistentSegmentReader, MultiPrimitiveColumnBuildingSegmentReader,
 };
 
-pub struct ListStringColumnReader {
-    persistent_segments: Vec<ListColumnPersistentSegmentReader>,
-    building_segments: Vec<ListStringColumnBuildingSegmentReader>,
+pub struct MultiPrimitiveColumnReader<T: PrimitiveType> {
+    persistent_segments: Vec<MultiColumnPersistentSegmentReader>,
+    building_segments: Vec<MultiPrimitiveColumnBuildingSegmentReader<T::Native>>,
 }
 
-impl ListStringColumnReader {
+impl<T: PrimitiveType> MultiPrimitiveColumnReader<T> {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let column_data = segment.data().column_data(field.name()).unwrap();
-            let column_segment_reader = ListColumnPersistentSegmentReader::new(column_data);
+            let column_segment_reader = MultiColumnPersistentSegmentReader::new(column_data);
             persistent_segments.push(column_segment_reader);
         }
 
@@ -30,9 +30,9 @@ impl ListStringColumnReader {
                 .column_data(field.name())
                 .cloned()
                 .unwrap();
-            let list_string_column_data = column_data.downcast_arc().ok().unwrap();
+            let list_primitive_column_data = column_data.downcast_arc().ok().unwrap();
             let column_segment_reader =
-                ListStringColumnBuildingSegmentReader::new(list_string_column_data);
+                MultiPrimitiveColumnBuildingSegmentReader::new(list_primitive_column_data);
             building_segments.push(column_segment_reader);
         }
 
@@ -52,9 +52,11 @@ impl ListStringColumnReader {
         }
         for segment in &self.building_segments {
             if docid < segment.doc_count() as DocId {
-                return segment
-                    .get(docid)
-                    .map(|data| Arc::new(StringArray::from(data.to_vec())) as ArrayRef);
+                return segment.get(docid).map(|data| {
+                    Arc::new(PrimitiveArray::<T::ArrowPrimitive>::from_iter_values(
+                        data.iter().copied(),
+                    )) as ArrayRef
+                });
             }
             docid -= segment.doc_count() as DocId;
         }
@@ -63,4 +65,4 @@ impl ListStringColumnReader {
     }
 }
 
-impl ColumnReader for ListStringColumnReader {}
+impl<T: PrimitiveType> ColumnReader for MultiPrimitiveColumnReader<T> {}

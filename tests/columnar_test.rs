@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow::array::{ArrayRef, Int64Array, Int8Array, StringArray};
 use tansakuu::{
     columnar::{
-        ListPrimitiveColumnReader, ListStringColumnReader, PrimitiveColumnReader,
+        MultiPrimitiveColumnReader, MultiStringColumnReader, PrimitiveColumnReader,
         StringColumnReader,
     },
     doc,
@@ -315,10 +315,10 @@ fn test_column_list_i8() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int8Type>>("f1")
+        .typed_reader::<MultiPrimitiveColumnReader<Int8Type>>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int8Type>>("f2")
+        .typed_reader::<MultiPrimitiveColumnReader<Int8Type>>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(Int8Array::from(f1_0.clone()));
@@ -337,10 +337,10 @@ fn test_column_list_i8() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int8Type>>("f1")
+        .typed_reader::<MultiPrimitiveColumnReader<Int8Type>>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int8Type>>("f2")
+        .typed_reader::<MultiPrimitiveColumnReader<Int8Type>>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(Int8Array::from(f1_0.clone()));
@@ -379,10 +379,10 @@ fn test_column_list_i64() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int64Type>>("f1")
+        .typed_reader::<MultiPrimitiveColumnReader<Int64Type>>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int64Type>>("f2")
+        .typed_reader::<MultiPrimitiveColumnReader<Int64Type>>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(Int64Array::from(f1_0.clone()));
@@ -401,10 +401,10 @@ fn test_column_list_i64() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int64Type>>("f1")
+        .typed_reader::<MultiPrimitiveColumnReader<Int64Type>>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListPrimitiveColumnReader<Int64Type>>("f2")
+        .typed_reader::<MultiPrimitiveColumnReader<Int64Type>>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(Int64Array::from(f1_0.clone()));
@@ -443,10 +443,10 @@ fn test_column_list_string() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListStringColumnReader>("f1")
+        .typed_reader::<MultiStringColumnReader>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListStringColumnReader>("f2")
+        .typed_reader::<MultiStringColumnReader>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(StringArray::from(f1_0.clone()));
@@ -465,10 +465,10 @@ fn test_column_list_string() {
     let reader = table.reader();
     let column_reader = reader.column_reader();
     let f1_reader = column_reader
-        .typed_reader::<ListStringColumnReader>("f1")
+        .typed_reader::<MultiStringColumnReader>("f1")
         .unwrap();
     let f2_reader = column_reader
-        .typed_reader::<ListStringColumnReader>("f2")
+        .typed_reader::<MultiStringColumnReader>("f2")
         .unwrap();
 
     let f1_0_expect = Arc::new(StringArray::from(f1_0.clone()));

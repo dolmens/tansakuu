@@ -13,7 +13,6 @@ use super::UniqueKeyBuildingSegmentData;
 pub struct UniqueKeyWriter {
     current_key: u64,
     keys: LayeredHashMapWriter<u64, DocId>,
-    index_data: Arc<UniqueKeyBuildingSegmentData>,
 }
 
 impl UniqueKeyWriter {
@@ -34,12 +33,10 @@ impl UniqueKeyWriter {
             hasher_builder,
             capacity_policy,
         );
-        let keymap = keys.hashmap();
 
         Self {
             current_key: 0,
             keys,
-            index_data: Arc::new(UniqueKeyBuildingSegmentData::new(keymap)),
         }
     }
 }
@@ -84,6 +81,6 @@ impl IndexWriter for UniqueKeyWriter {
     }
 
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {
-        self.index_data.clone()
+        Arc::new(UniqueKeyBuildingSegmentData::new(self.keys.hashmap()))
     }
 }

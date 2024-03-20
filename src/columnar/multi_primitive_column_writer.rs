@@ -5,22 +5,22 @@ use crate::{
     BUILDING_COLUMN_VEC_CHUNK_SIZE, BUILDING_COLUMN_VEC_NODE_SIZE,
 };
 
-use super::{ColumnWriter, ListPrimitiveColumnBuildingSegmentData};
+use super::{ColumnWriter, MultiPrimitiveColumnBuildingSegmentData};
 
-pub struct ListPrimitiveColumnWriter<T: NativeType> {
+pub struct MultiPrimitiveColumnWriter<T: NativeType> {
     field: FieldRef,
     writer: ChunkedVecWriter<Option<Box<[T]>>>,
-    column_data: Arc<ListPrimitiveColumnBuildingSegmentData<T>>,
+    column_data: Arc<MultiPrimitiveColumnBuildingSegmentData<T>>,
 }
 
-impl<T: NativeType> ListPrimitiveColumnWriter<T> {
+impl<T: NativeType> MultiPrimitiveColumnWriter<T> {
     pub fn new(field: FieldRef) -> Self {
         let writer = ChunkedVecWriter::new(
             BUILDING_COLUMN_VEC_CHUNK_SIZE,
             BUILDING_COLUMN_VEC_NODE_SIZE,
         );
         let reader = writer.reader();
-        let column_data = Arc::new(ListPrimitiveColumnBuildingSegmentData::new(reader));
+        let column_data = Arc::new(MultiPrimitiveColumnBuildingSegmentData::new(reader));
 
         Self {
             field,
@@ -32,7 +32,7 @@ impl<T: NativeType> ListPrimitiveColumnWriter<T> {
 
 macro_rules! impl_list_primitive_column_writer {
     ($ty:ty, $get_value:ident) => {
-        impl ColumnWriter for ListPrimitiveColumnWriter<$ty> {
+        impl ColumnWriter for MultiPrimitiveColumnWriter<$ty> {
             fn field(&self) -> &FieldRef {
                 &self.field
             }

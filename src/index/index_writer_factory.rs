@@ -1,8 +1,8 @@
 use crate::schema::{IndexRef, IndexType};
 
 use super::{
-    inverted_index::InvertedIndexWriter, range::RangeIndexWriter, unique_key::UniqueKeyWriter,
-    IndexWriter, IndexWriterResource,
+    inverted_index::InvertedIndexWriter, range::RangeIndexWriter, spatial::SpatialIndexWriter,
+    unique_key::UniqueKeyWriter, IndexWriter, IndexWriterResource,
 };
 
 #[derive(Default)]
@@ -22,6 +22,9 @@ impl IndexWriterFactory {
                 Box::new(UniqueKeyWriter::new(writer_resource))
             }
             IndexType::Range => Box::new(RangeIndexWriter::new(index.clone(), writer_resource)),
+            IndexType::Spatial(_) => {
+                Box::new(SpatialIndexWriter::new(index.clone(), writer_resource))
+            }
         }
     }
 }

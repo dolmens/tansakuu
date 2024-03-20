@@ -72,6 +72,24 @@ impl SchemaConverter {
                         arrow_schema::DataType::Float64,
                         field.is_nullable(),
                     ),
+                    FieldType::GeoLocation => {
+                        let longitude = Arc::new(arrow_schema::Field::new(
+                            "longitude",
+                            arrow_schema::DataType::Float64,
+                            false,
+                        ));
+                        let latitude = Arc::new(arrow_schema::Field::new(
+                            "latitude",
+                            arrow_schema::DataType::Float64,
+                            false,
+                        ));
+                        let fields = vec![longitude, latitude].into();
+                        arrow_schema::Field::new(
+                            field.name(),
+                            arrow_schema::DataType::Struct(fields),
+                            field.is_nullable(),
+                        )
+                    }
                 };
                 arrow_fields.push(arrow_field);
             } else {
@@ -111,6 +129,7 @@ impl SchemaConverter {
                     FieldType::Float64 => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Float64, true)
                     }
+                    FieldType::GeoLocation => unimplemented!(),
                 };
                 let arrow_list_field = arrow_schema::Field::new(
                     field.name(),

@@ -4,17 +4,17 @@ use arrow::array::StringArray;
 
 use crate::{util::chunked_vec::ChunkedVec, DocId};
 
-use super::ListStringColumnBuildingSegmentData;
+use super::MultiStringColumnBuildingSegmentData;
 
-pub struct ListStringColumnBuildingSegmentReader {
+pub struct MultiStringColumnBuildingSegmentReader {
     values: ChunkedVec<Option<Box<[String]>>>,
 }
 
-impl ListStringColumnBuildingSegmentReader
+impl MultiStringColumnBuildingSegmentReader
 where
     StringArray: for<'a> From<Vec<&'a str>>,
 {
-    pub fn new(column_data: Arc<ListStringColumnBuildingSegmentData>) -> Self {
+    pub fn new(column_data: Arc<MultiStringColumnBuildingSegmentData>) -> Self {
         let values = column_data.values.clone();
         Self { values }
     }
@@ -33,10 +33,10 @@ mod tests {
     use std::{error::Error, sync::Arc};
 
     use crate::{
-        columnar::ListStringColumnBuildingSegmentData, util::chunked_vec::ChunkedVecWriter,
+        columnar::MultiStringColumnBuildingSegmentData, util::chunked_vec::ChunkedVecWriter,
     };
 
-    use super::ListStringColumnBuildingSegmentReader;
+    use super::MultiStringColumnBuildingSegmentReader;
 
     #[test]
     fn test_basic() -> Result<(), Box<dyn Error>> {
@@ -47,8 +47,8 @@ mod tests {
         chunked_vec_writer.push(None);
         chunked_vec_writer.push(Some(vec!["world".to_string()].into_boxed_slice()));
         let values = chunked_vec_writer.reader();
-        let column_data = Arc::new(ListStringColumnBuildingSegmentData::new(values));
-        let reader = ListStringColumnBuildingSegmentReader::new(column_data);
+        let column_data = Arc::new(MultiStringColumnBuildingSegmentData::new(values));
+        let reader = MultiStringColumnBuildingSegmentReader::new(column_data);
 
         assert_eq!(reader.doc_count(), 3);
 

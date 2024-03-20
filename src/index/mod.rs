@@ -12,6 +12,7 @@ mod index_writer_resource;
 pub mod inverted_index;
 mod posting_iterator;
 pub mod range;
+pub mod spatial;
 pub mod unique_key;
 
 pub use index_merger::IndexMerger;
