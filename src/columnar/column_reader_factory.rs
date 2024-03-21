@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::{
-    multi_string_column_reader::MultiStringColumnReader, ColumnReader, GeoLocationColumnReader,
-    MultiPrimitiveColumnReader, PrimitiveColumnReader, StringColumnReader,
+    multi_string_column_reader::MultiStringColumnReader, BooleanColumnReader, ColumnReader,
+    GeoLocationColumnReader, MultiPrimitiveColumnReader, PrimitiveColumnReader, StringColumnReader,
 };
 
 #[derive(Default)]
@@ -22,6 +22,8 @@ impl ColumnReaderFactory {
                 FieldType::Str | FieldType::Text => {
                     Box::new(StringColumnReader::new(field, table_data))
                 }
+
+                FieldType::Boolean => Box::new(BooleanColumnReader::new(field, table_data)),
 
                 FieldType::Int8 => {
                     Box::new(PrimitiveColumnReader::<Int8Type>::new(field, table_data))
@@ -62,6 +64,8 @@ impl ColumnReaderFactory {
                 FieldType::Str | FieldType::Text => {
                     Box::new(MultiStringColumnReader::new(field, table_data))
                 }
+
+                FieldType::Boolean => unimplemented!(),
 
                 FieldType::Int8 => Box::new(MultiPrimitiveColumnReader::<Int8Type>::new(
                     field, table_data,

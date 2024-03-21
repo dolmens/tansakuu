@@ -21,6 +21,12 @@ impl SchemaConverter {
                         field.is_nullable(),
                     ),
 
+                    FieldType::Boolean => arrow_schema::Field::new(
+                        field.name(),
+                        arrow_schema::DataType::Boolean,
+                        field.is_nullable(),
+                    ),
+
                     FieldType::Int8 => arrow_schema::Field::new(
                         field.name(),
                         arrow_schema::DataType::Int8,
@@ -96,6 +102,10 @@ impl SchemaConverter {
                 let arrow_field = match field.data_type() {
                     FieldType::Str | FieldType::Text => {
                         arrow_schema::Field::new("item", arrow_schema::DataType::Utf8, true)
+                    }
+
+                    FieldType::Boolean => {
+                        arrow_schema::Field::new("item", arrow_schema::DataType::Boolean, true)
                     }
 
                     FieldType::Int8 => {

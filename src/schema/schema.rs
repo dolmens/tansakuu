@@ -21,6 +21,7 @@ pub type SchemaRef = Arc<Schema>;
 pub enum FieldType {
     Str,
     Text,
+    Boolean,
     Int8,
     Int16,
     Int32,

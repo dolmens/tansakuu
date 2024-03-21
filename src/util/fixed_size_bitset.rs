@@ -49,7 +49,7 @@ impl FixedSizeBitsetWriter {
 
     pub fn new_with_expandable_bitset(expandable: &ExpandableBitset) -> Self {
         let data: Vec<_> = expandable
-            .as_loaded_words()
+            .iter_words()
             .map(|w| AtomicWord::new(w))
             .collect();
         let data = Arc::from(data.into_boxed_slice());

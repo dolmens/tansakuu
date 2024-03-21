@@ -19,9 +19,18 @@ pub struct ExpandableBitset {
 }
 
 struct ExpandableBitsetData {
+    // len may NOT be set
     len: AcqRelUsize,
+    capacity: AcqRelUsize,
     data: RelaxedAtomicPtr<AtomicWord>,
     recycle_list: LinkedList<RecycleNode>,
+}
+
+pub struct ExpandableBitsetIter<'a> {
+    index: usize,
+    size: usize,
+    word: u64,
+    data: &'a [AtomicWord],
 }
 
 struct RecycleNode {
@@ -35,15 +44,20 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
 
 impl ExpandableBitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
-        let len = (capacity + BITS - 1) / BITS;
-        let data = (0..len)
+        let capacity = (capacity + BITS - 1) / BITS * BITS;
+        let word_len = capacity / BITS;
+        let data = (0..word_len)
             .map(|_| AtomicWord::new(0))
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let data = Box::into_raw(data) as *mut AtomicWord;
         let mut recycle_list = LinkedListWriter::new();
-        recycle_list.push(RecycleNode::new(data, len));
-        let data = Arc::new(ExpandableBitsetData::new(data, len, recycle_list.list()));
+        recycle_list.push(RecycleNode::new(data, word_len));
+        let data = Arc::new(ExpandableBitsetData::new(
+            data,
+            capacity,
+            recycle_list.list(),
+        ));
 
         Self { data, recycle_list }
     }
@@ -64,10 +78,15 @@ impl ExpandableBitsetWriter {
         slot.store(slot.load() | (1 << rem));
     }
 
+    pub fn set_item_len(&mut self, len: usize) {
+        assert!(len <= self.capacity());
+        self.data.len.store(len);
+    }
+
     fn expand(&mut self, index: usize) {
-        let len = self.data.len.load();
-        let mut next_len = len;
-        let add_len = std::cmp::max(len / 2, 1);
+        let word_len = self.data.capacity.load() / BITS;
+        let mut next_len = word_len;
+        let add_len = std::cmp::max(word_len / 2, 1);
         loop {
             next_len += add_len;
             if next_len * BITS > index {
@@ -77,20 +96,24 @@ impl ExpandableBitsetWriter {
 
         let mut data: Vec<_> = (0..next_len).map(|_| AtomicWord::new(0)).collect();
         let current_data = self.data.data();
-        for i in 0..len {
+        for i in 0..word_len {
             data[i] = AtomicWord::new(current_data[i].load());
         }
         let data = data.into_boxed_slice();
         let data_ptr = Box::into_raw(data) as *mut AtomicWord;
         self.recycle_list.push(RecycleNode::new(data_ptr, next_len));
 
-        // First data_ptr then len
+        // First data_ptr then capacity
         self.data.data.store(data_ptr);
-        self.data.len.store(next_len);
+        self.data.capacity.store(next_len * BITS);
     }
 
     pub fn contains(&self, index: usize) -> bool {
         self.data.contains(index)
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 
     pub fn capacity(&self) -> usize {
@@ -98,24 +121,70 @@ impl ExpandableBitsetWriter {
     }
 }
 
+impl ExpandableBitset {
+    pub fn contains(&self, index: usize) -> bool {
+        self.data.contains(index)
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.data.capacity()
+    }
+
+    pub fn iter_words(&self) -> impl Iterator<Item = u64> + '_ {
+        self.data.iter_words()
+    }
+
+    pub fn iter(&self) -> ExpandableBitsetIter<'_> {
+        self.data.iter()
+    }
+
+    pub fn count_ones(&self) -> usize {
+        self.data.count_ones()
+    }
+}
+
 impl ExpandableBitsetData {
-    fn new(data: *mut AtomicWord, len: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
+    fn new(data: *mut AtomicWord, capacity: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
-            len: AcqRelUsize::new(len),
+            len: AcqRelUsize::new(0),
+            capacity: AcqRelUsize::new(capacity),
             data: RelaxedAtomicPtr::new(data),
             recycle_list,
         }
     }
 
+    fn len(&self) -> usize {
+        self.len.load()
+    }
+
     fn capacity(&self) -> usize {
-        self.len.load() * BITS
+        self.capacity.load()
     }
 
     fn data(&self) -> &[AtomicWord] {
-        // First len then data_ptr
-        let len = self.len.load();
+        // First capacity then data_ptr
+        let capacity = self.capacity();
         let data_ptr = self.data.load();
-        unsafe { std::slice::from_raw_parts(data_ptr, len) }
+        unsafe { std::slice::from_raw_parts(data_ptr, capacity / BITS) }
+    }
+
+    fn iter_words(&self) -> impl Iterator<Item = u64> + '_ {
+        self.data().iter().map(|w| w.load())
+    }
+
+    fn iter(&self) -> ExpandableBitsetIter<'_> {
+        let size = self.len();
+        let size = if size > 0 { size } else { self.capacity() };
+        ExpandableBitsetIter {
+            index: 0,
+            size,
+            word: 0,
+            data: self.data(),
+        }
     }
 
     fn contains(&self, index: usize) -> bool {
@@ -128,17 +197,12 @@ impl ExpandableBitsetData {
             false
         }
     }
-}
 
-impl RecycleNode {
-    fn new(ptr: *mut AtomicWord, len: usize) -> Self {
-        Self { ptr, len }
-    }
-
-    fn release(&self) {
-        unsafe {
-            let _ = Box::from_raw(std::slice::from_raw_parts_mut(self.ptr, self.len));
-        }
+    fn count_ones(&self) -> usize {
+        self.data()
+            .iter()
+            .map(|w| w.load().count_ones() as usize)
+            .sum()
     }
 }
 
@@ -150,28 +214,37 @@ impl Drop for ExpandableBitsetData {
     }
 }
 
-impl ExpandableBitset {
-    pub fn contains(&self, index: usize) -> bool {
-        self.data.contains(index)
+impl<'a> Iterator for ExpandableBitsetIter<'a> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.size {
+            let index = self.index;
+            self.index += 1;
+            if index == 0 {
+                self.word = self.data[index / BITS].load();
+            }
+            Some((self.word & (1 << (index % BITS))) != 0)
+        } else {
+            None
+        }
     }
 
-    pub fn capacity(&self) -> usize {
-        self.data.capacity()
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remain = self.size - self.index;
+        (remain, Some(remain))
+    }
+}
+
+impl RecycleNode {
+    fn new(ptr: *mut AtomicWord, len: usize) -> Self {
+        Self { ptr, len }
     }
 
-    pub fn data(&self) -> &[AtomicWord] {
-        self.data.data()
-    }
-
-    pub fn as_loaded_words(&self) -> impl Iterator<Item = u64> + '_ {
-        self.data.data().iter().map(|w| w.load())
-    }
-
-    pub fn count_ones(&self) -> usize {
-        self.data()
-            .iter()
-            .map(|w| w.load().count_ones() as usize)
-            .sum()
+    fn release(&self) {
+        unsafe {
+            let _ = Box::from_raw(std::slice::from_raw_parts_mut(self.ptr, self.len));
+        }
     }
 }
 

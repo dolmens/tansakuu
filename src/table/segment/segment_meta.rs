@@ -18,6 +18,11 @@ pub struct SegmentMeta {
     doc_count: usize,
 }
 
+#[derive(Clone)]
+pub struct SegmentMetaRegistry {
+    pub segments: Vec<SegmentMeta>,
+}
+
 impl SegmentMetaData {
     pub fn new(doc_count: usize) -> Self {
         Self { doc_count }
@@ -76,5 +81,30 @@ impl SegmentMeta {
     pub fn inner_docid(&self, docid: DocId) -> DocId {
         assert!(docid > self.base_docid);
         docid - self.base_docid
+    }
+}
+
+impl SegmentMetaRegistry {
+    pub fn new(segment_metas: Vec<SegmentMeta>) -> Self {
+        Self {
+            segments: segment_metas,
+        }
+    }
+
+    pub fn add_segment(&mut self, segment_meta: SegmentMeta) {
+        self.segments.push(segment_meta);
+    }
+
+    pub fn locate_segment(&self, docid: DocId) -> Option<usize> {
+        for (i, segment) in self.segments.iter().enumerate() {
+            if (docid as usize) < (segment.base_docid as usize) + segment.doc_count {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn segment_base_docid(&self, segment_cursor: usize) -> DocId {
+        self.segments[segment_cursor].base_docid
     }
 }

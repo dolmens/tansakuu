@@ -1,3 +1,9 @@
+mod boolean_column_building_segment_data;
+mod boolean_column_building_segment_reader;
+mod boolean_column_persistent_segment_reader;
+mod boolean_column_reader;
+mod boolean_column_serializer;
+mod boolean_column_writer;
 mod column_building_segment_data;
 mod column_persistent_segment_data;
 mod column_reader;
@@ -39,6 +45,10 @@ mod string_column_reader;
 mod string_column_serializer;
 mod string_column_writer;
 
+pub use boolean_column_building_segment_data::BooleanColumnBuildingSegmentData;
+pub use boolean_column_building_segment_reader::BooleanColumnBuildingSegmentReader;
+pub use boolean_column_persistent_segment_reader::BooleanColumnPersistentSegmentReader;
+pub use boolean_column_reader::BooleanColumnReader;
 pub use column_building_segment_data::ColumnBuildingSegmentData;
 pub use column_persistent_segment_data::ColumnPersistentSegmentData;
 pub use column_reader::ColumnReader;

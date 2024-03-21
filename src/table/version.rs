@@ -1,7 +1,4 @@
-use std::{
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::path::PathBuf;
 
 use crate::{Directory, VersionId};
 
@@ -43,6 +40,7 @@ impl Version {
 
     #[cfg(not(miri))]
     pub fn next_version(&self) -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
         let version_id = (SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

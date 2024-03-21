@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::marker::{Send, Sync};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;

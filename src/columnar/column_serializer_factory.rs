@@ -7,8 +7,9 @@ use crate::{
 };
 
 use super::{
-    ColumnSerializer, GeoLocationColumnSerializer, MultiPrimitiveColumnSerializer,
-    MultiStringColumnSerializer, PrimitiveColumnSerializer, StringColumnSerializer,
+    boolean_column_serializer::BooleanColumnSerializer, ColumnSerializer,
+    GeoLocationColumnSerializer, MultiPrimitiveColumnSerializer, MultiStringColumnSerializer,
+    PrimitiveColumnSerializer, StringColumnSerializer,
 };
 
 #[derive(Default)]
@@ -19,6 +20,8 @@ impl ColumnSerializerFactory {
         if !field.is_multi() {
             match field.data_type() {
                 FieldType::Str | FieldType::Text => Box::new(StringColumnSerializer::default()),
+
+                FieldType::Boolean => Box::new(BooleanColumnSerializer::default()),
 
                 FieldType::Int8 => Box::new(PrimitiveColumnSerializer::<Int8Type>::default()),
                 FieldType::Int16 => Box::new(PrimitiveColumnSerializer::<Int16Type>::default()),
@@ -39,6 +42,8 @@ impl ColumnSerializerFactory {
                 FieldType::Str | FieldType::Text => {
                     Box::new(MultiStringColumnSerializer::default())
                 }
+
+                FieldType::Boolean => unimplemented!(),
 
                 FieldType::Int8 => Box::new(MultiPrimitiveColumnSerializer::<Int8Type>::default()),
                 FieldType::Int16 => {

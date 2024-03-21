@@ -10,9 +10,9 @@ use crate::{
 use super::{ColumnBuildingSegmentData, ColumnWriter, StringColumnBuildingSegmentData};
 
 pub struct StringColumnWriter {
-    field: FieldRef,
     writer: ChunkedVecWriter<Option<String>>,
     column_data: Arc<StringColumnBuildingSegmentData>,
+    field: FieldRef,
 }
 
 impl StringColumnWriter {

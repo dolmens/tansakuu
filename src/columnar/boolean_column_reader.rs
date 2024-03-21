@@ -4,23 +4,25 @@ use crate::{
     DocId,
 };
 
-use super::{ColumnReader, StringColumnBuildingSegmentReader, StringColumnPersistentSegmentReader};
+use super::{
+    BooleanColumnBuildingSegmentReader, BooleanColumnPersistentSegmentReader, ColumnReader,
+};
 
-pub struct StringColumnReader {
+pub struct BooleanColumnReader {
     segment_meta_registry: SegmentMetaRegistry,
-    persistent_segments: Vec<StringColumnPersistentSegmentReader>,
-    building_segments: Vec<StringColumnBuildingSegmentReader>,
+    persistent_segments: Vec<BooleanColumnPersistentSegmentReader>,
+    building_segments: Vec<BooleanColumnBuildingSegmentReader>,
 }
 
-impl StringColumnReader {
+impl BooleanColumnReader {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
         let segment_meta_registry = table_data.segment_meta_registry().clone();
 
         let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
             let column_data = segment.data().column_data(field.name()).unwrap();
-            let column_segment_reader = StringColumnPersistentSegmentReader::new(column_data);
-            persistent_segments.push(column_segment_reader);
+            let segment_reader = BooleanColumnPersistentSegmentReader::new(column_data);
+            persistent_segments.push(segment_reader);
         }
 
         let mut building_segments = vec![];
@@ -31,9 +33,9 @@ impl StringColumnReader {
                 .column_data(field.name())
                 .cloned()
                 .unwrap();
-            let string_column_data = column_data.downcast_arc().ok().unwrap();
-            let column_segment_reader = StringColumnBuildingSegmentReader::new(string_column_data);
-            building_segments.push(column_segment_reader);
+            let boolean_column_data = column_data.downcast_arc().ok().unwrap();
+            let segment_reader = BooleanColumnBuildingSegmentReader::new(boolean_column_data);
+            building_segments.push(segment_reader);
         }
 
         Self {
@@ -43,7 +45,7 @@ impl StringColumnReader {
         }
     }
 
-    pub fn get(&self, docid: DocId) -> Option<&str> {
+    pub fn get(&self, docid: DocId) -> Option<bool> {
         self.segment_meta_registry
             .locate_segment(docid)
             .and_then(|segment_cursor| {
@@ -62,4 +64,4 @@ impl StringColumnReader {
     }
 }
 
-impl ColumnReader for StringColumnReader {}
+impl ColumnReader for BooleanColumnReader {}

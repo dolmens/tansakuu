@@ -1,8 +1,8 @@
 use crate::schema::{FieldRef, FieldType};
 
 use super::{
-    ColumnWriter, GeoLocationColumnWriter, MultiPrimitiveColumnWriter, MultiStringColumnWriter,
-    PrimitiveColumnWriter, StringColumnWriter,
+    boolean_column_writer::BooleanColumnWriter, ColumnWriter, GeoLocationColumnWriter,
+    MultiPrimitiveColumnWriter, MultiStringColumnWriter, PrimitiveColumnWriter, StringColumnWriter,
 };
 
 #[derive(Default)]
@@ -15,6 +15,8 @@ impl ColumnWriterFactory {
                 FieldType::Str | FieldType::Text => {
                     Box::new(StringColumnWriter::new(field.clone()))
                 }
+
+                FieldType::Boolean => Box::new(BooleanColumnWriter::new(field.clone())),
 
                 FieldType::Int8 => Box::new(PrimitiveColumnWriter::<i8>::new(field.clone())),
                 FieldType::Int16 => Box::new(PrimitiveColumnWriter::<i16>::new(field.clone())),
@@ -35,6 +37,8 @@ impl ColumnWriterFactory {
                 FieldType::Str | FieldType::Text => {
                     Box::new(MultiStringColumnWriter::new(field.clone()))
                 }
+
+                FieldType::Boolean => unimplemented!(),
 
                 FieldType::Int8 => Box::new(MultiPrimitiveColumnWriter::<i8>::new(field.clone())),
                 FieldType::Int16 => Box::new(MultiPrimitiveColumnWriter::<i16>::new(field.clone())),

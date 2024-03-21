@@ -55,6 +55,10 @@ impl ArrowSchemaValidator {
                         matches!(arrow_field_type, arrow_schema::DataType::Utf8)
                     }
 
+                    FieldType::Boolean => {
+                        matches!(arrow_field_type, arrow_schema::DataType::Boolean)
+                    }
+
                     FieldType::Int8 => {
                         matches!(arrow_field_type, arrow_schema::DataType::Int8)
                     }

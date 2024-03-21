@@ -14,13 +14,14 @@ use crate::{
 use super::{
     segment::{
         BuildingSegment, BuildingSegmentData, PersistentSegment, PersistentSegmentData,
-        SegmentMerger,
+        SegmentMerger, SegmentMetaRegistry,
     },
     SegmentId, SegmentMeta, TableSettingsRef, Version,
 };
 
 #[derive(Clone)]
 pub struct TableData {
+    segment_meta_registry: SegmentMetaRegistry,
     building_segments: Vec<BuildingSegment>,
     persistent_segments: Vec<PersistentSegment>,
     recent_segment_stat: Option<Arc<SegmentStat>>,
@@ -41,6 +42,7 @@ impl TableData {
     ) -> Self {
         let directory: Box<dyn Directory> = directory.into();
         let version = Version::load_lastest(directory.as_ref()).unwrap();
+        let mut segment_metas = vec![];
         let mut persistent_segments = vec![];
         let mut base_docid = 0;
         let mut total_doc_count = 0;
@@ -52,10 +54,12 @@ impl TableData {
             ));
             let doc_count = segment.doc_count();
             let meta = SegmentMeta::new(segment.segment_id().clone(), base_docid, doc_count);
+            segment_metas.push(meta.clone());
             persistent_segments.push(PersistentSegment::new(meta, segment));
             base_docid += doc_count as DocId;
             total_doc_count += doc_count;
         }
+        let segment_meta_registry = SegmentMetaRegistry::new(segment_metas);
 
         let mut deletionmap = MutableDeletionMap::with_doc_count(total_doc_count);
         for seg in &persistent_segments {
@@ -68,6 +72,7 @@ impl TableData {
         let immutable_deletionmap: ImmutableDeletionMap = deletionmap.into();
 
         Self {
+            segment_meta_registry,
             building_segments: vec![],
             persistent_segments,
             recent_segment_stat: None,
@@ -87,6 +92,7 @@ impl TableData {
                 .iter()
                 .map(|segment| (segment.data().segment_id().clone(), segment.data().clone()))
                 .collect();
+            let mut segment_metas = vec![];
             let mut segments = vec![];
             let mut base_docid = 0;
             for segment_id in version.segments() {
@@ -101,16 +107,23 @@ impl TableData {
                 };
 
                 let meta = SegmentMeta::new(segment_id.clone(), base_docid, segment.doc_count());
+                segment_metas.push(meta.clone());
                 segments.push(PersistentSegment::new(meta, segment.clone()));
                 base_docid += segment.doc_count() as DocId;
             }
             std::mem::swap(&mut self.persistent_segments, &mut segments);
             for segment in &mut self.building_segments {
                 segment.meta_mut().set_base_docid(base_docid);
+                segment_metas.push(segment.meta().clone());
                 base_docid += segment.meta().doc_count() as DocId;
             }
+            self.segment_meta_registry = SegmentMetaRegistry::new(segment_metas);
             self.version = version;
         }
+    }
+
+    pub fn segment_meta_registry(&self) -> &SegmentMetaRegistry {
+        &self.segment_meta_registry
     }
 
     pub fn recent_segment_stat(&self) -> Option<&Arc<SegmentStat>> {
@@ -129,6 +142,7 @@ impl TableData {
             .unwrap_or_default();
         let doc_count = (END_DOCID - base_docid) as usize;
         let meta = SegmentMeta::new(building_segment.segment_id().clone(), base_docid, doc_count);
+        self.segment_meta_registry.add_segment(meta.clone());
         let building_segment = BuildingSegment::new(meta, building_segment);
         self.building_segments.push(building_segment);
     }
