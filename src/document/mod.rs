@@ -176,5 +176,5 @@ mod value;
 pub use self::document::Document;
 pub use self::inner_input_document::InnerInputDocument;
 pub use self::input_document::InputDocument;
-pub use self::owned_value::OwnedValue;
+pub use self::owned_value::{OwnedValue, NULL_VALUE};
 pub use self::value::{ReferenceValue, ReferenceValueLeaf, Value};

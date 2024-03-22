@@ -43,6 +43,8 @@ pub enum OwnedValue {
     IpAddr(Ipv6Addr),
 }
 
+pub const NULL_VALUE: OwnedValue = OwnedValue::Null;
+
 impl AsRef<OwnedValue> for OwnedValue {
     #[inline]
     fn as_ref(&self) -> &OwnedValue {

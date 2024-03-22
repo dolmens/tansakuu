@@ -19,6 +19,7 @@ pub struct ExpandableBitset {
 }
 
 struct ExpandableBitsetData {
+    len: AcqRelUsize,
     capacity: AcqRelUsize,
     data: RelaxedAtomicPtr<AtomicWord>,
     recycle_list: LinkedList<RecycleNode>,
@@ -75,6 +76,10 @@ impl ExpandableBitsetWriter {
         slot.store(slot.load() | (1 << rem));
     }
 
+    pub fn set_item_len(&mut self, len: usize) {
+        self.data.len.store(len);
+    }
+
     fn expand(&mut self, index: usize) {
         let word_len = self.data.capacity.load() / BITS;
         let mut next_len = word_len;
@@ -114,6 +119,14 @@ impl ExpandableBitset {
         self.data.contains(index)
     }
 
+    pub fn valid_len(&self) -> usize {
+        self.data.valid_len()
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
@@ -138,10 +151,24 @@ impl ExpandableBitset {
 impl ExpandableBitsetData {
     fn new(data: *mut AtomicWord, capacity: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
+            len: AcqRelUsize::new(0),
             capacity: AcqRelUsize::new(capacity),
             data: RelaxedAtomicPtr::new(data),
             recycle_list,
         }
+    }
+
+    pub fn valid_len(&self) -> usize {
+        let len = self.len();
+        if len > 0 {
+            len
+        } else {
+            self.capacity()
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.len.load()
     }
 
     fn capacity(&self) -> usize {

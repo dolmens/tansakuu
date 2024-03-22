@@ -121,7 +121,7 @@ impl SegmentMetaRegistry {
         None
     }
 
-    pub fn locate_segment_rewind(&self, docid: DocId, current_cursor: usize) -> Option<usize> {
+    pub fn locate_segment_rewind(&self, _docid: DocId, _current_cursor: usize) -> Option<usize> {
         unimplemented!()
     }
 }

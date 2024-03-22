@@ -18,20 +18,14 @@ pub struct BitsetPostingIterator<'a, const POSITIVE: bool> {
 impl<'a, const POSITIVE: bool> BitsetPostingIterator<'a, POSITIVE> {
     pub fn new(
         segment_meta_registry: SegmentMetaRegistry,
-        persistent_segment_datas: &[&'a ImmutableBitset],
-        building_segment_datas: &[&'a ExpandableBitset],
+        _persistent_segment_datas: &[&'a ImmutableBitset],
+        building_segment_datas: &[(&'a ExpandableBitset, Option<&'a ExpandableBitset>)],
     ) -> Self {
         let persistent_segments = vec![];
         let building_segments: Vec<_> = building_segment_datas
             .iter()
-            .enumerate()
-            .map(|(i, &segment_data)| {
-                ExpandableBitsetPostingIterator::<POSITIVE>::new(
-                    segment_meta_registry
-                        .segment(i - persistent_segment_datas.len())
-                        .doc_count(),
-                    segment_data,
-                )
+            .map(|(values, nulls)| {
+                ExpandableBitsetPostingIterator::<POSITIVE>::new(*values, *nulls)
             })
             .collect();
 

@@ -24,7 +24,7 @@ impl BitsetIndexBuildingSegmentData {
 }
 
 impl IndexSegmentData for BitsetIndexBuildingSegmentData {
-    fn collect_stat(&self, segment_stat: &mut crate::table::SegmentStat) {
+    fn collect_stat(&self, _segment_stat: &mut crate::table::SegmentStat) {
         // TODO:
     }
 }

@@ -22,4 +22,8 @@ impl Term {
     pub fn as_bool(&self) -> bool {
         self.keyword.trim().eq_ignore_ascii_case("true")
     }
+
+    pub fn is_null(&self) -> bool {
+        false
+    }
 }

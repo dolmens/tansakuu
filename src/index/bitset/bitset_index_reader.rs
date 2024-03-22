@@ -45,7 +45,7 @@ impl BitsetIndexReader {
         let building_bitsets: Vec<_> = self
             .building_segments
             .iter()
-            .map(|segment| &segment.values)
+            .map(|segment| (&segment.values, segment.nulls.as_ref()))
             .collect();
         Some(Box::new(BitsetPostingIterator::<POSITIVE>::new(
             self.segment_meta_registry.clone(),
