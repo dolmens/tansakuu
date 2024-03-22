@@ -70,14 +70,19 @@ fn test_boolean_column() {
     let index_reader = reader.index_reader();
     let term_f0_true = Term::new("f0".to_string(), "true".to_string());
     let term_f0_false = Term::new("f0".to_string(), "false".to_string());
+    let term_f0_null = Term::new("f0".to_string(), "null".to_string());
     let term_f1_true = Term::new("f1".to_string(), "true".to_string());
     let term_f1_false = Term::new("f1".to_string(), "false".to_string());
+    let term_f1_null = Term::new("f1".to_string(), "null".to_string());
 
     assert_eq!(get_all_docs(index_reader, &term_f0_true), vec![0]);
     assert_eq!(get_all_docs(index_reader, &term_f0_false), vec![1]);
+    assert_eq!(get_all_docs(index_reader, &term_f0_null), vec![2]);
 
     assert_eq!(get_all_docs(index_reader, &term_f1_true), vec![1]);
     assert_eq!(get_all_docs(index_reader, &term_f1_false), vec![0, 2]);
+    // Since f1 is non_null, query null equals to query false
+    assert_eq!(get_all_docs(index_reader, &term_f1_null), vec![0, 2]);
 
     // // Serialize
     // writer.new_segment();

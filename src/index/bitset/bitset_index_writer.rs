@@ -19,13 +19,12 @@ pub struct BitsetIndexWriter {
 
 impl BitsetIndexWriter {
     pub fn new(index: IndexRef, writer_resource: &IndexWriterResource) -> Self {
-        // If one field is nullable, then this index is nullable
-        let nullable = index.fields().iter().any(|field| field.is_nullable());
         let recent_segment_doc_count = writer_resource
             .recent_segment_stat()
             .map(|segment| segment.doc_count)
             .unwrap_or(1024);
         let values = ExpandableBitsetWriter::with_capacity(recent_segment_doc_count);
+        let nullable = index.is_nullable();
         let nulls = if nullable {
             Some(ExpandableBitsetWriter::with_capacity(1))
         } else {
@@ -109,7 +108,6 @@ impl IndexWriter for BitsetIndexWriter {
     fn index_data(&self) -> std::sync::Arc<dyn crate::index::IndexSegmentData> {
         Arc::new(BitsetIndexBuildingSegmentData::new(
             self.index.clone(),
-            self.nullable,
             self.values.bitset(),
             self.nulls.as_ref().map(|nulls| nulls.bitset()),
         ))

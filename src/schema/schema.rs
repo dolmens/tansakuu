@@ -80,6 +80,7 @@ pub enum IndexType {
 pub struct Index {
     name: String,
     index_type: IndexType,
+    nullable: bool,
     fields: Vec<FieldRef>,
 }
 
@@ -302,9 +303,13 @@ impl SchemaBuilder {
             )
         }
 
+        // If one field is nullable, then this index is nullable
+        let nullable = field_refs.iter().any(|field| field.is_nullable());
+
         let index = Arc::new(Index {
             name: index_name,
             index_type,
+            nullable,
             fields: field_refs,
         });
 
@@ -377,6 +382,10 @@ impl Index {
 
     pub fn index_type(&self) -> &IndexType {
         &self.index_type
+    }
+
+    pub fn is_nullable(&self) -> bool {
+        self.nullable
     }
 
     pub fn field_offset(&self, field: &FieldRef) -> Option<usize> {

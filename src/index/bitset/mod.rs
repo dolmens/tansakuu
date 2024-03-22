@@ -2,11 +2,16 @@ mod bitset_index_building_segment_data;
 mod bitset_index_reader;
 mod bitset_index_writer;
 mod bitset_posting_iterator;
-mod expandable_bitset_posting_iterator;
+mod building_bitset_posting_iterator;
 mod immutable_bitset_posting_iterator;
+mod ternary_bitset_posting_iterator;
+mod ternary_building_bitset_posting_iterator;
 
 pub use bitset_index_building_segment_data::BitsetIndexBuildingSegmentData;
 pub use bitset_index_reader::BitsetIndexReader;
 pub use bitset_index_writer::BitsetIndexWriter;
-pub use expandable_bitset_posting_iterator::ExpandableBitsetPostingIterator;
+pub use bitset_posting_iterator::BitsetPostingIterator;
+pub use building_bitset_posting_iterator::BuildingBitsetPostingIterator;
 pub use immutable_bitset_posting_iterator::ImmutableBitsetPostingIterator;
+pub use ternary_bitset_posting_iterator::TernaryBitsetPostingIterator;
+pub use ternary_building_bitset_posting_iterator::TernaryBuildingBitsetPostingIterator;

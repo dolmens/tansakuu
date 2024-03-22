@@ -24,6 +24,6 @@ impl Term {
     }
 
     pub fn is_null(&self) -> bool {
-        false
+        self.keyword.trim().eq_ignore_ascii_case("null")
     }
 }

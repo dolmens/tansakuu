@@ -6,9 +6,10 @@ use crate::{
     table::{SegmentMetaRegistry, TableData},
 };
 
-use super::{bitset_posting_iterator::BitsetPostingIterator, BitsetIndexBuildingSegmentData};
+use super::{BitsetIndexBuildingSegmentData, BitsetPostingIterator, TernaryBitsetPostingIterator};
 
 pub struct BitsetIndexReader {
+    nullable: bool,
     segment_meta_registry: SegmentMetaRegistry,
     building_segments: Vec<Arc<BitsetIndexBuildingSegmentData>>,
 }
@@ -33,6 +34,7 @@ impl BitsetIndexReader {
         }
 
         Self {
+            nullable: index.is_nullable(),
             segment_meta_registry,
             building_segments,
         }
@@ -47,7 +49,21 @@ impl BitsetIndexReader {
             .iter()
             .map(|segment| (&segment.values, segment.nulls.as_ref()))
             .collect();
-        Some(Box::new(BitsetPostingIterator::<POSITIVE>::new(
+        Some(Box::new(TernaryBitsetPostingIterator::<POSITIVE>::new(
+            self.segment_meta_registry.clone(),
+            &persistent_bitests,
+            &building_bitsets,
+        )))
+    }
+
+    pub fn null_posting_iterator(&self) -> Option<Box<dyn crate::index::PostingIterator + '_>> {
+        let persistent_bitests = vec![];
+        let building_bitsets: Vec<_> = self
+            .building_segments
+            .iter()
+            .map(|segment| segment.nulls.as_ref().unwrap())
+            .collect();
+        Some(Box::new(BitsetPostingIterator::new(
             self.segment_meta_registry.clone(),
             &persistent_bitests,
             &building_bitsets,
@@ -60,6 +76,9 @@ impl IndexReader for BitsetIndexReader {
         &'a self,
         term: &crate::query::Term,
     ) -> Option<Box<dyn crate::index::PostingIterator + 'a>> {
+        if self.nullable && term.is_null() {
+            return self.null_posting_iterator();
+        }
         let positive = term.as_bool();
         if positive {
             self.lookup::<true>()

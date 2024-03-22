@@ -1,6 +1,6 @@
 use crate::{util::ExpandableBitset, DocId, END_DOCID, INVALID_DOCID};
 
-pub struct ExpandableBitsetPostingIterator<'a, const POSITIVE: bool> {
+pub struct TernaryBuildingBitsetPostingIterator<'a, const POSITIVE: bool> {
     current_docid: DocId,
     doc_count: usize,
     current_word: u64,
@@ -9,7 +9,7 @@ pub struct ExpandableBitsetPostingIterator<'a, const POSITIVE: bool> {
     nulls: Option<&'a ExpandableBitset>,
 }
 
-impl<'a, const POSITIVE: bool> ExpandableBitsetPostingIterator<'a, POSITIVE> {
+impl<'a, const POSITIVE: bool> TernaryBuildingBitsetPostingIterator<'a, POSITIVE> {
     pub fn new(values: &'a ExpandableBitset, nulls: Option<&'a ExpandableBitset>) -> Self {
         let doc_count = values.valid_len();
         if let Some(nulls) = nulls {
@@ -83,7 +83,7 @@ impl<'a, const POSITIVE: bool> ExpandableBitsetPostingIterator<'a, POSITIVE> {
 mod tests {
     use crate::{util::ExpandableBitsetWriter, END_DOCID, INVALID_DOCID};
 
-    use super::ExpandableBitsetPostingIterator;
+    use super::TernaryBuildingBitsetPostingIterator;
 
     #[test]
     fn test_basic() {
@@ -97,7 +97,7 @@ mod tests {
         bitset_writer.insert(191);
         bitset_writer.set_item_len(192);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<true>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<true>::new(&bitset, None);
         assert_eq!(posting_iter.seek(INVALID_DOCID), 0);
         assert_eq!(posting_iter.seek(0), 0);
         assert_eq!(posting_iter.seek(1), 63);
@@ -106,31 +106,31 @@ mod tests {
         assert_eq!(posting_iter.seek(181), 191);
         assert_eq!(posting_iter.seek(192), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<false>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<false>::new(&bitset, None);
         assert_eq!(posting_iter.seek(INVALID_DOCID), 1);
         assert_eq!(posting_iter.seek(1), 1);
         assert_eq!(posting_iter.seek(2), 2);
         assert_eq!(posting_iter.seek(64), 64);
         assert_eq!(posting_iter.seek(191), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<true>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<true>::new(&bitset, None);
         assert_eq!(posting_iter.seek(0), 0);
         assert_eq!(posting_iter.seek(66), 180);
         assert_eq!(posting_iter.seek(192), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<false>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<false>::new(&bitset, None);
         assert_eq!(posting_iter.seek(64), 64);
         assert_eq!(posting_iter.seek(191), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<true>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<true>::new(&bitset, None);
         assert_eq!(posting_iter.seek(66), 180);
         assert_eq!(posting_iter.seek(192), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<true>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<true>::new(&bitset, None);
         assert_eq!(posting_iter.seek(191), 191);
         assert_eq!(posting_iter.seek(192), END_DOCID);
 
-        let mut posting_iter = ExpandableBitsetPostingIterator::<true>::new(&bitset, None);
+        let mut posting_iter = TernaryBuildingBitsetPostingIterator::<true>::new(&bitset, None);
         assert_eq!(posting_iter.seek(192), END_DOCID);
     }
 }
