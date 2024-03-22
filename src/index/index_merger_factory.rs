@@ -14,6 +14,7 @@ impl IndexMergerFactory {
             IndexType::Text(_) => Box::new(InvertedIndexMerger::default()),
             IndexType::PrimaryKey => Box::new(UniqueKeyMerger::default()),
             IndexType::UniqueKey => Box::new(UniqueKeyMerger::default()),
+            IndexType::Bitset => unimplemented!(),
             IndexType::Range => Box::new(RangeIndexMerger::default()),
             IndexType::Spatial(_) => Box::new(InvertedIndexMerger::default()),
         }

@@ -19,8 +19,6 @@ pub struct ExpandableBitset {
 }
 
 struct ExpandableBitsetData {
-    // len may NOT be set
-    len: AcqRelUsize,
     capacity: AcqRelUsize,
     data: RelaxedAtomicPtr<AtomicWord>,
     recycle_list: LinkedList<RecycleNode>,
@@ -28,8 +26,7 @@ struct ExpandableBitsetData {
 
 pub struct ExpandableBitsetIter<'a> {
     index: usize,
-    size: usize,
-    word: u64,
+    current_word: u64,
     data: &'a [AtomicWord],
 }
 
@@ -78,11 +75,6 @@ impl ExpandableBitsetWriter {
         slot.store(slot.load() | (1 << rem));
     }
 
-    pub fn set_item_len(&mut self, len: usize) {
-        assert!(len <= self.capacity());
-        self.data.len.store(len);
-    }
-
     fn expand(&mut self, index: usize) {
         let word_len = self.data.capacity.load() / BITS;
         let mut next_len = word_len;
@@ -103,17 +95,13 @@ impl ExpandableBitsetWriter {
         let data_ptr = Box::into_raw(data) as *mut AtomicWord;
         self.recycle_list.push(RecycleNode::new(data_ptr, next_len));
 
-        // First data_ptr then capacity
+        // First store data_ptr then capacity
         self.data.data.store(data_ptr);
         self.data.capacity.store(next_len * BITS);
     }
 
     pub fn contains(&self, index: usize) -> bool {
         self.data.contains(index)
-    }
-
-    pub fn len(&self) -> usize {
-        self.data.len()
     }
 
     pub fn capacity(&self) -> usize {
@@ -126,12 +114,12 @@ impl ExpandableBitset {
         self.data.contains(index)
     }
 
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
     pub fn capacity(&self) -> usize {
         self.data.capacity()
+    }
+
+    pub fn word(&self, pos: usize) -> u64 {
+        self.data.word(pos)
     }
 
     pub fn iter_words(&self) -> impl Iterator<Item = u64> + '_ {
@@ -150,23 +138,22 @@ impl ExpandableBitset {
 impl ExpandableBitsetData {
     fn new(data: *mut AtomicWord, capacity: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
-            len: AcqRelUsize::new(0),
             capacity: AcqRelUsize::new(capacity),
             data: RelaxedAtomicPtr::new(data),
             recycle_list,
         }
     }
 
-    fn len(&self) -> usize {
-        self.len.load()
-    }
-
     fn capacity(&self) -> usize {
         self.capacity.load()
     }
 
+    fn word(&self, pos: usize) -> u64 {
+        self.data()[pos].load()
+    }
+
     fn data(&self) -> &[AtomicWord] {
-        // First capacity then data_ptr
+        // First load capacity then data_ptr
         let capacity = self.capacity();
         let data_ptr = self.data.load();
         unsafe { std::slice::from_raw_parts(data_ptr, capacity / BITS) }
@@ -177,12 +164,9 @@ impl ExpandableBitsetData {
     }
 
     fn iter(&self) -> ExpandableBitsetIter<'_> {
-        let size = self.len();
-        let size = if size > 0 { size } else { self.capacity() };
         ExpandableBitsetIter {
             index: 0,
-            size,
-            word: 0,
+            current_word: 0,
             data: self.data(),
         }
     }
@@ -218,20 +202,20 @@ impl<'a> Iterator for ExpandableBitsetIter<'a> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.size {
+        if self.index < self.data.len() * BITS {
             let index = self.index;
             self.index += 1;
-            if index == 0 {
-                self.word = self.data[index / BITS].load();
+            if index % BITS == 0 {
+                self.current_word = self.data[index / BITS].load();
             }
-            Some((self.word & (1 << (index % BITS))) != 0)
+            Some((self.current_word & (1 << (index % BITS))) != 0)
         } else {
             None
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remain = self.size - self.index;
+        let remain = self.data.len() * BITS - self.index;
         (remain, Some(remain))
     }
 }

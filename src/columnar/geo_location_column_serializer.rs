@@ -19,6 +19,8 @@ impl ColumnSerializer for GeoLocationColumnSerializer {
     fn serialize(
         &self,
         column_data: &dyn super::ColumnBuildingSegmentData,
+        _doc_count: usize,
+        _docid_mapping: Option<&Vec<Option<crate::DocId>>>,
     ) -> arrow::array::ArrayRef {
         let geo_location_column_data = column_data
             .downcast_ref::<GeoLocationColumnBuildingSegmentData>()

@@ -95,6 +95,14 @@ impl SegmentMetaRegistry {
         self.segments.push(segment_meta);
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = &SegmentMeta> + '_ {
+        self.segments.iter()
+    }
+
+    pub fn segment(&self, segment_cursor: usize) -> &SegmentMeta {
+        &self.segments[segment_cursor]
+    }
+
     pub fn locate_segment(&self, docid: DocId) -> Option<usize> {
         for (i, segment) in self.segments.iter().enumerate() {
             if (docid as usize) < (segment.base_docid as usize) + segment.doc_count {
@@ -104,7 +112,16 @@ impl SegmentMetaRegistry {
         None
     }
 
-    pub fn segment_base_docid(&self, segment_cursor: usize) -> DocId {
-        self.segments[segment_cursor].base_docid
+    pub fn locate_segment_from(&self, docid: DocId, current_cursor: usize) -> Option<usize> {
+        for (i, segment) in self.segments.iter().enumerate().skip(current_cursor) {
+            if (docid as usize) < (segment.base_docid as usize) + segment.doc_count {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn locate_segment_rewind(&self, docid: DocId, current_cursor: usize) -> Option<usize> {
+        unimplemented!()
     }
 }

@@ -1,3 +1,4 @@
+pub mod bitset;
 mod index_merger;
 mod index_merger_factory;
 mod index_reader;

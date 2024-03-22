@@ -7,7 +7,7 @@ use super::BooleanColumnBuildingSegmentData;
 pub struct BooleanColumnBuildingSegmentReader {
     nullable: bool,
     values: ExpandableBitset,
-    nulls: ExpandableBitset,
+    nulls: Option<ExpandableBitset>,
 }
 
 impl BooleanColumnBuildingSegmentReader {
@@ -22,7 +22,7 @@ impl BooleanColumnBuildingSegmentReader {
     pub fn get(&self, docid: DocId) -> Option<bool> {
         if self.nullable {
             // Note nulls size may be smaller than values
-            if self.nulls.contains(docid as usize) {
+            if self.nulls.as_ref().unwrap().contains(docid as usize) {
                 return None;
             }
         }

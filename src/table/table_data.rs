@@ -126,6 +126,25 @@ impl TableData {
         &self.segment_meta_registry
     }
 
+    pub fn segment_meta_registry_updated(&self) -> SegmentMetaRegistry {
+        let mut segment_meta_registry = self.segment_meta_registry.clone();
+        debug_assert_eq!(
+            segment_meta_registry.segments.len(),
+            self.persistent_segments.len() + self.building_segments.len()
+        );
+        for (i, segment_meta) in segment_meta_registry
+            .segments
+            .iter_mut()
+            .skip(self.persistent_segments.len())
+            .enumerate()
+        {
+            if segment_meta.doc_count() == 0 {
+                segment_meta.set_doc_count(self.building_segments[i].data().doc_count());
+            }
+        }
+        segment_meta_registry
+    }
+
     pub fn recent_segment_stat(&self) -> Option<&Arc<SegmentStat>> {
         self.recent_segment_stat.as_ref()
     }
@@ -183,8 +202,6 @@ impl TableData {
             None
         };
 
-        let doc_count = total_doc_count - deleted_doc_count;
-
         let segment_path =
             PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
 
@@ -193,6 +210,7 @@ impl TableData {
         column_serializer.serialize(
             self.directory.as_ref(),
             &segment_path,
+            total_doc_count,
             docid_mapping.as_ref(),
             &self.schema,
             column_data,
@@ -215,6 +233,7 @@ impl TableData {
             );
         }
 
+        let doc_count = total_doc_count - deleted_doc_count;
         let meta = SegmentMetaData::new(doc_count);
         let meta_path = segment_path.join("meta.json");
         meta.save(self.directory.as_ref(), &meta_path);

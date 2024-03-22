@@ -14,19 +14,21 @@ impl ColumnSerializer for BooleanColumnSerializer {
     fn serialize(
         &self,
         column_data: &dyn super::ColumnBuildingSegmentData,
+        doc_count: usize,
+        _docid_mapping: Option<&Vec<Option<crate::DocId>>>,
     ) -> arrow::array::ArrayRef {
         let boolean_column_data = column_data
             .as_any()
             .downcast_ref::<BooleanColumnBuildingSegmentData>()
             .unwrap();
 
-        let values: Vec<_> = boolean_column_data.values.iter().collect();
+        let values: Vec<_> = boolean_column_data.values.iter().take(doc_count).collect();
         if boolean_column_data.nullable {
             let mut nulls = vec![true; values.len()];
-            // Note nulls's item len may be not set, in that case, iter will use capacity,
-            // and may be longer than values.
             for (i, is_null) in boolean_column_data
                 .nulls
+                .as_ref()
+                .unwrap()
                 .iter()
                 .take(values.len())
                 .enumerate()

@@ -20,6 +20,7 @@ impl SegmentColumnSerializer {
         &self,
         directory: &dyn Directory,
         segment_path: &Path,
+        doc_count: usize,
         docid_mapping: Option<&Vec<Option<DocId>>>,
         schema: &Schema,
         column_data: &HashMap<String, Arc<dyn ColumnBuildingSegmentData>>,
@@ -37,7 +38,8 @@ impl SegmentColumnSerializer {
         for field in schema.columns() {
             let column_serializer = serializer_factory.create(field);
             let field_column_data = column_data.get(field.name()).unwrap().as_ref();
-            let arrow_column = column_serializer.serialize(field_column_data);
+            let arrow_column =
+                column_serializer.serialize(field_column_data, doc_count, docid_mapping);
             arrow_columns.push(arrow_column);
         }
         let arrow_columns: Vec<_> = if let Some(docid_mapping) = docid_mapping {

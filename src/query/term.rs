@@ -18,4 +18,8 @@ impl Term {
     pub fn keyword(&self) -> &str {
         &self.keyword
     }
+
+    pub fn as_bool(&self) -> bool {
+        self.keyword.trim().eq_ignore_ascii_case("true")
+    }
 }

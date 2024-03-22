@@ -4,8 +4,8 @@ use crate::{
 };
 
 use super::{
-    range::RangeIndexReader, spatial::SpatialIndexReader, IndexReader, InvertedIndexReader,
-    UniqueKeyReader,
+    bitset::BitsetIndexReader, range::RangeIndexReader, spatial::SpatialIndexReader, IndexReader,
+    InvertedIndexReader, UniqueKeyReader,
 };
 
 #[derive(Default)]
@@ -17,6 +17,7 @@ impl IndexReaderFactory {
             IndexType::Text(_) => Box::new(InvertedIndexReader::new(index, table_data)),
             IndexType::PrimaryKey => Box::new(UniqueKeyReader::new(index, table_data)),
             IndexType::UniqueKey => Box::new(UniqueKeyReader::new(index, table_data)),
+            IndexType::Bitset => Box::new(BitsetIndexReader::new(index, table_data)),
             IndexType::Range => Box::new(RangeIndexReader::new(index, table_data)),
             IndexType::Spatial(_) => Box::new(SpatialIndexReader::new(index, table_data)),
         }

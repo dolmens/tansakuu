@@ -11,7 +11,12 @@ use super::{
 pub struct MultiStringColumnSerializer {}
 
 impl ColumnSerializer for MultiStringColumnSerializer {
-    fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef {
+    fn serialize(
+        &self,
+        column_data: &dyn ColumnBuildingSegmentData,
+        _doc_count: usize,
+        _docid_mapping: Option<&Vec<Option<crate::DocId>>>,
+    ) -> ArrayRef {
         let list_string_column_data = column_data
             .as_any()
             .downcast_ref::<MultiStringColumnBuildingSegmentData>()

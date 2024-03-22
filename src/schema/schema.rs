@@ -71,6 +71,7 @@ pub enum IndexType {
     Text(TextIndexOptions),
     PrimaryKey,
     UniqueKey,
+    Bitset,
     Range,
     Spatial(SpatialIndexOptions),
 }
@@ -253,6 +254,7 @@ impl SchemaBuilder {
                     | FieldType::Int32
                     | FieldType::Int16
                     | FieldType::Int8 => IndexType::Range,
+                    FieldType::Boolean => IndexType::Bitset,
                     FieldType::GeoLocation => IndexType::Spatial(Default::default()),
                     _ => IndexType::Text(Default::default()),
                 }

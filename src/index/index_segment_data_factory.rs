@@ -14,6 +14,7 @@ impl IndexSegmentDataFactory {
             IndexType::Text(_) => Box::new(InvertedIndexSegmentDataBuilder::default()),
             IndexType::PrimaryKey => Box::new(UniqueKeySegmentDataBuilder::default()),
             IndexType::UniqueKey => Box::new(UniqueKeySegmentDataBuilder::default()),
+            IndexType::Bitset => unimplemented!(),
             IndexType::Range => Box::new(RangeIndexSegmentDataBuilder::default()),
             IndexType::Spatial(_) => Box::new(InvertedIndexSegmentDataBuilder::default()),
         }

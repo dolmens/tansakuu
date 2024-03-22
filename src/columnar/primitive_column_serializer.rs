@@ -31,7 +31,12 @@ impl<T: PrimitiveType> ColumnSerializer for PrimitiveColumnSerializer<T>
 where
     PrimitiveArray<T::ArrowPrimitive>: From<Vec<Option<T::Native>>>,
 {
-    fn serialize(&self, column_data: &dyn ColumnBuildingSegmentData) -> ArrayRef {
+    fn serialize(
+        &self,
+        column_data: &dyn ColumnBuildingSegmentData,
+        _doc_count: usize,
+        _docid_mapping: Option<&Vec<Option<crate::DocId>>>,
+    ) -> ArrayRef {
         let primitive_column_data = column_data
             .as_any()
             .downcast_ref::<PrimitiveColumnBuildingSegmentData<T::Native>>()

@@ -57,7 +57,8 @@ impl<T: PrimitiveType> MultiPrimitiveColumnReader<T> {
             .and_then(|segment_cursor| {
                 let base_docid = self
                     .segment_meta_registry
-                    .segment_base_docid(segment_cursor);
+                    .segment(segment_cursor)
+                    .base_docid();
                 if segment_cursor < self.persistent_segments.len() {
                     let segment_reader = &self.persistent_segments[segment_cursor];
                     segment_reader.get(docid - base_docid)
