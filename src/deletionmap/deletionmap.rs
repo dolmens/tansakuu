@@ -28,11 +28,16 @@ impl Into<ImmutableDeletionMap> for MutableDeletionMap {
         }
     }
 }
-
 #[derive(Clone)]
 pub struct DeletionMap {
     doc_count: usize,
-    bitset: Bitset,
+    bitset: BitsetVariant,
+}
+
+#[derive(Clone)]
+enum BitsetVariant {
+    Immutable(ImmutableBitset),
+    Mutable(Bitset),
 }
 
 impl ImmutableDeletionMap {
@@ -40,12 +45,13 @@ impl ImmutableDeletionMap {
         let deletionmap_path = PathBuf::from("deletionmap").join(segment_id.as_str());
         if directory.exists(&deletionmap_path).unwrap() {
             let deletionmap_data = directory.open_read(&deletionmap_path).unwrap();
+            // TODO: Buggy code
             if deletionmap_data.len() % 8 != 0 || deletionmap_data.len() * 8 < doc_count {
                 let mut deletionmap_bytes = deletionmap_data.read_bytes().unwrap();
                 let words: Vec<_> = (0..deletionmap_data.len() / 8)
                     .map(|_| deletionmap_bytes.read_u64())
                     .collect();
-                let bitset = ImmutableBitset::new(&words);
+                let bitset = ImmutableBitset::from_vec(words);
                 return Self { doc_count, bitset };
             } else {
                 warn!(
@@ -55,6 +61,7 @@ impl ImmutableDeletionMap {
             }
         }
 
+        // TODO: Use option, don't need this
         let bitset = ImmutableBitset::with_capacity(doc_count);
         Self { doc_count, bitset }
     }
@@ -97,16 +104,23 @@ impl MutableDeletionMap {
 
 impl From<ImmutableDeletionMap> for DeletionMap {
     fn from(immutable: ImmutableDeletionMap) -> Self {
-        Self {
-            doc_count: immutable.doc_count,
-            bitset: immutable.bitset.into(),
-        }
+        Self::new_with_immutable(immutable.doc_count, immutable.bitset)
     }
 }
 
 impl DeletionMap {
-    pub fn new(doc_count: usize, bitset: Bitset) -> Self {
-        Self { doc_count, bitset }
+    pub fn new_with_immutable(doc_count: usize, bitset: ImmutableBitset) -> Self {
+        Self {
+            doc_count,
+            bitset: BitsetVariant::Immutable(bitset),
+        }
+    }
+
+    pub fn new_with_mutable(doc_count: usize, bitset: Bitset) -> Self {
+        Self {
+            doc_count,
+            bitset: BitsetVariant::Mutable(bitset),
+        }
     }
 
     pub fn doc_count(&self) -> usize {
@@ -114,6 +128,10 @@ impl DeletionMap {
     }
 
     pub fn is_deleted(&self, docid: DocId) -> bool {
-        self.bitset.contains(docid as usize)
+        let index = docid as usize;
+        match &self.bitset {
+            BitsetVariant::Immutable(bitset) => bitset.contains(index),
+            BitsetVariant::Mutable(bitset) => bitset.contains(index),
+        }
     }
 }

@@ -11,6 +11,13 @@ impl Term {
         }
     }
 
+    pub fn null(index_name: String) -> Self {
+        Self {
+            index_name,
+            keyword: "null".to_string(),
+        }
+    }
+
     pub fn index_name(&self) -> &str {
         &self.index_name
     }

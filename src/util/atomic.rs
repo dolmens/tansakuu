@@ -34,13 +34,7 @@ macro_rules! atomic {
 
 atomic! { AcqRelUsize, AtomicUsize, usize, Ordering::Acquire, Ordering::Release }
 
-atomic! { RelaxedUsize, AtomicUsize, usize, Ordering::Relaxed, Ordering::Relaxed }
-
-atomic! { SeqCstU64, AtomicU64, u64, Ordering::SeqCst, Ordering::SeqCst }
-
 atomic! { AcqRelU64, AtomicU64, u64, Ordering::Acquire, Ordering::Release }
-
-atomic! { RelaxedU64, AtomicU64, u64, Ordering::Relaxed, Ordering::Relaxed }
 
 atomic! { RelaxedU32, AtomicU32, u32, Ordering::Relaxed, Ordering::Relaxed }
 

@@ -10,7 +10,7 @@ pub struct MutableBitset {
 
 impl Into<ImmutableBitset> for MutableBitset {
     fn into(self) -> ImmutableBitset {
-        ImmutableBitset::new(&self.data)
+        ImmutableBitset::from_vec(self.data)
     }
 }
 
