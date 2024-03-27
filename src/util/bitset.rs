@@ -46,6 +46,10 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
 }
 
 impl BitsetWriter {
+    pub fn empty() -> Self {
+        Self::with_capacity(0)
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         let len = (capacity + BITS - 1) / BITS;
         let capacity = len * BITS;
@@ -347,6 +351,31 @@ mod tests {
     }
 
     #[test]
+    fn test_empty() {
+        let mut writer = BitsetWriter::empty();
+        writer.insert(0);
+        let bitset = writer.bitset();
+        assert!(bitset.contains(0));
+    }
+
+    #[test]
+    fn test_empty_multithreads() {
+        let mut writer = BitsetWriter::empty();
+        let bitset = writer.bitset();
+        let th = thread::spawn(move || loop {
+            if !bitset.contains(0) {
+                thread::yield_now();
+            } else {
+                break;
+            }
+        });
+
+        writer.insert(0);
+
+        th.join().unwrap();
+    }
+
+    #[test]
     fn test_to_boolean_vec() {
         let capacity = 127;
         let mut writer = BitsetWriter::with_capacity(capacity);
@@ -426,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_multithread() {
+    fn test_expand_multithreads() {
         let capacity = 1;
         let mut writer = BitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
