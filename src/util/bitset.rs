@@ -353,8 +353,10 @@ mod tests {
     #[test]
     fn test_empty() {
         let mut writer = BitsetWriter::empty();
-        writer.insert(0);
         let bitset = writer.bitset();
+        assert!(bitset.is_empty());
+        writer.insert(0);
+        assert!(!bitset.is_empty());
         assert!(bitset.contains(0));
     }
 
