@@ -4,7 +4,7 @@ use tantivy_common::TerminatingWrite;
 
 use crate::{
     table::{SegmentId, TableData},
-    util::{Bitset, BitsetWriter, MutableBitset},
+    util::{FixedSizeBitset, FixedSizeBitsetWriter, MutableBitset},
     Directory, DocId,
 };
 
@@ -13,13 +13,13 @@ use super::DeletionMap;
 pub struct DeletionMapWriter {
     doc_count: usize,
     segments: Vec<DeletionMapSegmentWriter>,
-    global_writer: BitsetWriter,
+    global_writer: FixedSizeBitsetWriter,
 }
 
 pub struct DeletionMapSegmentWriter {
     base_docid: DocId,
     doc_count: usize,
-    bitset: BitsetWriter,
+    bitset: FixedSizeBitsetWriter,
     segment_id: SegmentId,
 }
 
@@ -27,7 +27,8 @@ impl DeletionMapWriter {
     pub fn new(table_data: &mut TableData) -> Self {
         let mut segments = vec![];
         for seg in table_data.persistent_segments() {
-            let bitset = BitsetWriter::new_with_immutable_bitset(seg.data().deletionmap().bitset());
+            let bitset =
+                FixedSizeBitsetWriter::new_with_immutable_bitset(seg.data().deletionmap().bitset());
             segments.push(DeletionMapSegmentWriter {
                 base_docid: seg.meta().base_docid(),
                 doc_count: seg.meta().doc_count(),
@@ -37,8 +38,9 @@ impl DeletionMapWriter {
         }
         for seg in table_data.building_segments() {
             if seg.is_dumping() {
-                let bitset =
-                    BitsetWriter::new_with_expandable_bitset(seg.data().deletionmap().bitset());
+                let bitset = FixedSizeBitsetWriter::new_with_expandable_bitset(
+                    seg.data().deletionmap().bitset(),
+                );
                 segments.push(DeletionMapSegmentWriter {
                     base_docid: seg.meta().base_docid(),
                     doc_count: seg.meta().doc_count(),
@@ -55,7 +57,7 @@ impl DeletionMapWriter {
             let data: Vec<_> = bitset.iter_words().collect();
             global_bitset.copy_data_at(&data, seg.base_docid as usize, seg.doc_count);
         }
-        let global_writer = BitsetWriter::new(global_bitset.data());
+        let global_writer = FixedSizeBitsetWriter::new(global_bitset.data());
         let deletionmap = DeletionMap::new_with_mutable(doc_count, global_writer.bitset());
         table_data.set_deletionmap(deletionmap);
 
@@ -91,7 +93,7 @@ impl DeletionMapSegmentWriter {
         self.bitset.insert(docid_in_segment as usize);
     }
 
-    pub fn bitset(&self) -> Bitset {
+    pub fn bitset(&self) -> FixedSizeBitset {
         self.bitset.bitset()
     }
 

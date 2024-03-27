@@ -2,7 +2,7 @@ use tantivy_common::HasLen;
 
 use crate::{
     table::SegmentId,
-    util::{Bitset, ImmutableBitset, MutableBitset},
+    util::{FixedSizeBitset, ImmutableBitset, MutableBitset},
     Directory, DocId,
 };
 
@@ -37,7 +37,7 @@ pub struct DeletionMap {
 #[derive(Clone)]
 enum BitsetVariant {
     Immutable(ImmutableBitset),
-    Mutable(Bitset),
+    Mutable(FixedSizeBitset),
 }
 
 impl ImmutableDeletionMap {
@@ -116,7 +116,7 @@ impl DeletionMap {
         }
     }
 
-    pub fn new_with_mutable(doc_count: usize, bitset: Bitset) -> Self {
+    pub fn new_with_mutable(doc_count: usize, bitset: FixedSizeBitset) -> Self {
         Self {
             doc_count,
             bitset: BitsetVariant::Mutable(bitset),

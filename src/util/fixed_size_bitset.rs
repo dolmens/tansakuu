@@ -8,12 +8,12 @@ type Word = u64;
 type AtomicWord = AcqRelU64;
 const BITS: usize = std::mem::size_of::<AtomicWord>() * 8;
 
-pub struct BitsetWriter {
+pub struct FixedSizeBitsetWriter {
     data: Arc<[AtomicWord]>,
 }
 
 #[derive(Clone)]
-pub struct Bitset {
+pub struct FixedSizeBitset {
     data: Arc<[AtomicWord]>,
 }
 
@@ -21,7 +21,7 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
     (index / BITS, index % BITS)
 }
 
-impl BitsetWriter {
+impl FixedSizeBitsetWriter {
     pub fn new(data: &[Word]) -> Self {
         let data: Vec<_> = data.iter().map(|&w| AtomicWord::new(w)).collect();
 
@@ -56,8 +56,8 @@ impl BitsetWriter {
         Self { data }
     }
 
-    pub fn bitset(&self) -> Bitset {
-        Bitset {
+    pub fn bitset(&self) -> FixedSizeBitset {
+        FixedSizeBitset {
             data: self.data.clone(),
         }
     }
@@ -71,7 +71,7 @@ impl BitsetWriter {
         }
     }
 
-    pub fn union_with(&mut self, other: &Bitset) {
+    pub fn union_with(&mut self, other: &FixedSizeBitset) {
         if self.capacity() != other.capacity() {
             return;
         }
@@ -100,7 +100,7 @@ impl BitsetWriter {
     }
 }
 
-impl Bitset {
+impl FixedSizeBitset {
     pub fn contains(&self, index: usize) -> bool {
         if index < self.capacity() {
             let (quot, rem) = quot_and_rem(index);
@@ -125,7 +125,7 @@ mod tests {
     use std::{thread, time::Duration};
 
     use super::BITS;
-    use crate::util::bitset::BitsetWriter;
+    use crate::util::fixed_size_bitset::FixedSizeBitsetWriter;
 
     #[test]
     fn test_bits() {
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_simple() {
         let capacity = 129;
-        let mut writer = BitsetWriter::with_capacity(capacity);
+        let mut writer = FixedSizeBitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
 
         for i in 0..capacity {
@@ -177,8 +177,8 @@ mod tests {
 
     #[test]
     fn test_union_with() {
-        let mut w1 = BitsetWriter::with_capacity(BITS * 3);
-        let mut w2 = BitsetWriter::with_capacity(BITS * 3);
+        let mut w1 = FixedSizeBitsetWriter::with_capacity(BITS * 3);
+        let mut w2 = FixedSizeBitsetWriter::with_capacity(BITS * 3);
 
         w1.insert(0);
         w1.insert(1);
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn test_multithreads() {
         let capacity = 129;
-        let mut writer = BitsetWriter::with_capacity(capacity);
+        let mut writer = FixedSizeBitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
 
         let reader = bitset.clone();
