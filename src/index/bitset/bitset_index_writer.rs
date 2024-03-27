@@ -4,7 +4,7 @@ use crate::{
     document::OwnedValue,
     index::{IndexWriter, IndexWriterResource},
     schema::IndexRef,
-    util::ExpandableBitsetWriter,
+    util::BitsetWriter,
 };
 
 use super::BitsetIndexBuildingSegmentData;
@@ -12,8 +12,8 @@ use super::BitsetIndexBuildingSegmentData;
 pub struct BitsetIndexWriter {
     nullable: bool,
     current_value: Option<bool>,
-    values: ExpandableBitsetWriter,
-    nulls: Option<ExpandableBitsetWriter>,
+    values: BitsetWriter,
+    nulls: Option<BitsetWriter>,
     index: IndexRef,
 }
 
@@ -23,10 +23,10 @@ impl BitsetIndexWriter {
             .recent_segment_stat()
             .map(|segment| segment.doc_count)
             .unwrap_or(1024);
-        let values = ExpandableBitsetWriter::with_capacity(recent_segment_doc_count);
+        let values = BitsetWriter::with_capacity(recent_segment_doc_count);
         let nullable = index.is_nullable();
         let nulls = if nullable {
-            Some(ExpandableBitsetWriter::with_capacity(1))
+            Some(BitsetWriter::with_capacity(1))
         } else {
             None
         };

@@ -8,29 +8,29 @@ use super::{
 type AtomicWord = AcqRelU64;
 const BITS: usize = std::mem::size_of::<AtomicWord>() * 8;
 
-pub struct ExpandableBitsetWriter {
-    data: Arc<ExpandableBitsetData>,
+pub struct BitsetWriter {
+    data: Arc<BitsetData>,
     recycle_list: LinkedListWriter<RecycleNode>,
 }
 
 #[derive(Clone)]
-pub struct ExpandableBitset {
-    data: Arc<ExpandableBitsetData>,
+pub struct Bitset {
+    data: Arc<BitsetData>,
 }
 
-struct ExpandableBitsetData {
+struct BitsetData {
     capacity: AcqRelUsize,
     data: RelaxedAtomicPtr<AtomicWord>,
     recycle_list: LinkedList<RecycleNode>,
 }
 
-pub struct ExpandableBitsetValueIter<'a> {
+pub struct BitsetValueIter<'a> {
     index: usize,
     current_word: u64,
     data: &'a [AtomicWord],
 }
 
-pub struct ExpandableBitsetIter<'a> {
+pub struct BitsetIter<'a> {
     index: usize,
     current_word: u64,
     data: &'a [AtomicWord],
@@ -45,7 +45,7 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
     (index / BITS, index % BITS)
 }
 
-impl ExpandableBitsetWriter {
+impl BitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
         let len = (capacity + BITS - 1) / BITS;
         let capacity = len * BITS;
@@ -56,17 +56,13 @@ impl ExpandableBitsetWriter {
         let data = Box::into_raw(data) as *mut AtomicWord;
         let mut recycle_list = LinkedListWriter::new();
         recycle_list.push(RecycleNode::new(data, len));
-        let data = Arc::new(ExpandableBitsetData::new(
-            data,
-            capacity,
-            recycle_list.list(),
-        ));
+        let data = Arc::new(BitsetData::new(data, capacity, recycle_list.list()));
 
         Self { data, recycle_list }
     }
 
-    pub fn bitset(&self) -> ExpandableBitset {
-        ExpandableBitset {
+    pub fn bitset(&self) -> Bitset {
+        Bitset {
             data: self.data.clone(),
         }
     }
@@ -115,7 +111,7 @@ impl ExpandableBitsetWriter {
     }
 }
 
-impl ExpandableBitset {
+impl Bitset {
     pub fn contains(&self, index: usize) -> bool {
         self.data.contains(index)
     }
@@ -140,11 +136,11 @@ impl ExpandableBitset {
         self.data.to_boolean_vec()
     }
 
-    pub fn iter_values(&self) -> ExpandableBitsetValueIter<'_> {
+    pub fn iter_values(&self) -> BitsetValueIter<'_> {
         self.data.iter_values()
     }
 
-    pub fn iter(&self) -> ExpandableBitsetIter<'_> {
+    pub fn iter(&self) -> BitsetIter<'_> {
         self.data.iter()
     }
 
@@ -153,7 +149,7 @@ impl ExpandableBitset {
     }
 }
 
-impl ExpandableBitsetData {
+impl BitsetData {
     fn new(data: *mut AtomicWord, capacity: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
             capacity: AcqRelUsize::new(capacity),
@@ -195,16 +191,16 @@ impl ExpandableBitsetData {
         vec
     }
 
-    fn iter_values(&self) -> ExpandableBitsetValueIter<'_> {
-        ExpandableBitsetValueIter {
+    fn iter_values(&self) -> BitsetValueIter<'_> {
+        BitsetValueIter {
             index: 0,
             current_word: 0,
             data: self.data(),
         }
     }
 
-    fn iter(&self) -> ExpandableBitsetIter<'_> {
-        ExpandableBitsetIter {
+    fn iter(&self) -> BitsetIter<'_> {
+        BitsetIter {
             index: 0,
             current_word: 0,
             data: self.data(),
@@ -230,7 +226,7 @@ impl ExpandableBitsetData {
     }
 }
 
-impl Drop for ExpandableBitsetData {
+impl Drop for BitsetData {
     fn drop(&mut self) {
         for recycle_node in self.recycle_list.iter() {
             recycle_node.release();
@@ -238,7 +234,7 @@ impl Drop for ExpandableBitsetData {
     }
 }
 
-impl<'a> Iterator for ExpandableBitsetValueIter<'a> {
+impl<'a> Iterator for BitsetValueIter<'a> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -260,7 +256,7 @@ impl<'a> Iterator for ExpandableBitsetValueIter<'a> {
     }
 }
 
-impl<'a> Iterator for ExpandableBitsetIter<'a> {
+impl<'a> Iterator for BitsetIter<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -300,7 +296,7 @@ mod tests {
     use std::{thread, time::Duration};
 
     use super::BITS;
-    use crate::util::expandable_bitset::ExpandableBitsetWriter;
+    use crate::util::bitset::BitsetWriter;
 
     #[test]
     fn test_bits() {
@@ -310,7 +306,7 @@ mod tests {
     #[test]
     fn test_simple() {
         let capacity = 129;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
 
         for i in 0..capacity {
@@ -353,7 +349,7 @@ mod tests {
     #[test]
     fn test_to_boolean_vec() {
         let capacity = 127;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         writer.insert(0);
         writer.insert(1);
         writer.insert(127);
@@ -369,7 +365,7 @@ mod tests {
     #[test]
     fn test_iter_values() {
         let capacity = 127;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         writer.insert(0);
         writer.insert(1);
         writer.insert(127);
@@ -385,7 +381,7 @@ mod tests {
     #[test]
     fn test_iter() {
         let capacity = 127;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         writer.insert(0);
         writer.insert(1);
         writer.insert(127);
@@ -398,7 +394,7 @@ mod tests {
     #[test]
     fn test_expand() {
         let capacity = 1;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
         let capacity = BITS;
         assert_eq!(bitset.capacity(), capacity);
@@ -432,7 +428,7 @@ mod tests {
     #[test]
     fn test_expand_multithread() {
         let capacity = 1;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
         let reader = bitset.clone();
 
@@ -483,7 +479,7 @@ mod tests {
     #[test]
     fn test_multithreads() {
         let capacity = 129;
-        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        let mut writer = BitsetWriter::with_capacity(capacity);
         let bitset = writer.bitset();
 
         let reader = bitset.clone();

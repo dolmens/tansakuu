@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use super::{
-    atomic::AcqRelU64, expandable_bitset::ExpandableBitset, immutable_bitset::ImmutableBitset,
-};
+use super::{atomic::AcqRelU64, bitset::Bitset, immutable_bitset::ImmutableBitset};
 
 type Word = u64;
 type AtomicWord = AcqRelU64;
@@ -47,7 +45,7 @@ impl FixedSizeBitsetWriter {
         Self { data }
     }
 
-    pub fn new_with_expandable_bitset(expandable: &ExpandableBitset) -> Self {
+    pub fn new_with_expandable_bitset(expandable: &Bitset) -> Self {
         let data: Vec<_> = expandable
             .iter_words()
             .map(|w| AtomicWord::new(w))

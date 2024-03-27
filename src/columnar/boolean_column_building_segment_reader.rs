@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::{util::ExpandableBitset, DocId};
+use crate::{util::Bitset, DocId};
 
 use super::BooleanColumnBuildingSegmentData;
 
 pub struct BooleanColumnBuildingSegmentReader {
     nullable: bool,
-    values: ExpandableBitset,
-    nulls: Option<ExpandableBitset>,
+    values: Bitset,
+    nulls: Option<Bitset>,
 }
 
 impl BooleanColumnBuildingSegmentReader {

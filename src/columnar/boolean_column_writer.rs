@@ -1,23 +1,23 @@
 use std::sync::Arc;
 
-use crate::{document::Value, schema::FieldRef, util::ExpandableBitsetWriter};
+use crate::{document::Value, schema::FieldRef, util::BitsetWriter};
 
 use super::{BooleanColumnBuildingSegmentData, ColumnWriter};
 
 pub struct BooleanColumnWriter {
     index: usize,
-    values: ExpandableBitsetWriter,
-    nulls: Option<ExpandableBitsetWriter>,
+    values: BitsetWriter,
+    nulls: Option<BitsetWriter>,
     field: FieldRef,
 }
 
 impl BooleanColumnWriter {
     pub fn new(field: FieldRef) -> Self {
         // TODO: pass writer resource to get estimate segment doc count
-        let values = ExpandableBitsetWriter::with_capacity(512 * 1024);
+        let values = BitsetWriter::with_capacity(512 * 1024);
         // There may be no null values, so a small initial capacity is good.
         let nulls = if field.is_nullable() {
-            Some(ExpandableBitsetWriter::with_capacity(1))
+            Some(BitsetWriter::with_capacity(1))
         } else {
             None
         };

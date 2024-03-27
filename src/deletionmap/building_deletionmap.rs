@@ -1,21 +1,21 @@
 use crate::{
-    util::{ExpandableBitset, ExpandableBitsetWriter},
+    util::{Bitset, BitsetWriter},
     DocId,
 };
 
 pub struct BuildingDeletionMapWriter {
-    bitset: ExpandableBitsetWriter,
+    bitset: BitsetWriter,
 }
 
 #[derive(Clone)]
 pub struct BuildingDeletionMap {
-    bitset: ExpandableBitset,
+    bitset: Bitset,
 }
 
 impl BuildingDeletionMapWriter {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            bitset: ExpandableBitsetWriter::with_capacity(capacity),
+            bitset: BitsetWriter::with_capacity(capacity),
         }
     }
 
@@ -35,7 +35,7 @@ impl BuildingDeletionMap {
         self.bitset.contains(docid as usize)
     }
 
-    pub fn bitset(&self) -> &ExpandableBitset {
+    pub fn bitset(&self) -> &Bitset {
         &self.bitset
     }
 

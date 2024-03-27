@@ -1,5 +1,5 @@
 use crate::{
-    util::{ExpandableBitset, ImmutableBitset},
+    util::{Bitset, ImmutableBitset},
     DocId,
 };
 
@@ -11,7 +11,7 @@ pub struct BitsetSegmentPosting<'a> {
 
 pub enum BitsetPostingVariant<'a> {
     Immutable(&'a ImmutableBitset),
-    Mutable(&'a ExpandableBitset),
+    Mutable(&'a Bitset),
 }
 
 impl<'a> BitsetSegmentPosting<'a> {
@@ -23,7 +23,7 @@ impl<'a> BitsetSegmentPosting<'a> {
         }
     }
 
-    pub fn new_mutable(base_docid: DocId, doc_count: usize, bitset: &'a ExpandableBitset) -> Self {
+    pub fn new_mutable(base_docid: DocId, doc_count: usize, bitset: &'a Bitset) -> Self {
         Self {
             base_docid,
             doc_count,
