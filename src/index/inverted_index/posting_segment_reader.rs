@@ -42,7 +42,7 @@ impl<'a> PostingSegmentReader<'a> {
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
-        let docid = if docid > self.base_docid {
+        let docid = if docid >= self.base_docid {
             docid - self.base_docid
         } else {
             0

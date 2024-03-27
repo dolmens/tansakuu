@@ -139,7 +139,7 @@ impl<'a> PostingSegmentMultiReader<'a> {
     }
 
     fn init_read(&mut self, docid: DocId) -> io::Result<()> {
-        let docid = if docid > self.base_docid {
+        let docid = if docid >= self.base_docid {
             docid - self.base_docid
         } else {
             0

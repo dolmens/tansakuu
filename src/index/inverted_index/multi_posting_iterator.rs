@@ -1,11 +1,11 @@
-use crate::{index::PostingIterator, postings::PostingFormat, DocId, END_DOCID, INVALID_DOCID};
+use crate::{index::PostingIterator, postings::PostingFormat, DocId, END_DOCID};
 
-use super::{PostingSegmentMultiReader, SegmentMultiPosting};
+use super::{PostingSegmentMultiReader, SegmentMultiPosting, SegmentMultiPostings};
 
 pub struct MultiPostingIterator<'a> {
     reader: Option<PostingSegmentMultiReader<'a>>,
     cursor: usize,
-    segments: Vec<SegmentMultiPosting<'a>>,
+    segments: SegmentMultiPostings<'a>,
     posting_format: PostingFormat,
 }
 
@@ -14,46 +14,23 @@ impl<'a> MultiPostingIterator<'a> {
         Self {
             reader: None,
             cursor: 0,
-            segments: postings,
+            segments: SegmentMultiPostings::new(postings),
             posting_format,
         }
     }
 
     fn move_to_segment(&mut self, docid: DocId) -> bool {
-        let cursor = self.locate_segment(self.cursor, docid);
-        if cursor >= self.segments.len() {
-            return false;
-        }
-
-        if self.cursor != cursor || self.reader.is_none() {
-            self.cursor = cursor;
-            self.reader = Some(PostingSegmentMultiReader::open(
-                self.posting_format.doc_list_format().clone(),
-                unsafe { std::mem::transmute(&self.segments[self.cursor]) },
-            ));
-        }
-        true
-    }
-
-    fn locate_segment(&self, cursor: usize, docid: DocId) -> usize {
-        let curr_seg_base_docid = self.segment_base_docid(cursor);
-        if curr_seg_base_docid == INVALID_DOCID {
-            return cursor;
-        }
-        let mut cursor = cursor;
-        let mut next_seg_base_docid = self.segment_base_docid(cursor + 1);
-        while next_seg_base_docid != INVALID_DOCID && docid >= next_seg_base_docid {
-            cursor += 1;
-            next_seg_base_docid = self.segment_base_docid(cursor + 1);
-        }
-        cursor
-    }
-
-    fn segment_base_docid(&self, cursor: usize) -> DocId {
-        if cursor >= self.segments.len() {
-            INVALID_DOCID
+        if let Some(cursor) = self.segments.locate_segment_from(docid, self.cursor) {
+            if self.cursor != cursor || self.reader.is_none() {
+                self.cursor = cursor;
+                self.reader = Some(PostingSegmentMultiReader::open(
+                    self.posting_format.doc_list_format().clone(),
+                    unsafe { std::mem::transmute(self.segments.segment(self.cursor)) },
+                ));
+            }
+            true
         } else {
-            self.segments[cursor].base_docid()
+            false
         }
     }
 }

@@ -41,7 +41,9 @@ pub use inverted_index_writer::InvertedIndexWriter;
 pub use multi_posting_iterator::MultiPostingIterator;
 pub use posting_data_loader::{PersistentPostingData, PostingDataLoader};
 pub use posting_segment_multi_reader::PostingSegmentMultiReader;
-pub use segment_multi_posting::{SegmentMultiPosting, SegmentMultiPostingData};
+pub use segment_multi_posting::{
+    SegmentMultiPosting, SegmentMultiPostingData, SegmentMultiPostings,
+};
 pub use segment_posting::{
     BuildingSegmentPosting, PersistentSegmentPosting, SegmentPosting, SegmentPostingData,
     SegmentPostings,

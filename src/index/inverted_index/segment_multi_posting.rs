@@ -4,13 +4,17 @@ use super::{BuildingSegmentPosting, PersistentSegmentPosting};
 
 pub struct SegmentMultiPosting<'a> {
     base_docid: DocId,
-    _doc_count: usize,
+    doc_count: usize,
     posting_data: SegmentMultiPostingData<'a>,
 }
 
 pub enum SegmentMultiPostingData<'a> {
     Persistent(Vec<PersistentSegmentPosting<'a>>),
     Building(Vec<BuildingSegmentPosting<'a>>),
+}
+
+pub struct SegmentMultiPostings<'a> {
+    segments: Vec<SegmentMultiPosting<'a>>,
 }
 
 impl<'a> SegmentMultiPosting<'a> {
@@ -21,7 +25,7 @@ impl<'a> SegmentMultiPosting<'a> {
     ) -> Self {
         Self {
             base_docid,
-            _doc_count: doc_count,
+            doc_count,
             posting_data,
         }
     }
@@ -45,5 +49,33 @@ impl<'a> SegmentMultiPostingData<'a> {
             Self::Persistent(postings) => postings.len(),
             Self::Building(postings) => postings.len(),
         }
+    }
+}
+
+impl<'a> SegmentMultiPostings<'a> {
+    pub fn new(segments: Vec<SegmentMultiPosting<'a>>) -> Self {
+        Self { segments }
+    }
+
+    pub fn locate_segment(&self, docid: DocId) -> Option<usize> {
+        for (i, segment) in self.segments.iter().enumerate() {
+            if docid < segment.base_docid + (segment.doc_count as DocId) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn locate_segment_from(&self, docid: DocId, current_cursor: usize) -> Option<usize> {
+        for (i, segment) in self.segments.iter().enumerate().skip(current_cursor) {
+            if docid < segment.base_docid + (segment.doc_count as DocId) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn segment(&self, index: usize) -> &SegmentMultiPosting<'a> {
+        &self.segments[index]
     }
 }
