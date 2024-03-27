@@ -1,41 +1,28 @@
-use crate::{
-    index::PostingIterator,
-    table::SegmentMetaRegistry,
-    util::{ExpandableBitset, ImmutableBitset},
-    DocId, END_DOCID, INVALID_DOCID,
-};
+use crate::{index::PostingIterator, DocId, END_DOCID, INVALID_DOCID};
 
-use super::{BuildingBitsetPostingIterator, ImmutableBitsetPostingIterator};
+use super::BitsetSegmentPosting;
 
 pub struct BitsetPostingIterator<'a> {
     current_docid: DocId,
+    word_pos: usize,
+    current_word: u64,
     segment_cursor: usize,
-    segment_meta_registry: SegmentMetaRegistry,
-    persistent_segments: Vec<ImmutableBitsetPostingIterator<'a>>,
-    building_segments: Vec<BuildingBitsetPostingIterator<'a>>,
+    postings: Vec<BitsetSegmentPosting<'a>>,
 }
 
 impl<'a> BitsetPostingIterator<'a> {
-    pub fn new(
-        segment_meta_registry: SegmentMetaRegistry,
-        _persistent_segment_datas: &[&'a ImmutableBitset],
-        building_segment_datas: &[&'a ExpandableBitset],
-    ) -> Self {
-        let persistent_segments = vec![];
-        let building_segments: Vec<_> = building_segment_datas
-            .iter()
-            .map(|&values| BuildingBitsetPostingIterator::new(values))
-            .collect();
-
+    pub fn new(postings: Vec<BitsetSegmentPosting<'a>>) -> Self {
         Self {
             current_docid: INVALID_DOCID,
+            word_pos: usize::MAX,
+            current_word: 0,
             segment_cursor: 0,
-            segment_meta_registry,
-            persistent_segments,
-            building_segments,
+            postings,
         }
     }
 }
+
+const BITS: usize = 64;
 
 impl<'a> PostingIterator for BitsetPostingIterator<'a> {
     fn seek(&mut self, docid: crate::DocId) -> std::io::Result<crate::DocId> {
@@ -44,32 +31,32 @@ impl<'a> PostingIterator for BitsetPostingIterator<'a> {
             return Ok(self.current_docid);
         }
 
-        if let Some(segment_cursor) = self
-            .segment_meta_registry
-            .locate_segment_from(docid, self.segment_cursor)
-        {
-            let mut segment_cursor = segment_cursor;
-            while segment_cursor < self.persistent_segments.len() {
-                segment_cursor += 1;
-            }
-            while segment_cursor < self.persistent_segments.len() + self.building_segments.len() {
-                let segment_base_docid = self
-                    .segment_meta_registry
-                    .segment(segment_cursor)
-                    .base_docid();
-                let building_segment_cursor = segment_cursor - self.persistent_segments.len();
-                let got_docid = self.building_segments[building_segment_cursor]
-                    .seek(docid - segment_base_docid);
-                if got_docid != END_DOCID {
-                    self.segment_cursor = segment_cursor;
-                    let docid = got_docid + segment_base_docid;
-                    self.current_docid = docid;
-                    return Ok(docid);
+        let mut docid = docid;
+        loop {
+            let current_segment = &self.postings[self.segment_cursor];
+            if docid >= current_segment.base_docid + (current_segment.doc_count as DocId) {
+                self.word_pos = usize::MAX;
+                self.segment_cursor += 1;
+                if self.segment_cursor == self.postings.len() {
+                    self.current_docid = END_DOCID;
+                    return Ok(END_DOCID);
                 }
-                segment_cursor += 1;
+                continue;
             }
+
+            let docid_in_segment = docid - current_segment.base_docid;
+
+            if ((docid_in_segment as usize) / BITS) != self.word_pos {
+                self.word_pos = (docid_in_segment as usize) / BITS;
+                self.current_word = current_segment.bitset.load_word(self.word_pos);
+            }
+
+            if self.current_word & (1 << ((docid_in_segment as usize) % BITS)) != 0 {
+                self.current_docid = docid;
+                return Ok(docid);
+            }
+
+            docid += 1;
         }
-        self.current_docid = END_DOCID;
-        Ok(END_DOCID)
     }
 }

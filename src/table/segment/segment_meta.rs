@@ -18,11 +18,6 @@ pub struct SegmentMeta {
     doc_count: usize,
 }
 
-#[derive(Clone)]
-pub struct SegmentMetaRegistry {
-    pub segments: Vec<SegmentMeta>,
-}
-
 impl SegmentMetaData {
     pub fn new(doc_count: usize) -> Self {
         Self { doc_count }
@@ -81,47 +76,5 @@ impl SegmentMeta {
     pub fn inner_docid(&self, docid: DocId) -> DocId {
         assert!(docid > self.base_docid);
         docid - self.base_docid
-    }
-}
-
-impl SegmentMetaRegistry {
-    pub fn new(segment_metas: Vec<SegmentMeta>) -> Self {
-        Self {
-            segments: segment_metas,
-        }
-    }
-
-    pub fn add_segment(&mut self, segment_meta: SegmentMeta) {
-        self.segments.push(segment_meta);
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &SegmentMeta> + '_ {
-        self.segments.iter()
-    }
-
-    pub fn segment(&self, segment_cursor: usize) -> &SegmentMeta {
-        &self.segments[segment_cursor]
-    }
-
-    pub fn locate_segment(&self, docid: DocId) -> Option<usize> {
-        for (i, segment) in self.segments.iter().enumerate() {
-            if (docid as usize) < (segment.base_docid as usize) + segment.doc_count {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    pub fn locate_segment_from(&self, docid: DocId, current_cursor: usize) -> Option<usize> {
-        for (i, segment) in self.segments.iter().enumerate().skip(current_cursor) {
-            if (docid as usize) < (segment.base_docid as usize) + segment.doc_count {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    pub fn locate_segment_rewind(&self, _docid: DocId, _current_cursor: usize) -> Option<usize> {
-        unimplemented!()
     }
 }

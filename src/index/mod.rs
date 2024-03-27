@@ -1,3 +1,5 @@
+mod all_docs_posting_iterator;
+mod and_not_posting_iterator;
 pub mod bitset;
 mod index_merger;
 mod index_merger_factory;
@@ -11,11 +13,14 @@ mod index_writer;
 mod index_writer_factory;
 mod index_writer_resource;
 pub mod inverted_index;
+mod negated_posting_iterator;
 mod posting_iterator;
 pub mod range;
 pub mod spatial;
 pub mod unique_key;
 
+pub use all_docs_posting_iterator::AllDocsPostingIterator;
+pub use and_not_posting_iterator::AndNotPostingIterator;
 pub use index_merger::IndexMerger;
 pub use index_merger_factory::IndexMergerFactory;
 pub use index_reader::IndexReader;
@@ -28,5 +33,6 @@ pub use index_writer::IndexWriter;
 pub use index_writer_factory::IndexWriterFactory;
 pub use index_writer_resource::{IndexWriterResource, IndexWriterResourceBuilder};
 pub use inverted_index::InvertedIndexReader;
+pub use negated_posting_iterator::NegatedPostingIterator;
 pub use posting_iterator::PostingIterator;
 pub use unique_key::UniqueKeyReader;

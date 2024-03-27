@@ -1,8 +1,8 @@
 use crate::schema::{IndexRef, IndexType};
 
 use super::{
-    inverted_index::InvertedIndexSerializer, range::RangeIndexSerializer,
-    unique_key::UniqueKeySerializer, IndexSerializer,
+    bitset::BitsetIndexSerializer, inverted_index::InvertedIndexSerializer,
+    range::RangeIndexSerializer, unique_key::UniqueKeySerializer, IndexSerializer,
 };
 
 #[derive(Default)]
@@ -14,7 +14,7 @@ impl IndexSerializerFactory {
             IndexType::Text(_) => Box::new(InvertedIndexSerializer::default()),
             IndexType::PrimaryKey => Box::new(UniqueKeySerializer::default()),
             IndexType::UniqueKey => Box::new(UniqueKeySerializer::default()),
-            IndexType::Bitset => unimplemented!(),
+            IndexType::Bitset => Box::new(BitsetIndexSerializer::default()),
             IndexType::Range => Box::new(RangeIndexSerializer::default()),
             IndexType::Spatial(_) => Box::new(InvertedIndexSerializer::default()),
         }

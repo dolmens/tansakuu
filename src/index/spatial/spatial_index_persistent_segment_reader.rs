@@ -10,13 +10,19 @@ use crate::{
 
 pub struct SpatialIndexPersistentSegmentReader {
     base_docid: DocId,
+    doc_count: usize,
     index_data: Arc<InvertedIndexPersistentSegmentData>,
 }
 
 impl SpatialIndexPersistentSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<InvertedIndexPersistentSegmentData>) -> Self {
+    pub fn new(
+        base_docid: DocId,
+        doc_count: usize,
+        index_data: Arc<InvertedIndexPersistentSegmentData>,
+    ) -> Self {
         Self {
             base_docid,
+            doc_count,
             index_data,
         }
     }
@@ -40,6 +46,7 @@ impl SpatialIndexPersistentSegmentReader {
         if !postings.is_empty() {
             Some(SegmentMultiPosting::new(
                 self.base_docid,
+                self.doc_count,
                 SegmentMultiPostingData::Persistent(postings),
             ))
         } else {

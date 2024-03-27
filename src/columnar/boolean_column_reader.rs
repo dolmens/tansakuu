@@ -1,6 +1,6 @@
 use crate::{
     schema::Field,
-    table::{SegmentMetaRegistry, TableData},
+    table::{SegmentRegistry, TableData},
     DocId,
 };
 
@@ -9,24 +9,30 @@ use super::{
 };
 
 pub struct BooleanColumnReader {
-    segment_meta_registry: SegmentMetaRegistry,
-    persistent_segments: Vec<BooleanColumnPersistentSegmentReader>,
-    building_segments: Vec<BooleanColumnBuildingSegmentReader>,
+    segment_registry: SegmentRegistry,
+    segment_readers: Vec<BooleanColumnSegmentReader>,
+}
+
+enum BooleanColumnSegmentReader {
+    Persistent(BooleanColumnPersistentSegmentReader),
+    Building(BooleanColumnBuildingSegmentReader),
 }
 
 impl BooleanColumnReader {
     pub fn new(field: &Field, table_data: &TableData) -> Self {
-        let segment_meta_registry = table_data.segment_meta_registry().clone();
+        let mut segment_registry = SegmentRegistry::default();
+        let mut segment_readers = vec![];
 
-        let mut persistent_segments = vec![];
         for segment in table_data.persistent_segments() {
+            segment_registry.add_persistent_segment(segment.meta());
             let column_data = segment.data().column_data(field.name()).unwrap();
             let segment_reader = BooleanColumnPersistentSegmentReader::new(column_data);
-            persistent_segments.push(segment_reader);
+            segment_readers.push(BooleanColumnSegmentReader::Persistent(segment_reader));
         }
 
-        let mut building_segments = vec![];
         for building_segment in table_data.building_segments() {
+            segment_registry
+                .add_building_segment(building_segment.meta(), building_segment.data().doc_count());
             let column_data = building_segment
                 .data()
                 .column_data()
@@ -35,33 +41,33 @@ impl BooleanColumnReader {
                 .unwrap();
             let boolean_column_data = column_data.downcast_arc().ok().unwrap();
             let segment_reader = BooleanColumnBuildingSegmentReader::new(boolean_column_data);
-            building_segments.push(segment_reader);
+            segment_readers.push(BooleanColumnSegmentReader::Building(segment_reader));
         }
 
         Self {
-            segment_meta_registry,
-            persistent_segments,
-            building_segments,
+            segment_registry,
+            segment_readers,
         }
     }
 
     pub fn get(&self, docid: DocId) -> Option<bool> {
-        self.segment_meta_registry
+        self.segment_registry
             .locate_segment(docid)
             .and_then(|segment_cursor| {
-                let base_docid = self
-                    .segment_meta_registry
-                    .segment(segment_cursor)
-                    .base_docid();
-                if segment_cursor < self.persistent_segments.len() {
-                    let segment_reader = &self.persistent_segments[segment_cursor];
-                    segment_reader.get(docid - base_docid)
-                } else {
-                    let segment_cursor = segment_cursor - self.persistent_segments.len();
-                    let segment_reader = &self.building_segments[segment_cursor];
-                    segment_reader.get(docid - base_docid)
-                }
+                let docid_in_segment = self
+                    .segment_registry
+                    .docid_in_segment(docid, segment_cursor);
+                self.segment_readers[segment_cursor].get(docid_in_segment)
             })
+    }
+}
+
+impl BooleanColumnSegmentReader {
+    fn get(&self, docid: DocId) -> Option<bool> {
+        match self {
+            Self::Persistent(segment_reader) => segment_reader.get(docid),
+            Self::Building(segment_reader) => segment_reader.get(docid),
+        }
     }
 }
 

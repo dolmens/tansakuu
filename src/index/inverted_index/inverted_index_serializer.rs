@@ -18,6 +18,7 @@ impl IndexSerializer for InvertedIndexSerializer {
         index_data: &Arc<dyn IndexSegmentData>,
         directory: &dyn Directory,
         index_path: &std::path::Path,
+        _doc_count: usize,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let index_name = index.name();

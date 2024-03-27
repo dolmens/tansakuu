@@ -10,6 +10,7 @@ pub trait IndexMerger {
         directory: &dyn Directory,
         index_path: &Path,
         index: &Index,
+        total_doc_count: usize,
         segments: &[&Arc<dyn IndexSegmentData>],
         docid_mappings: &[Vec<Option<DocId>>],
     );

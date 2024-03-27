@@ -4,6 +4,7 @@ use super::{BuildingSegmentPosting, PersistentSegmentPosting};
 
 pub struct SegmentMultiPosting<'a> {
     base_docid: DocId,
+    _doc_count: usize,
     posting_data: SegmentMultiPostingData<'a>,
 }
 
@@ -13,9 +14,14 @@ pub enum SegmentMultiPostingData<'a> {
 }
 
 impl<'a> SegmentMultiPosting<'a> {
-    pub fn new(base_docid: DocId, posting_data: SegmentMultiPostingData<'a>) -> Self {
+    pub fn new(
+        base_docid: DocId,
+        doc_count: usize,
+        posting_data: SegmentMultiPostingData<'a>,
+    ) -> Self {
         Self {
             base_docid,
+            _doc_count: doc_count,
             posting_data,
         }
     }

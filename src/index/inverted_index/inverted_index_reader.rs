@@ -34,10 +34,13 @@ impl InvertedIndexReader {
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
             let data = segment.data();
-            let index_data = data.index_data(index.name());
+            let index_data = data.index_data(index.name()).unwrap();
             let inverted_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader =
-                InvertedIndexPersistentSegmentReader::new(meta.base_docid(), inverted_index_data);
+            let index_segment_reader = InvertedIndexPersistentSegmentReader::new(
+                meta.base_docid(),
+                meta.doc_count(),
+                inverted_index_data,
+            );
             persistent_segments.push(index_segment_reader);
         }
 
@@ -47,8 +50,11 @@ impl InvertedIndexReader {
             let data = segment.data();
             let index_data = data.index_data().index_data(index.name()).unwrap();
             let inverted_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader =
-                InvertedIndexBuildingSegmentReader::new(meta.base_docid(), inverted_index_data);
+            let index_segment_reader = InvertedIndexBuildingSegmentReader::new(
+                meta.base_docid(),
+                data.doc_count().clone(),
+                inverted_index_data,
+            );
             building_segments.push(index_segment_reader);
         }
 

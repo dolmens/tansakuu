@@ -1,8 +1,9 @@
 use crate::schema::{Index, IndexType};
 
 use super::{
-    inverted_index::InvertedIndexSegmentDataBuilder, range::RangeIndexSegmentDataBuilder,
-    unique_key::UniqueKeySegmentDataBuilder, IndexSegmentDataBuilder,
+    bitset::BitsetIndexSegmentDataBuilder, inverted_index::InvertedIndexSegmentDataBuilder,
+    range::RangeIndexSegmentDataBuilder, unique_key::UniqueKeySegmentDataBuilder,
+    IndexSegmentDataBuilder,
 };
 
 #[derive(Default)]
@@ -14,7 +15,7 @@ impl IndexSegmentDataFactory {
             IndexType::Text(_) => Box::new(InvertedIndexSegmentDataBuilder::default()),
             IndexType::PrimaryKey => Box::new(UniqueKeySegmentDataBuilder::default()),
             IndexType::UniqueKey => Box::new(UniqueKeySegmentDataBuilder::default()),
-            IndexType::Bitset => unimplemented!(),
+            IndexType::Bitset => Box::new(BitsetIndexSegmentDataBuilder::default()),
             IndexType::Range => Box::new(RangeIndexSegmentDataBuilder::default()),
             IndexType::Spatial(_) => Box::new(InvertedIndexSegmentDataBuilder::default()),
         }

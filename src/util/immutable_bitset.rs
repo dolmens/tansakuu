@@ -8,6 +8,11 @@ pub struct ImmutableBitset {
     data: Buffer,
 }
 
+pub struct ImmutableBitsetIter<'a> {
+    index: usize,
+    bitset: &'a ImmutableBitset,
+}
+
 fn quot_and_rem(index: usize) -> (usize, usize) {
     (index / BITS, index % BITS)
 }
@@ -42,7 +47,7 @@ impl ImmutableBitset {
     }
 
     pub fn capacity(&self) -> usize {
-        self.data.len() * BITS
+        self.data.len() * 8
     }
 
     pub fn data(&self) -> &[Word] {
@@ -51,7 +56,47 @@ impl ImmutableBitset {
         unsafe { std::slice::from_raw_parts(data, len) }
     }
 
+    pub fn word(&self, pos: usize) -> Word {
+        self.data().get(pos).copied().unwrap_or_default()
+    }
+
+    pub fn iter(&self) -> ImmutableBitsetIter {
+        ImmutableBitsetIter {
+            index: 0,
+            bitset: self,
+        }
+    }
+
     pub fn count_ones(&self) -> usize {
         self.data().iter().map(|w| w.count_ones() as usize).sum()
+    }
+}
+
+impl<'a> Iterator for ImmutableBitsetIter<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < self.bitset.capacity() {
+            let index = self.index;
+            self.index += 1;
+            if self.bitset.contains(index) {
+                return Some(index);
+            }
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImmutableBitset;
+
+    #[test]
+    fn test_iter() {
+        let vec = vec![1, 2];
+        let bitset = ImmutableBitset::from_vec(vec);
+        let expect = vec![0, 65];
+        let got: Vec<_> = bitset.iter().collect();
+        assert_eq!(got, expect);
     }
 }

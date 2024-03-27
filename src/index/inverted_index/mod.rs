@@ -44,5 +44,6 @@ pub use posting_segment_multi_reader::PostingSegmentMultiReader;
 pub use segment_multi_posting::{SegmentMultiPosting, SegmentMultiPostingData};
 pub use segment_posting::{
     BuildingSegmentPosting, PersistentSegmentPosting, SegmentPosting, SegmentPostingData,
+    SegmentPostings,
 };
 pub use token_hasher::TokenHasher;

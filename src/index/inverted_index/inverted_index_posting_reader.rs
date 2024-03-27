@@ -2,23 +2,23 @@ use std::io;
 
 use crate::{
     postings::{positions::PositionListBlock, DocListBlock},
-    DocId, INVALID_DOCID,
+    DocId,
 };
 
-use super::{posting_segment_reader::PostingSegmentReader, SegmentPosting};
+use super::{posting_segment_reader::PostingSegmentReader, SegmentPosting, SegmentPostings};
 
 pub struct InvertedIndexPostingReader<'a> {
-    segment_reader: Option<PostingSegmentReader<'a>>,
     cursor: usize,
-    postings: Vec<SegmentPosting<'a>>,
+    segments: SegmentPostings<'a>,
+    readers: Option<PostingSegmentReader<'a>>,
 }
 
 impl<'a> InvertedIndexPostingReader<'a> {
     pub fn new(segment_postings: Vec<SegmentPosting<'a>>) -> Self {
         Self {
-            segment_reader: None,
             cursor: 0,
-            postings: segment_postings,
+            segments: SegmentPostings::new(segment_postings),
+            readers: None,
         }
     }
 
@@ -27,12 +27,14 @@ impl<'a> InvertedIndexPostingReader<'a> {
         docid: DocId,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
-        if self.segment_reader.is_none() {
-            self.move_to_segment(docid);
+        if self.readers.is_none() {
+            if !self.move_to_segment(docid) {
+                return Ok(false);
+            }
         }
         loop {
             if self
-                .segment_reader
+                .readers
                 .as_mut()
                 .unwrap()
                 .decode_doc_buffer(docid, doc_list_block)?
@@ -46,7 +48,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
     }
 
     pub fn decode_tf_buffer(&mut self, doc_list_block: &mut DocListBlock) -> io::Result<bool> {
-        if let Some(segment_reader) = self.segment_reader.as_mut() {
+        if let Some(segment_reader) = self.readers.as_mut() {
             segment_reader.decode_tf_buffer(doc_list_block)
         } else {
             Ok(false)
@@ -57,7 +59,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
         &mut self,
         doc_list_block: &mut DocListBlock,
     ) -> io::Result<bool> {
-        if let Some(segment_reader) = self.segment_reader.as_mut() {
+        if let Some(segment_reader) = self.readers.as_mut() {
             segment_reader.decode_fieldmask_buffer(doc_list_block)
         } else {
             Ok(false)
@@ -69,7 +71,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
         from_ttf: u64,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if let Some(segment_reader) = self.segment_reader.as_mut() {
+        if let Some(segment_reader) = self.readers.as_mut() {
             segment_reader.decode_position_buffer(from_ttf, position_list_block)
         } else {
             Ok(false)
@@ -80,7 +82,7 @@ impl<'a> InvertedIndexPostingReader<'a> {
         &mut self,
         position_list_block: &mut PositionListBlock,
     ) -> io::Result<bool> {
-        if let Some(segment_reader) = self.segment_reader.as_mut() {
+        if let Some(segment_reader) = self.readers.as_mut() {
             segment_reader.decode_next_position_record(position_list_block)
         } else {
             Ok(false)
@@ -88,36 +90,14 @@ impl<'a> InvertedIndexPostingReader<'a> {
     }
 
     fn move_to_segment(&mut self, docid: DocId) -> bool {
-        let cursor = self.locate_segment(self.cursor, docid);
-        if cursor >= self.postings.len() {
-            return false;
-        }
-        self.segment_reader = Some(PostingSegmentReader::open(unsafe {
-            std::mem::transmute(&self.postings[cursor])
-        }));
-        self.cursor = cursor + 1;
-        true
-    }
-
-    fn locate_segment(&self, cursor: usize, docid: DocId) -> usize {
-        let curr_seg_base_docid = self.segment_base_docid(cursor);
-        if curr_seg_base_docid == INVALID_DOCID {
-            return cursor;
-        }
-        let mut cursor = cursor;
-        let mut next_seg_base_docid = self.segment_base_docid(cursor + 1);
-        while next_seg_base_docid != INVALID_DOCID && docid >= next_seg_base_docid {
-            cursor += 1;
-            next_seg_base_docid = self.segment_base_docid(cursor + 1);
-        }
-        cursor
-    }
-
-    fn segment_base_docid(&self, cursor: usize) -> DocId {
-        if cursor >= self.postings.len() {
-            INVALID_DOCID
+        if let Some(cursor) = self.segments.locate_segment_from(docid, self.cursor) {
+            self.readers = Some(PostingSegmentReader::open(unsafe {
+                std::mem::transmute(self.segments.segment(cursor))
+            }));
+            self.cursor = cursor + 1;
+            true
         } else {
-            self.postings[cursor].base_docid()
+            false
         }
     }
 }

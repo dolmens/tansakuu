@@ -18,6 +18,7 @@ impl IndexSerializer for RangeIndexSerializer {
         index_data: &Arc<dyn IndexSegmentData>,
         directory: &dyn crate::Directory,
         index_path: &std::path::Path,
+        _doc_count: usize,
         docid_mapping: Option<&Vec<Option<crate::DocId>>>,
     ) {
         let range_index_data = index_data

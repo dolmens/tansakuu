@@ -59,9 +59,16 @@ impl SegmentMerger {
                 let index_merger = index_merger_factory.create(index);
                 let index_data: Vec<_> = non_empty_segments
                     .iter()
-                    .map(|seg| seg.index_data(index.name()))
+                    .map(|seg| seg.index_data(index.name()).unwrap())
                     .collect();
-                index_merger.merge(directory, &index_path, index, &index_data, &docid_mappings);
+                index_merger.merge(
+                    directory,
+                    &index_path,
+                    index,
+                    total_doc_count,
+                    &index_data,
+                    &docid_mappings,
+                );
             }
 
             let meta = SegmentMetaData::new(total_doc_count);

@@ -6,10 +6,11 @@ use crate::{
     ESTIMATE_SEGMENT_INC_FACTOR,
 };
 
-use super::{BuildingSegmentData, SegmentColumnWriter, SegmentIndexWriter};
+use super::{BuildingSegmentData, DocCountPublisher, SegmentColumnWriter, SegmentIndexWriter};
 
 pub struct SegmentWriter {
     doc_count: usize,
+    doc_count_publisher: DocCountPublisher,
     column_writer: SegmentColumnWriter,
     index_writer: SegmentIndexWriter,
     deletionmap_writer: BuildingDeletionMapWriter,
@@ -28,9 +29,11 @@ impl SegmentWriter {
         } else {
             ESTIMATE_SEGMENT_DOC_COUNT
         };
+        let doc_count_publisher = DocCountPublisher::default();
         let deletionmap_writer =
             BuildingDeletionMapWriter::with_capacity(estimate_segment_doc_count);
         let building_segment = Arc::new(BuildingSegmentData::new(
+            doc_count_publisher.reader(),
             column_writer.column_data(),
             index_writer.index_data(),
             deletionmap_writer.deletionmap(),
@@ -38,6 +41,7 @@ impl SegmentWriter {
 
         Self {
             doc_count: 0,
+            doc_count_publisher,
             column_writer,
             index_writer,
             deletionmap_writer,
@@ -51,7 +55,7 @@ impl SegmentWriter {
         self.column_writer.add_document(&document, docid);
         self.index_writer.add_document(&document, docid);
         self.doc_count += 1;
-        self.building_segment_data.set_doc_count(self.doc_count);
+        self.doc_count_publisher.publish(self.doc_count);
     }
 
     pub fn delete_document(&mut self, docid: DocId) {

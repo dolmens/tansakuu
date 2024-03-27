@@ -23,10 +23,13 @@ impl SpatialIndexReader {
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
             let data = segment.data();
-            let index_data = data.index_data(index.name());
+            let index_data = data.index_data(index.name()).unwrap();
             let spatial_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader =
-                SpatialIndexPersistentSegmentReader::new(meta.base_docid(), spatial_index_data);
+            let index_segment_reader = SpatialIndexPersistentSegmentReader::new(
+                meta.base_docid(),
+                meta.doc_count(),
+                spatial_index_data,
+            );
             persistent_segments.push(index_segment_reader);
         }
 
@@ -36,8 +39,11 @@ impl SpatialIndexReader {
             let data = segment.data();
             let index_data = data.index_data().index_data(index.name()).unwrap();
             let spatial_index_data = index_data.clone().downcast_arc().ok().unwrap();
-            let index_segment_reader =
-                SpatialIndexBuildingSegmentReader::new(meta.base_docid(), spatial_index_data);
+            let index_segment_reader = SpatialIndexBuildingSegmentReader::new(
+                meta.base_docid(),
+                data.doc_count().clone(),
+                spatial_index_data,
+            );
             building_segments.push(index_segment_reader);
         }
 

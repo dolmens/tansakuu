@@ -19,10 +19,15 @@ pub struct ExpandableBitset {
 }
 
 struct ExpandableBitsetData {
-    len: AcqRelUsize,
     capacity: AcqRelUsize,
     data: RelaxedAtomicPtr<AtomicWord>,
     recycle_list: LinkedList<RecycleNode>,
+}
+
+pub struct ExpandableBitsetValueIter<'a> {
+    index: usize,
+    current_word: u64,
+    data: &'a [AtomicWord],
 }
 
 pub struct ExpandableBitsetIter<'a> {
@@ -42,15 +47,15 @@ fn quot_and_rem(index: usize) -> (usize, usize) {
 
 impl ExpandableBitsetWriter {
     pub fn with_capacity(capacity: usize) -> Self {
-        let capacity = (capacity + BITS - 1) / BITS * BITS;
-        let word_len = capacity / BITS;
-        let data = (0..word_len)
+        let len = (capacity + BITS - 1) / BITS;
+        let capacity = len * BITS;
+        let data = (0..len)
             .map(|_| AtomicWord::new(0))
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let data = Box::into_raw(data) as *mut AtomicWord;
         let mut recycle_list = LinkedListWriter::new();
-        recycle_list.push(RecycleNode::new(data, word_len));
+        recycle_list.push(RecycleNode::new(data, len));
         let data = Arc::new(ExpandableBitsetData::new(
             data,
             capacity,
@@ -74,10 +79,6 @@ impl ExpandableBitsetWriter {
         let data = self.data.data();
         let slot = &data[quot];
         slot.store(slot.load() | (1 << rem));
-    }
-
-    pub fn set_item_len(&mut self, len: usize) {
-        self.data.len.store(len);
     }
 
     fn expand(&mut self, index: usize) {
@@ -119,12 +120,8 @@ impl ExpandableBitset {
         self.data.contains(index)
     }
 
-    pub fn valid_len(&self) -> usize {
-        self.data.valid_len()
-    }
-
-    pub fn len(&self) -> usize {
-        self.data.len()
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 
     pub fn capacity(&self) -> usize {
@@ -139,6 +136,14 @@ impl ExpandableBitset {
         self.data.iter_words()
     }
 
+    pub fn to_boolean_vec(&self) -> Vec<bool> {
+        self.data.to_boolean_vec()
+    }
+
+    pub fn iter_values(&self) -> ExpandableBitsetValueIter<'_> {
+        self.data.iter_values()
+    }
+
     pub fn iter(&self) -> ExpandableBitsetIter<'_> {
         self.data.iter()
     }
@@ -151,32 +156,22 @@ impl ExpandableBitset {
 impl ExpandableBitsetData {
     fn new(data: *mut AtomicWord, capacity: usize, recycle_list: LinkedList<RecycleNode>) -> Self {
         Self {
-            len: AcqRelUsize::new(0),
             capacity: AcqRelUsize::new(capacity),
             data: RelaxedAtomicPtr::new(data),
             recycle_list,
         }
     }
 
-    pub fn valid_len(&self) -> usize {
-        let len = self.len();
-        if len > 0 {
-            len
-        } else {
-            self.capacity()
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.len.load()
-    }
-
     fn capacity(&self) -> usize {
         self.capacity.load()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.capacity() == 0
+    }
+
     fn word(&self, pos: usize) -> u64 {
-        self.data()[pos].load()
+        self.data().get(pos).map(|w| w.load()).unwrap_or_default()
     }
 
     fn data(&self) -> &[AtomicWord] {
@@ -188,6 +183,24 @@ impl ExpandableBitsetData {
 
     fn iter_words(&self) -> impl Iterator<Item = u64> + '_ {
         self.data().iter().map(|w| w.load())
+    }
+
+    fn to_boolean_vec(&self) -> Vec<bool> {
+        let mut vec = Vec::with_capacity(self.capacity());
+        for w in self.iter_words() {
+            for i in 0..BITS {
+                vec.push((w >> i) & 1 == 1);
+            }
+        }
+        vec
+    }
+
+    fn iter_values(&self) -> ExpandableBitsetValueIter<'_> {
+        ExpandableBitsetValueIter {
+            index: 0,
+            current_word: 0,
+            data: self.data(),
+        }
     }
 
     fn iter(&self) -> ExpandableBitsetIter<'_> {
@@ -225,7 +238,7 @@ impl Drop for ExpandableBitsetData {
     }
 }
 
-impl<'a> Iterator for ExpandableBitsetIter<'a> {
+impl<'a> Iterator for ExpandableBitsetValueIter<'a> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -239,6 +252,29 @@ impl<'a> Iterator for ExpandableBitsetIter<'a> {
         } else {
             None
         }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remain = self.data.len() * BITS - self.index;
+        (remain, Some(remain))
+    }
+}
+
+impl<'a> Iterator for ExpandableBitsetIter<'a> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < self.data.len() * BITS {
+            let index = self.index;
+            self.index += 1;
+            if index % BITS == 0 {
+                self.current_word = self.data[index / BITS].load();
+            }
+            if (self.current_word & (1 << (index % BITS))) != 0 {
+                return Some(index);
+            }
+        }
+        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -312,6 +348,51 @@ mod tests {
                 assert!(!bitset.contains(i));
             }
         }
+    }
+
+    #[test]
+    fn test_to_boolean_vec() {
+        let capacity = 127;
+        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        writer.insert(0);
+        writer.insert(1);
+        writer.insert(127);
+        let bitset = writer.bitset();
+        let mut expect = vec![false; 128];
+        expect[0] = true;
+        expect[1] = true;
+        expect[127] = true;
+        let got = bitset.to_boolean_vec();
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn test_iter_values() {
+        let capacity = 127;
+        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        writer.insert(0);
+        writer.insert(1);
+        writer.insert(127);
+        let bitset = writer.bitset();
+        let mut expect = vec![false; 128];
+        expect[0] = true;
+        expect[1] = true;
+        expect[127] = true;
+        let got: Vec<_> = bitset.iter_values().collect();
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn test_iter() {
+        let capacity = 127;
+        let mut writer = ExpandableBitsetWriter::with_capacity(capacity);
+        writer.insert(0);
+        writer.insert(1);
+        writer.insert(127);
+        let bitset = writer.bitset();
+        let expect = vec![0, 1, 127];
+        let got: Vec<_> = bitset.iter().collect();
+        assert_eq!(got, expect);
     }
 
     #[test]

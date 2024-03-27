@@ -3,33 +3,33 @@ use crate::{index::PostingIterator, postings::PostingFormat, DocId, END_DOCID, I
 use super::{PostingSegmentMultiReader, SegmentMultiPosting};
 
 pub struct MultiPostingIterator<'a> {
-    segment_reader: Option<PostingSegmentMultiReader<'a>>,
+    reader: Option<PostingSegmentMultiReader<'a>>,
     cursor: usize,
-    postings: Vec<SegmentMultiPosting<'a>>,
+    segments: Vec<SegmentMultiPosting<'a>>,
     posting_format: PostingFormat,
 }
 
 impl<'a> MultiPostingIterator<'a> {
     pub fn new(posting_format: PostingFormat, postings: Vec<SegmentMultiPosting<'a>>) -> Self {
         Self {
-            segment_reader: None,
+            reader: None,
             cursor: 0,
-            postings,
+            segments: postings,
             posting_format,
         }
     }
 
     fn move_to_segment(&mut self, docid: DocId) -> bool {
         let cursor = self.locate_segment(self.cursor, docid);
-        if cursor >= self.postings.len() {
+        if cursor >= self.segments.len() {
             return false;
         }
 
-        if self.cursor != cursor || self.segment_reader.is_none() {
+        if self.cursor != cursor || self.reader.is_none() {
             self.cursor = cursor;
-            self.segment_reader = Some(PostingSegmentMultiReader::open(
+            self.reader = Some(PostingSegmentMultiReader::open(
                 self.posting_format.doc_list_format().clone(),
-                unsafe { std::mem::transmute(&self.postings[self.cursor]) },
+                unsafe { std::mem::transmute(&self.segments[self.cursor]) },
             ));
         }
         true
@@ -50,10 +50,10 @@ impl<'a> MultiPostingIterator<'a> {
     }
 
     fn segment_base_docid(&self, cursor: usize) -> DocId {
-        if cursor >= self.postings.len() {
+        if cursor >= self.segments.len() {
             INVALID_DOCID
         } else {
-            self.postings[cursor].base_docid()
+            self.segments[cursor].base_docid()
         }
     }
 }
@@ -65,11 +65,11 @@ impl<'a> PostingIterator for MultiPostingIterator<'a> {
                 return Ok(END_DOCID);
             }
 
-            let result_docid = self.segment_reader.as_mut().unwrap().seek(docid)?;
+            let result_docid = self.reader.as_mut().unwrap().seek(docid)?;
             if result_docid != END_DOCID {
                 return Ok(result_docid);
             }
-            self.segment_reader = None;
+            self.reader = None;
             self.cursor += 1;
         }
     }
@@ -131,7 +131,7 @@ mod tests {
             segment_posting2,
             segment_posting3,
         ]);
-        let segment_multi_posting = SegmentMultiPosting::new(base_docid, multi_posting_data);
+        let segment_multi_posting = SegmentMultiPosting::new(base_docid, 1000, multi_posting_data);
 
         let mut posting_iterator =
             MultiPostingIterator::new(PostingFormat::default(), vec![segment_multi_posting]);
@@ -189,7 +189,7 @@ mod tests {
             segment_posting2,
             segment_posting3,
         ]);
-        let segment_multi_posting = SegmentMultiPosting::new(base_docid, multi_posting_data);
+        let segment_multi_posting = SegmentMultiPosting::new(base_docid, 1000, multi_posting_data);
 
         let second_segment_posting1 = BuildingSegmentPosting {
             building_posting_list: posting_writer1.building_posting_list(),
@@ -207,7 +207,7 @@ mod tests {
             second_segment_posting3,
         ]);
         let second_segment_multi_posting =
-            SegmentMultiPosting::new(second_base_docid, second_multi_posting_data);
+            SegmentMultiPosting::new(second_base_docid, 1000, second_multi_posting_data);
 
         let mut posting_iterator = MultiPostingIterator::new(
             PostingFormat::default(),

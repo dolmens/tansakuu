@@ -9,13 +9,19 @@ use super::{
 
 pub struct InvertedIndexPersistentSegmentReader {
     base_docid: DocId,
+    doc_count: usize,
     index_data: Arc<InvertedIndexPersistentSegmentData>,
 }
 
 impl InvertedIndexPersistentSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<InvertedIndexPersistentSegmentData>) -> Self {
+    pub fn new(
+        base_docid: DocId,
+        doc_count: usize,
+        index_data: Arc<InvertedIndexPersistentSegmentData>,
+    ) -> Self {
         Self {
             base_docid,
+            doc_count,
             index_data,
         }
     }
@@ -31,6 +37,7 @@ impl InvertedIndexPersistentSegmentReader {
         {
             Some(SegmentPosting::new_persistent_segment(
                 self.base_docid,
+                self.doc_count,
                 term_info,
                 &self.index_data.posting_data,
             ))

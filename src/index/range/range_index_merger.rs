@@ -12,6 +12,7 @@ impl IndexMerger for RangeIndexMerger {
         directory: &dyn crate::Directory,
         index_path: &std::path::Path,
         index: &crate::schema::Index,
+        _total_doc_count: usize,
         segments: &[&std::sync::Arc<dyn crate::index::IndexSegmentData>],
         docid_mappings: &[Vec<Option<crate::DocId>>],
     ) {

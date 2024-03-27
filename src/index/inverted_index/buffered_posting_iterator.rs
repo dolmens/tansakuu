@@ -178,9 +178,10 @@ impl<'a> BufferedPostingIterator<'a> {
 
 impl<'a> PostingIterator for BufferedPostingIterator<'a> {
     fn seek(&mut self, docid: crate::DocId) -> io::Result<crate::DocId> {
-        // if self.current_docid != INVALID_DOCID && docid <= self.current_docid {
-        //     return Ok(self.current_docid);
-        // }
+        let docid = if docid < 0 { 0 } else { docid };
+        if docid <= self.current_docid {
+            return Ok(self.current_docid);
+        }
 
         if self.doc_buffer_cursor == self.doc_list_block.len
             || self.doc_list_block.last_docid < docid
@@ -307,7 +308,11 @@ mod tests {
         }
         posting_writer.end_doc(docids[0])?;
 
-        let building_segment = SegmentPosting::new_building_segment(0, &posting_list);
+        let building_segment = SegmentPosting::new_building_segment(
+            0,
+            (docids.last().unwrap() + 1) as usize,
+            &posting_list,
+        );
         let segment_postings = vec![building_segment];
         let mut posting_iterator =
             BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
@@ -479,9 +484,16 @@ mod tests {
         posting_writer2.end_doc(docids[0])?;
 
         let second_segment_basedocid = docids.last().unwrap() + 1;
-        let building_segment = SegmentPosting::new_building_segment(0, &posting_list);
-        let building_segment2 =
-            SegmentPosting::new_building_segment(second_segment_basedocid, &posting_list2);
+        let building_segment = SegmentPosting::new_building_segment(
+            0,
+            (docids.last().unwrap() + 1) as usize,
+            &posting_list,
+        );
+        let building_segment2 = SegmentPosting::new_building_segment(
+            second_segment_basedocid,
+            (docids.last().unwrap() + 1) as usize,
+            &posting_list2,
+        );
         let segment_postings = vec![building_segment, building_segment2];
         let mut posting_iterator =
             BufferedPostingIterator::new(posting_format.clone(), segment_postings.clone());
@@ -714,7 +726,11 @@ mod tests {
         }
         posting_writer.end_doc(docids[0])?;
 
-        let building_segment = SegmentPosting::new_building_segment(0, &posting_list);
+        let building_segment = SegmentPosting::new_building_segment(
+            0,
+            (docids.last().unwrap() + 1) as usize,
+            &posting_list,
+        );
         let segment_postings = vec![building_segment];
 
         let mut posting_iterator =

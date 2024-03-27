@@ -20,6 +20,7 @@ impl IndexSerializer for UniqueKeySerializer {
         index_data: &Arc<dyn IndexSegmentData>,
         directory: &dyn Directory,
         index_path: &std::path::Path,
+        _doc_count: usize,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     ) {
         let unique_key_index_data = index_data

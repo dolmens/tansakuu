@@ -1,8 +1,8 @@
 use crate::schema::{Index, IndexType};
 
 use super::{
-    inverted_index::InvertedIndexMerger, range::RangeIndexMerger, unique_key::UniqueKeyMerger,
-    IndexMerger,
+    bitset::BitsetIndexMerger, inverted_index::InvertedIndexMerger, range::RangeIndexMerger,
+    unique_key::UniqueKeyMerger, IndexMerger,
 };
 
 #[derive(Default)]
@@ -14,7 +14,7 @@ impl IndexMergerFactory {
             IndexType::Text(_) => Box::new(InvertedIndexMerger::default()),
             IndexType::PrimaryKey => Box::new(UniqueKeyMerger::default()),
             IndexType::UniqueKey => Box::new(UniqueKeyMerger::default()),
-            IndexType::Bitset => unimplemented!(),
+            IndexType::Bitset => Box::new(BitsetIndexMerger::default()),
             IndexType::Range => Box::new(RangeIndexMerger::default()),
             IndexType::Spatial(_) => Box::new(InvertedIndexMerger::default()),
         }

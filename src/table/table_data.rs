@@ -8,20 +8,19 @@ use crate::{
         segment::{SegmentColumnSerializer, SegmentMetaData},
         SegmentStat,
     },
-    Directory, DocId, END_DOCID,
+    Directory, DocId,
 };
 
 use super::{
     segment::{
         BuildingSegment, BuildingSegmentData, PersistentSegment, PersistentSegmentData,
-        SegmentMerger, SegmentMetaRegistry,
+        SegmentMerger,
     },
     SegmentId, SegmentMeta, TableSettingsRef, Version,
 };
 
 #[derive(Clone)]
 pub struct TableData {
-    segment_meta_registry: SegmentMetaRegistry,
     building_segments: Vec<BuildingSegment>,
     persistent_segments: Vec<PersistentSegment>,
     recent_segment_stat: Option<Arc<SegmentStat>>,
@@ -42,7 +41,6 @@ impl TableData {
     ) -> Self {
         let directory: Box<dyn Directory> = directory.into();
         let version = Version::load_lastest(directory.as_ref()).unwrap();
-        let mut segment_metas = vec![];
         let mut persistent_segments = vec![];
         let mut base_docid = 0;
         let mut total_doc_count = 0;
@@ -54,12 +52,10 @@ impl TableData {
             ));
             let doc_count = segment.doc_count();
             let meta = SegmentMeta::new(segment.segment_id().clone(), base_docid, doc_count);
-            segment_metas.push(meta.clone());
             persistent_segments.push(PersistentSegment::new(meta, segment));
             base_docid += doc_count as DocId;
             total_doc_count += doc_count;
         }
-        let segment_meta_registry = SegmentMetaRegistry::new(segment_metas);
 
         let mut deletionmap = MutableDeletionMap::with_doc_count(total_doc_count);
         for seg in &persistent_segments {
@@ -72,7 +68,6 @@ impl TableData {
         let immutable_deletionmap: ImmutableDeletionMap = deletionmap.into();
 
         Self {
-            segment_meta_registry,
             building_segments: vec![],
             persistent_segments,
             recent_segment_stat: None,
@@ -114,24 +109,8 @@ impl TableData {
                 segment.meta_mut().set_base_docid(base_docid);
                 base_docid += segment.meta().doc_count() as DocId;
             }
-            self.update_segment_meta_registry();
             self.version = version;
         }
-    }
-
-    pub fn segment_meta_registry(&self) -> &SegmentMetaRegistry {
-        &self.segment_meta_registry
-    }
-
-    pub fn update_segment_meta_registry(&mut self) {
-        let mut segment_metas = Vec::with_capacity(self.total_segment_count());
-        for segment in &self.persistent_segments {
-            segment_metas.push(segment.meta().clone());
-        }
-        for segment in &self.building_segments {
-            segment_metas.push(segment.meta().clone());
-        }
-        self.segment_meta_registry = SegmentMetaRegistry::new(segment_metas);
     }
 
     pub fn total_segment_count(&self) -> usize {
@@ -152,9 +131,7 @@ impl TableData {
                 .last()
                 .map(|segment| segment.meta().end_docid()))
             .unwrap_or_default();
-        let doc_count = (END_DOCID - 1 - base_docid) as usize;
-        let meta = SegmentMeta::new(building_segment.segment_id().clone(), base_docid, doc_count);
-        self.segment_meta_registry.add_segment(meta.clone());
+        let meta = SegmentMeta::new(building_segment.segment_id().clone(), base_docid, 0);
         let building_segment = BuildingSegment::new(meta, building_segment);
         self.building_segments.push(building_segment);
     }
@@ -170,13 +147,12 @@ impl TableData {
         self.recent_segment_stat = Some(Arc::new(segment_stat));
         building_segment
             .meta_mut()
-            .set_doc_count(building_segment_data.doc_count());
-        let total_doc_count = building_segment_data.doc_count();
+            .set_doc_count(building_segment_data.doc_count().get());
+        let total_doc_count = building_segment_data.doc_count().get();
         let deletionmap = building_segment.data().deletionmap();
         let deleted_doc_count = deletionmap.deleted_doc_count();
         if total_doc_count == deleted_doc_count {
             self.remove_building_segment(building_segment_data);
-            self.update_segment_meta_registry();
             return;
         }
         let docid_mapping = if deleted_doc_count > 0 {
@@ -210,6 +186,8 @@ impl TableData {
             column_data,
         );
 
+        let doc_count = total_doc_count - deleted_doc_count;
+
         let index_path = segment_path.join("index");
         let index_serializer_factory = IndexSerializerFactory::default();
         for index in self.schema.indexes() {
@@ -223,11 +201,11 @@ impl TableData {
                 index_data,
                 self.directory.as_ref(),
                 &index_path,
+                doc_count,
                 docid_mapping.as_ref(),
             );
         }
 
-        let doc_count = total_doc_count - deleted_doc_count;
         let meta = SegmentMetaData::new(doc_count);
         let meta_path = segment_path.join("meta.json");
         meta.save(self.directory.as_ref(), &meta_path);

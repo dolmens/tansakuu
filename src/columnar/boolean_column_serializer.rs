@@ -22,14 +22,18 @@ impl ColumnSerializer for BooleanColumnSerializer {
             .downcast_ref::<BooleanColumnBuildingSegmentData>()
             .unwrap();
 
-        let values: Vec<_> = boolean_column_data.values.iter().take(doc_count).collect();
+        let values: Vec<_> = boolean_column_data
+            .values
+            .iter_values()
+            .take(doc_count)
+            .collect();
         if boolean_column_data.nullable {
             let mut nulls = vec![true; values.len()];
             for (i, is_null) in boolean_column_data
                 .nulls
                 .as_ref()
                 .unwrap()
-                .iter()
+                .iter_values()
                 .take(values.len())
                 .enumerate()
             {

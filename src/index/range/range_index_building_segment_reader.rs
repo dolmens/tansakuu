@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{
     index::inverted_index::{BuildingSegmentPosting, SegmentMultiPosting, SegmentMultiPostingData},
     postings::BuildingPostingList,
+    table::segment::BuildingDocCount,
     util::layered_hashmap::LayeredHashMap,
     DocId,
 };
@@ -11,14 +12,20 @@ use super::RangeIndexBuildingSegmentData;
 
 pub struct RangeIndexBuildingSegmentReader {
     base_docid: DocId,
+    doc_count: BuildingDocCount,
     bottom_postings: LayeredHashMap<u64, BuildingPostingList>,
     higher_postings: LayeredHashMap<u64, BuildingPostingList>,
 }
 
 impl RangeIndexBuildingSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<RangeIndexBuildingSegmentData>) -> Self {
+    pub fn new(
+        base_docid: DocId,
+        doc_count: BuildingDocCount,
+        index_data: Arc<RangeIndexBuildingSegmentData>,
+    ) -> Self {
         Self {
             base_docid,
+            doc_count,
             bottom_postings: index_data.bottom_postings.clone(),
             higher_postings: index_data.higher_postings.clone(),
         }
@@ -45,6 +52,7 @@ impl RangeIndexBuildingSegmentReader {
         if !postings.is_empty() {
             Some(SegmentMultiPosting::new(
                 self.base_docid,
+                self.doc_count.get(),
                 SegmentMultiPostingData::Building(postings),
             ))
         } else {

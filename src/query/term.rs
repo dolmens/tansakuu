@@ -11,10 +11,19 @@ impl Term {
         }
     }
 
+    // TODO: Should refactor Term to support variant types, include Null and NonNull
     pub fn null(index_name: String) -> Self {
         Self {
             index_name,
             keyword: "null".to_string(),
+        }
+    }
+
+    // TODO: Should refactor Term to support variant types, include Null and NonNull
+    pub fn non_null(index_name: String) -> Self {
+        Self {
+            index_name,
+            keyword: "non_null".to_string(),
         }
     }
 
@@ -30,7 +39,13 @@ impl Term {
         self.keyword.trim().eq_ignore_ascii_case("true")
     }
 
+    // TODO: Should refactor Term to support variant types, include Null and NonNull
     pub fn is_null(&self) -> bool {
         self.keyword.trim().eq_ignore_ascii_case("null")
+    }
+
+    // TODO: Should refactor Term to support variant types, include Null and NonNull
+    pub fn is_non_null(&self) -> bool {
+        self.keyword.trim().eq_ignore_ascii_case("non_null")
     }
 }

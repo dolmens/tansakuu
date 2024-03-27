@@ -94,13 +94,6 @@ impl IndexWriter for BitsetIndexWriter {
         } else if self.nullable {
             self.nulls.as_mut().unwrap().insert(docid as usize);
         }
-        self.values.set_item_len((docid + 1) as usize);
-        if self.nullable {
-            self.nulls
-                .as_mut()
-                .unwrap()
-                .set_item_len((docid + 1) as usize);
-        }
 
         self.current_value = None;
     }

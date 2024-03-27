@@ -11,6 +11,7 @@ pub trait IndexSerializer {
         index_data: &Arc<dyn IndexSegmentData>,
         directory: &dyn Directory,
         index_path: &Path,
+        doc_count: usize,
         docid_mapping: Option<&Vec<Option<DocId>>>,
     );
 }

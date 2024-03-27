@@ -68,8 +68,8 @@ impl PersistentSegmentData {
         self.meta.doc_count()
     }
 
-    pub fn index_data(&self, index: &str) -> &Arc<dyn IndexSegmentData> {
-        self.index_data.index(index).unwrap()
+    pub fn index_data(&self, index: &str) -> Option<&Arc<dyn IndexSegmentData>> {
+        self.index_data.index(index)
     }
 
     pub fn column_data(&self, column: &str) -> Option<&ColumnPersistentSegmentData> {

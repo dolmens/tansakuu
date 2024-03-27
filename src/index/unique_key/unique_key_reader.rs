@@ -21,7 +21,7 @@ impl UniqueKeyReader {
         for segment in table_data.persistent_segments() {
             let meta = segment.meta();
             let data = segment.data();
-            let index_data = data.index_data(index.name());
+            let index_data = data.index_data(index.name()).unwrap();
             let primary_key_data = index_data.clone().downcast_arc().ok().unwrap();
             let primary_key_segment_reader =
                 UniqueKeyPersistentSegmentReader::new(meta.clone(), primary_key_data);

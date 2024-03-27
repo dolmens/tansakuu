@@ -1,9 +1,10 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use crate::{deletionmap::BuildingDeletionMap, util::atomic::AcqRelUsize};
+use crate::deletionmap::BuildingDeletionMap;
 
 use super::{
-    BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta, SegmentStat,
+    BuildingDocCount, BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta,
+    SegmentStat,
 };
 
 #[derive(Clone)]
@@ -14,7 +15,7 @@ pub struct BuildingSegment {
 
 pub struct BuildingSegmentData {
     segment_id: SegmentId,
-    doc_count: AcqRelUsize,
+    doc_count: BuildingDocCount,
     dumping: AtomicBool,
     column_data: BuildingSegmentColumnData,
     index_data: BuildingSegmentIndexData,
@@ -44,7 +45,7 @@ impl BuildingSegment {
 
     pub fn collect_segment_stat(&self) -> SegmentStat {
         let mut segment_stat = SegmentStat::new();
-        segment_stat.doc_count = self.data.doc_count();
+        segment_stat.doc_count = self.data.doc_count().get();
         self.data.collect_segment_stat(&mut segment_stat);
         segment_stat
     }
@@ -52,13 +53,14 @@ impl BuildingSegment {
 
 impl BuildingSegmentData {
     pub fn new(
+        doc_count: BuildingDocCount,
         column_data: BuildingSegmentColumnData,
         index_data: BuildingSegmentIndexData,
         deletionmap: BuildingDeletionMap,
     ) -> Self {
         Self {
             segment_id: SegmentId::new(),
-            doc_count: AcqRelUsize::new(0),
+            doc_count,
             dumping: AtomicBool::new(false),
             column_data,
             index_data,
@@ -70,12 +72,8 @@ impl BuildingSegmentData {
         &self.segment_id
     }
 
-    pub fn doc_count(&self) -> usize {
-        self.doc_count.load()
-    }
-
-    pub(super) fn set_doc_count(&self, doc_count: usize) {
-        self.doc_count.store(doc_count);
+    pub fn doc_count(&self) -> &BuildingDocCount {
+        &self.doc_count
     }
 
     pub fn is_dumping(&self) -> bool {

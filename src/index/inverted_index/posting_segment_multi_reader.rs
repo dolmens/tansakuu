@@ -298,7 +298,8 @@ mod tests {
             segment_posting3,
         ]);
 
-        let segment_multi_posting = SegmentMultiPosting::new(base_docid, multi_posting_data);
+        let segment_multi_posting =
+            SegmentMultiPosting::new(base_docid, 1000, multi_posting_data);
 
         let mut reader = PostingSegmentMultiReader::open(doc_list_format, unsafe {
             std::mem::transmute(&segment_multi_posting)
@@ -357,7 +358,8 @@ mod tests {
             segment_posting3,
         ]);
 
-        let segment_multi_posting = SegmentMultiPosting::new(base_docid, multi_posting_data);
+        let segment_multi_posting =
+            SegmentMultiPosting::new(base_docid, 1000, multi_posting_data);
 
         let mut reader = PostingSegmentMultiReader::open(doc_list_format, unsafe {
             std::mem::transmute(&segment_multi_posting)

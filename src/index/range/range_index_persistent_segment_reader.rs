@@ -11,13 +11,19 @@ use super::range_index_persistent_segment_data::RangeIndexPersistentSegmentData;
 
 pub struct RangeIndexPersistentSegmentReader {
     base_docid: DocId,
+    doc_count: usize,
     index_data: Arc<RangeIndexPersistentSegmentData>,
 }
 
 impl RangeIndexPersistentSegmentReader {
-    pub fn new(base_docid: DocId, index_data: Arc<RangeIndexPersistentSegmentData>) -> Self {
+    pub fn new(
+        base_docid: DocId,
+        doc_count: usize,
+        index_data: Arc<RangeIndexPersistentSegmentData>,
+    ) -> Self {
         Self {
             base_docid,
+            doc_count,
             index_data,
         }
     }
@@ -61,6 +67,7 @@ impl RangeIndexPersistentSegmentReader {
         if !postings.is_empty() {
             Some(SegmentMultiPosting::new(
                 self.base_docid,
+                self.doc_count,
                 SegmentMultiPostingData::Persistent(postings),
             ))
         } else {

@@ -82,6 +82,10 @@ impl MutableBitset {
     pub fn data(&self) -> &[Word] {
         &self.data
     }
+
+    pub fn count_ones(&self) -> usize {
+        self.data().iter().map(|w| w.count_ones() as usize).sum()
+    }
 }
 
 #[cfg(test)]
