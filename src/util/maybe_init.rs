@@ -104,6 +104,7 @@ mod tests {
                 thread::yield_now();
             }
             assert_eq!(mr.get(), Some(&sr));
+            assert_eq!(mr.initialize_by(sr.clone()), Some(sr));
         });
         assert_eq!(m.initialize_by(s.clone()), None);
         assert!(m.is_initialized());
