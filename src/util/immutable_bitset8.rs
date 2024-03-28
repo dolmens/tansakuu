@@ -1,37 +1,33 @@
 use super::{buffer::Buffer, bytes::Bytes};
 
-type Word = u64;
-const BITS: usize = std::mem::size_of::<Word>() * 8;
-
 #[derive(Clone)]
-pub struct ImmutableBitset {
+pub struct ImmutableBitset8 {
     data: Buffer,
 }
 
-pub struct ImmutableBitsetIter<'a> {
+pub struct ImmutableBitset8Iter<'a> {
     index: usize,
-    bitset: &'a ImmutableBitset,
+    bitset: &'a ImmutableBitset8,
 }
 
 fn quot_and_rem(index: usize) -> (usize, usize) {
-    (index / BITS, index % BITS)
+    (index / 8, index % 8)
 }
 
-impl ImmutableBitset {
+impl ImmutableBitset8 {
     pub fn from_bytes(bytes: Bytes) -> Self {
         let data = Buffer::from_bytes(bytes);
-        assert!(data.typed_data::<Word>().len() > 0);
         Self { data }
     }
 
-    pub fn from_vec(vec: Vec<Word>) -> Self {
+    pub fn from_vec(vec: Vec<u8>) -> Self {
         let data = Buffer::from_vec(vec);
         Self { data }
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        let len = (capacity + BITS - 1) / BITS;
-        let vec: Vec<u64> = (0..len).map(|_| 0).collect();
+        let len = (capacity + 8 - 1) / 8;
+        let vec: Vec<u8> = vec![0; len];
         let data = Buffer::from_vec(vec);
         Self { data }
     }
@@ -50,29 +46,33 @@ impl ImmutableBitset {
         self.data.len() * 8
     }
 
-    pub fn data(&self) -> &[Word] {
-        let data = self.data.as_ptr() as *const Word;
-        let len = self.data.len() / std::mem::size_of::<Word>();
-        unsafe { std::slice::from_raw_parts(data, len) }
+    pub fn data(&self) -> &[u8] {
+        self.data.as_slice()
     }
 
-    pub fn word(&self, pos: usize) -> Word {
-        self.data().get(pos).copied().unwrap_or_default()
+    pub fn word(&self, word_pos: usize) -> u64 {
+        let data = self.data();
+        let pos = word_pos * 8;
+        data.iter()
+            .skip(pos)
+            .take(8)
+            .enumerate()
+            .fold(0, |acc, (i, &b)| ((b as u64) << (i * 8)) | acc)
     }
 
-    pub fn iter(&self) -> ImmutableBitsetIter {
-        ImmutableBitsetIter {
+    pub fn iter(&self) -> ImmutableBitset8Iter {
+        ImmutableBitset8Iter {
             index: 0,
             bitset: self,
         }
     }
 
     pub fn count_ones(&self) -> usize {
-        self.data().iter().map(|w| w.count_ones() as usize).sum()
+        self.data().iter().map(|b| b.count_ones() as usize).sum()
     }
 }
 
-impl<'a> Iterator for ImmutableBitsetIter<'a> {
+impl<'a> Iterator for ImmutableBitset8Iter<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -89,19 +89,19 @@ impl<'a> Iterator for ImmutableBitsetIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::ImmutableBitset;
+    use super::ImmutableBitset8;
 
     #[test]
     fn test_iter() {
         let vec = vec![1, 2];
-        let bitset = ImmutableBitset::from_vec(vec);
-        assert_eq!(bitset.capacity(), 128);
+        let bitset = ImmutableBitset8::from_vec(vec);
+        assert_eq!(bitset.capacity(), 16);
 
-        let expect_data: Vec<u64> = vec![1, 2];
-        let got_data: Vec<u64> = bitset.data().iter().copied().collect();
+        let expect_data: Vec<u8> = vec![1, 2];
+        let got_data: Vec<u8> = bitset.data().iter().copied().collect();
         assert_eq!(got_data, expect_data);
 
-        let expect_index = vec![0, 65];
+        let expect_index = vec![0, 9];
         let got_index: Vec<_> = bitset.iter().collect();
         assert_eq!(got_index, expect_index);
     }

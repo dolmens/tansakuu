@@ -107,6 +107,8 @@ fn test_delete_doc() {
     doc4.add_field("title".to_string(), "world peace 4");
     writer.add_document(doc4);
 
+    assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1, 2]);
+
     let term_300 = Term::new("item_id".to_string(), "300".to_string());
     writer.delete_documents(&term_300);
 
@@ -116,6 +118,13 @@ fn test_delete_doc() {
     let reader = table.reader();
     let index_reader = reader.index_reader();
     assert_eq!(get_all_docs(index_reader, &term_world), vec![0, 1]);
+
+    assert!(!deletionmap_reader.is_deleted(1));
+    let term_400 = Term::new("item_id".to_string(), "400".to_string());
+    // delete document in persistent segment
+    writer.delete_documents(&term_400);
+    let deletionmap_reader = reader.deletionmap_reader();
+    assert!(deletionmap_reader.is_deleted(1));
 }
 
 #[test]

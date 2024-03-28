@@ -1,7 +1,5 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use crate::deletionmap::BuildingDeletionMap;
-
 use super::{
     BuildingDocCount, BuildingSegmentColumnData, BuildingSegmentIndexData, SegmentId, SegmentMeta,
     SegmentStat,
@@ -19,7 +17,6 @@ pub struct BuildingSegmentData {
     dumping: AtomicBool,
     column_data: BuildingSegmentColumnData,
     index_data: BuildingSegmentIndexData,
-    deletionmap: BuildingDeletionMap,
 }
 
 impl BuildingSegment {
@@ -56,7 +53,6 @@ impl BuildingSegmentData {
         doc_count: BuildingDocCount,
         column_data: BuildingSegmentColumnData,
         index_data: BuildingSegmentIndexData,
-        deletionmap: BuildingDeletionMap,
     ) -> Self {
         Self {
             segment_id: SegmentId::new(),
@@ -64,7 +60,6 @@ impl BuildingSegmentData {
             dumping: AtomicBool::new(false),
             column_data,
             index_data,
-            deletionmap,
         }
     }
 
@@ -91,10 +86,6 @@ impl BuildingSegmentData {
 
     pub fn index_data(&self) -> &BuildingSegmentIndexData {
         &self.index_data
-    }
-
-    pub fn deletionmap(&self) -> &BuildingDeletionMap {
-        &self.deletionmap
     }
 
     pub fn collect_segment_stat(&self, segment_stat: &mut SegmentStat) {

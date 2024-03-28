@@ -1,6 +1,6 @@
 use crate::{
     index::IndexSegmentDataBuilder,
-    util::{bytes::Bytes, ImmutableBitset},
+    util::{bytes::Bytes, ImmutableBitset8},
 };
 
 use super::BitsetIndexPersistentSegmentData;
@@ -13,25 +13,15 @@ impl BitsetIndexSegmentDataBuilder {
         &self,
         directory: &dyn crate::Directory,
         path: &std::path::Path,
-    ) -> Option<ImmutableBitset> {
+    ) -> Option<ImmutableBitset8> {
         if !directory.exists(&path).unwrap() {
             return None;
         }
         let file = directory.open_read(path).unwrap();
         let owned_bytes = file.read_bytes().unwrap();
-        // TODO: If ImmutableBitset use u8 then don't need check align and length
         // TODO: Do we need check the length is zero?
-        if owned_bytes
-            .as_ptr()
-            .align_offset(std::mem::align_of::<u64>())
-            == 0
-            && owned_bytes.len() % 8 == 0
-        {
-            let bytes: Bytes = owned_bytes.into();
-            Some(ImmutableBitset::from_bytes(bytes))
-        } else {
-            None
-        }
+        let bytes: Bytes = owned_bytes.into();
+        Some(ImmutableBitset8::from_bytes(bytes))
     }
 }
 

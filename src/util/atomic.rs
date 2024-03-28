@@ -10,7 +10,7 @@
 
 use std::{
     ptr::NonNull,
-    sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering},
 };
 
 macro_rules! atomic {
@@ -35,6 +35,8 @@ macro_rules! atomic {
 atomic! { AcqRelUsize, AtomicUsize, usize, Ordering::Acquire, Ordering::Release }
 
 atomic! { AcqRelU64, AtomicU64, u64, Ordering::Acquire, Ordering::Release }
+
+atomic! { AcqRelBool, AtomicBool, bool, Ordering::Acquire, Ordering::Release }
 
 atomic! { RelaxedU32, AtomicU32, u32, Ordering::Relaxed, Ordering::Relaxed }
 

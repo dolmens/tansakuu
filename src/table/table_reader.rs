@@ -31,7 +31,7 @@ impl TableReader {
             .and_then(|(_, primary_key)| index_reader.index_ref(primary_key.name()))
             .and_then(|reader| reader.downcast_arc().ok());
 
-        let deletionmap_reader = DeletionMapReader::new(&table_data);
+        let deletionmap_reader = table_data.deletionmap_reader().clone();
 
         Self {
             index_reader,

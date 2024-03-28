@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::{index::IndexMergerFactory, schema::SchemaRef, table::Version, Directory, DocId};
+use crate::{
+    deletionmap::DeletionMapReader, index::IndexMergerFactory, schema::SchemaRef, table::Version,
+    Directory, DocId,
+};
 
 use super::{PersistentSegmentData, SegmentColumnMerger, SegmentId, SegmentMetaData};
 
@@ -8,7 +11,13 @@ use super::{PersistentSegmentData, SegmentColumnMerger, SegmentId, SegmentMetaDa
 pub struct SegmentMerger {}
 
 impl SegmentMerger {
-    pub fn merge(&self, directory: &dyn Directory, schema: &SchemaRef, version: &mut Version) {
+    pub fn merge(
+        &self,
+        directory: &dyn Directory,
+        schema: &SchemaRef,
+        deletionmap_reader: &DeletionMapReader,
+        version: &mut Version,
+    ) {
         let segment_directory = PathBuf::from("segments");
         let segments: Vec<_> = version
             .segments()
@@ -21,35 +30,39 @@ impl SegmentMerger {
 
         let mut docid = 0;
         let mut docid_mappings = Vec::<Vec<Option<DocId>>>::new();
-        let mut non_empty_segments = vec![];
+        let mut remain_segments = vec![];
         for segment in segments.iter() {
-            let deletionmap = segment.deletionmap();
-            let deleted_doc_count = deletionmap.deleted_doc_count();
-            if deleted_doc_count == segment.doc_count() {
-                continue;
-            }
-            non_empty_segments.push(segment);
             let mut segment_docid_mapping = vec![];
+            let deletionmap_segment_reader =
+                deletionmap_reader.segment_reader(segment.segment_id());
             for i in 0..segment.doc_count() {
-                segment_docid_mapping.push(if deletionmap.is_deleted(i as DocId) {
-                    None
-                } else {
-                    let current_docid = docid;
-                    docid += 1;
-                    Some(current_docid)
-                });
+                segment_docid_mapping.push(
+                    if deletionmap_segment_reader
+                        .is_some_and(|reader| reader.is_deleted(i as DocId))
+                    {
+                        None
+                    } else {
+                        let current_docid = docid;
+                        docid += 1;
+                        Some(current_docid)
+                    },
+                );
             }
-            docid_mappings.push(segment_docid_mapping);
+            let deleted_doc_count = segment_docid_mapping.iter().filter(|m| m.is_none()).count();
+            if deleted_doc_count < segment.doc_count() {
+                docid_mappings.push(segment_docid_mapping);
+                remain_segments.push(segment);
+            }
         }
 
         let total_doc_count = docid as usize;
-        if !non_empty_segments.is_empty() {
+        if !remain_segments.is_empty() {
             let column_merger = SegmentColumnMerger::default();
             column_merger.merge(
                 directory,
                 &segment_path,
                 schema,
-                &non_empty_segments,
+                &remain_segments,
                 &docid_mappings,
             );
 
@@ -57,7 +70,7 @@ impl SegmentMerger {
             let index_merger_factory = IndexMergerFactory::default();
             for index in schema.indexes() {
                 let index_merger = index_merger_factory.create(index);
-                let index_data: Vec<_> = non_empty_segments
+                let index_data: Vec<_> = remain_segments
                     .iter()
                     .map(|seg| seg.index_data(index.name()).unwrap())
                     .collect();

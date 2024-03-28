@@ -21,7 +21,7 @@ pub struct PersistentSegmentData {
     meta: SegmentMetaData,
     index_data: PersistentSegmentIndexData,
     column_data: PersistentSegmentColumnData,
-    deletionmap: ImmutableDeletionMap,
+    deletionmap: Option<ImmutableDeletionMap>,
 }
 
 impl PersistentSegment {
@@ -48,8 +48,7 @@ impl PersistentSegmentData {
 
         let column_data = PersistentSegmentColumnData::open(directory, &segment_path, schema);
 
-        let deletionmap =
-            ImmutableDeletionMap::load(directory, segment_id.clone(), meta.doc_count());
+        let deletionmap = ImmutableDeletionMap::load(directory, segment_id.clone()).unwrap();
 
         Self {
             segment_id,
@@ -76,7 +75,7 @@ impl PersistentSegmentData {
         self.column_data.column(column)
     }
 
-    pub fn deletionmap(&self) -> &ImmutableDeletionMap {
-        &self.deletionmap
+    pub fn deletionmap(&self) -> Option<&ImmutableDeletionMap> {
+        self.deletionmap.as_ref()
     }
 }

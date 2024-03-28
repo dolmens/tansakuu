@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use crate::{
-    deletionmap::{DeletionMap, ImmutableDeletionMap, MutableDeletionMap},
+    deletionmap::DeletionMapReader,
     index::IndexSerializerFactory,
     schema::SchemaRef,
     table::{
@@ -24,7 +24,7 @@ pub struct TableData {
     building_segments: Vec<BuildingSegment>,
     persistent_segments: Vec<PersistentSegment>,
     recent_segment_stat: Option<Arc<SegmentStat>>,
-    deletionmap: DeletionMap,
+    deletionmap_reader: DeletionMapReader,
     version: Version,
     directory: Box<dyn Directory>,
     schema: SchemaRef,
@@ -43,7 +43,6 @@ impl TableData {
         let version = Version::load_lastest(directory.as_ref()).unwrap();
         let mut persistent_segments = vec![];
         let mut base_docid = 0;
-        let mut total_doc_count = 0;
         for segment_id in version.segments() {
             let segment = Arc::new(PersistentSegmentData::open(
                 directory.as_ref(),
@@ -54,24 +53,15 @@ impl TableData {
             let meta = SegmentMeta::new(segment.segment_id().clone(), base_docid, doc_count);
             persistent_segments.push(PersistentSegment::new(meta, segment));
             base_docid += doc_count as DocId;
-            total_doc_count += doc_count;
         }
 
-        let mut deletionmap = MutableDeletionMap::with_doc_count(total_doc_count);
-        for seg in &persistent_segments {
-            deletionmap.copy_immutable_at(
-                seg.data().deletionmap(),
-                seg.meta().base_docid(),
-                seg.meta().doc_count(),
-            );
-        }
-        let immutable_deletionmap: ImmutableDeletionMap = deletionmap.into();
+        let deletionmap_reader = DeletionMapReader::new_readonly(&persistent_segments);
 
         Self {
             building_segments: vec![],
             persistent_segments,
             recent_segment_stat: None,
-            deletionmap: immutable_deletionmap.into(),
+            deletionmap_reader,
             version,
             directory,
             schema,
@@ -149,31 +139,36 @@ impl TableData {
             .meta_mut()
             .set_doc_count(building_segment_data.doc_count().get());
         let total_doc_count = building_segment_data.doc_count().get();
-        let deletionmap = building_segment.data().deletionmap();
-        let deleted_doc_count = deletionmap.deleted_doc_count();
-        if total_doc_count == deleted_doc_count {
-            self.remove_building_segment(building_segment_data);
-            return;
-        }
-        let docid_mapping = if deleted_doc_count > 0 {
-            let mut docid_mapping = vec![];
-            let mut docid = 0 as DocId;
-            for i in 0..total_doc_count {
-                docid_mapping.push(if deletionmap.is_deleted(i as DocId) {
+        let building_segment_id = building_segment.meta().segment_id().clone();
+        let deletionmap_segment_reader = self
+            .deletionmap_reader()
+            .segment_reader(&building_segment_id);
+        let mut docid_mapping = vec![];
+        let mut docid = 0 as DocId;
+        for i in 0..total_doc_count {
+            docid_mapping.push(
+                if deletionmap_segment_reader.is_some_and(|reader| reader.is_deleted(i as DocId)) {
                     None
                 } else {
                     let current_docid = docid;
                     docid += 1;
                     Some(current_docid)
-                });
-            }
+                },
+            );
+        }
+        let deleted_doc_count = docid_mapping.iter().filter(|m| m.is_none()).count();
+        if total_doc_count == deleted_doc_count {
+            self.remove_building_segment(building_segment_data);
+            return;
+        }
+        let docid_mapping = if total_doc_count > 0 {
             Some(docid_mapping)
         } else {
             None
         };
 
-        let segment_path =
-            PathBuf::from("segments").join(building_segment_data.segment_id().as_str());
+        let segment_id = SegmentId::new();
+        let segment_path = PathBuf::from("segments").join(segment_id.as_str());
 
         let column_data = building_segment_data.column_data().columns();
         let column_serializer = SegmentColumnSerializer {};
@@ -210,7 +205,7 @@ impl TableData {
         let meta_path = segment_path.join("meta.json");
         meta.save(self.directory.as_ref(), &meta_path);
         let mut version = self.version.next_version();
-        version.add_segment(building_segment_data.segment_id().clone());
+        version.add_segment(segment_id);
         version.save(self.directory.as_ref());
 
         self.remove_building_segment(building_segment_data);
@@ -229,17 +224,23 @@ impl TableData {
 
     pub fn merge_segments(&mut self, version: &mut Version) {
         let segment_merger = SegmentMerger::default();
-        segment_merger.merge(self.directory.as_ref(), &self.schema, version);
+        let deletionmap_reader = self.deletionmap_reader();
+        segment_merger.merge(
+            self.directory.as_ref(),
+            &self.schema,
+            deletionmap_reader,
+            version,
+        );
 
         self.reload();
     }
 
-    pub fn set_deletionmap(&mut self, deletionmap: DeletionMap) {
-        self.deletionmap = deletionmap;
+    pub fn set_deletionmap_reader(&mut self, deletionmap_reader: DeletionMapReader) {
+        self.deletionmap_reader = deletionmap_reader;
     }
 
-    pub fn deletionmap(&self) -> &DeletionMap {
-        &self.deletionmap
+    pub fn deletionmap_reader(&self) -> &DeletionMapReader {
+        &self.deletionmap_reader
     }
 
     pub fn directory(&self) -> &dyn Directory {

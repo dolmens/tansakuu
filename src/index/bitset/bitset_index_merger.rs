@@ -34,8 +34,6 @@ impl IndexMerger for BitsetIndexMerger {
                 for docid in segment_values.iter() {
                     if let Some(docid) = docid_mapping[docid] {
                         values.insert(docid as usize);
-                    } else {
-                        println!("dddd: {}", docid);
                     }
                 }
             }

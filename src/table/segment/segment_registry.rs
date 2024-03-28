@@ -14,6 +14,12 @@ pub struct SegmentInfo {
 }
 
 impl SegmentRegistry {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            segments: Vec::with_capacity(capacity),
+        }
+    }
+
     pub fn add_persistent_segment(&mut self, segment_meta: &SegmentMeta) {
         self.segments.push(SegmentInfo::new_static_segment(
             segment_meta.base_docid(),
@@ -31,6 +37,10 @@ impl SegmentRegistry {
         } else {
             self.add_dynamic_segment(segment_meta.base_docid(), doc_count.clone());
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.segments.clear();
     }
 
     pub fn add_static_segment(&mut self, base_docid: DocId, doc_count: usize) {
